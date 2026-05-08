@@ -1,0 +1,23 @@
+{
+  "url": "/api/stripe/webhook",
+  "method": "POST",
+  "headers": {
+    "stripe-signature": "test_signature"
+  },
+  "body": {
+    "type": "checkout.session.completed",
+    "data": {
+      "object": {
+        "id": "cs_test_123",
+        "customer_details": {
+          "email": "test@example.com"
+        },
+        "metadata": {
+          "plan": "Pro"
+        },
+        "amount_total": 2000,
+        "payment_status": "paid"
+      }
+    }
+  }
+}
