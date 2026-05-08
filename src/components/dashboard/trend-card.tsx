@@ -15,31 +15,45 @@ interface TrendCardProps {
 }
 
 export function TrendCard({ trend }: TrendCardProps) {
-  const getStatusColor = (status: string) => {
+  // YouTube-style score colors
+  const getScoreColor = (score: number) => {
+    if (score >= 75) return "bg-yt-red"        // Hot - YouTube red
+    if (score >= 50) return "bg-amber-500"      // Rising - Amber
+    return "bg-green-500"                       // Cool - Green
+  }
+
+  // YouTube-style status badge
+  const getStatusVariant = (status: string) => {
     switch (status) {
-      case "PEAK": return "bg-red-500"
-      case "GROWING": return "bg-yellow-500"
-      case "FADING": return "bg-gray-500"
-      default: return "bg-green-500"
+      case "PEAK": return "live"
+      case "GROWING": return "default"
+      case "FADING": return "members"
+      default: return "default"
     }
   }
 
+  // Hot trend styling - YouTube style with subtle red border
+  const isHot = trend.score >= 75
+
   return (
-    <div className="bg-white p-4 rounded-xl border hover:shadow-md transition-shadow">
-      <div className="flex items-start gap-4">
+    <div className={`bg-white p-4 rounded-xl border transition-shadow hover:shadow-md ${isHot ? "border-red-200" : "border-hairline"}`}>
+      <div className="flex items-start gap-3">
+        {/* Score Badge - YouTube style */}
         <div
-          className={`w-12 h-12 rounded-lg flex items-center justify-center font-bold text-white flex-shrink-0 ${getStatusColor(trend.status)}`}
+          className={`w-12 h-12 rounded-lg flex items-center justify-center font-roboto font-bold text-white flex-shrink-0 ${getScoreColor(trend.score)}`}
         >
           {trend.score}
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium truncate">{trend.title}</h3>
+          {/* Video Title Style - YouTube */}
+          <h3 className="font-roboto text-sm font-medium text-ink line-clamp-2">{trend.title}</h3>
           {trend.description && (
-            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{trend.description}</p>
+            <p className="text-sm text-ink-secondary mt-1 line-clamp-2">{trend.description}</p>
           )}
 
-          <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+          {/* Video Meta Style */}
+          <div className="flex items-center gap-3 mt-2 text-sm text-ink-secondary font-roboto">
             <span className="flex items-center gap-1">
               {trend.velocity > 0 ? (
                 <TrendingUp className="w-4 h-4" />
@@ -55,19 +69,21 @@ export function TrendCard({ trend }: TrendCardProps) {
             )}
           </div>
 
+          {/* Content Angles - YouTube caption style */}
           {trend.contentAngles && trend.contentAngles.length > 0 && (
             <div className="mt-3 space-y-1">
               {trend.contentAngles.slice(0, 2).map((angle, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm">
-                  <Play className="w-3 h-3 mt-1 text-gray-400 flex-shrink-0" />
-                  <span className="text-gray-600">{angle}</span>
+                <div key={i} className="flex items-start gap-2 text-sm font-roboto">
+                  <Play className="w-3 h-3 mt-0.5 text-ink-tertiary flex-shrink-0" />
+                  <span className="text-ink-secondary">{angle}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <Badge variant={trend.score >= 75 ? "destructive" : trend.score >= 50 ? "default" : "secondary"}>
+        {/* Status Badge - YouTube badge style */}
+        <Badge variant={getStatusVariant(trend.status) as any}>
           {trend.status}
         </Badge>
       </div>

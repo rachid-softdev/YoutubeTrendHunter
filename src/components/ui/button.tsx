@@ -2,7 +2,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "destructive" | "outline" | "ghost" | "link"
+  variant?: "default" | "destructive" | "outline" | "ghost" | "subscribe" | "subscribed"
   size?: "default" | "sm" | "lg" | "icon"
 }
 
@@ -11,18 +11,28 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         className={cn(
-          "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+          // Base styles - YouTube Roboto, pill shape
+          "inline-flex items-center justify-center font-roboto text-sm font-medium tracking-wide rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yt-link disabled:pointer-events-none disabled:opacity-50",
+          // Variant styles - YouTube design tokens
           {
-            default: "bg-black text-white hover:bg-gray-800",
+            // Primary - Ink (near-black) pill
+            default: "bg-ink text-white hover:bg-ink-secondary",
+            // Subscribe - YouTube Red
+            subscribe: "bg-yt-red text-white hover:bg-yt-red-deep",
+            // Subscribed - Dark chip
+            subscribed: "bg-dark-chip text-dark-ink hover:bg-dark-overlay",
+            // Destructive
             destructive: "bg-red-500 text-white hover:bg-red-600",
-            outline: "border border-gray-300 hover:bg-gray-100",
-            ghost: "hover:bg-gray-100",
-            link: "text-black underline-offset-4 hover:underline",
+            // Outline
+            outline: "border border-hairline bg-transparent hover:bg-surface-chip text-ink",
+            // Ghost
+            ghost: "bg-transparent hover:bg-surface-chip text-ink",
           }[variant],
+          // Size styles
           {
-            default: "h-10 px-4 py-2",
-            sm: "h-9 rounded-md px-3",
-            lg: "h-11 rounded-md px-8",
+            default: "h-9 px-4 py-2",
+            sm: "h-8 px-3 py-1.5 text-xs",
+            lg: "h-11 px-6 py-2.5",
             icon: "h-10 w-10",
           }[size],
           className

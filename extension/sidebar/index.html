@@ -1,33 +1,150 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TrendHunter</title>
-  <link rel="stylesheet" href="style.css">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'yt-red': '#FF0000',
+            'yt-red-deep': '#CC0000',
+            'yt-red-soft': '#FF4E45',
+            'yt-link': '#065FD4',
+            'dark-canvas': '#0F0F0F',
+            'dark-surface': '#212121',
+            'dark-overlay': '#272727',
+            'dark-chip': '#272727',
+            'dark-chip-selected': '#FFFFFF',
+            'canvas': '#FFFFFF',
+            'surface-elevated': '#F9F9F9',
+            'surface-chip': '#F2F2F2',
+            'ink': '#0F0F0F',
+            'ink-secondary': '#606060',
+            'ink-tertiary': '#909090',
+            'dark-ink': '#F1F1F1',
+            'dark-ink-secondary': '#AAAAAA',
+            'hairline': '#E5E5E5',
+            'hairline-dark': '#3D3D3D',
+          },
+          fontFamily: {
+            roboto: ['Roboto', 'Arial', 'sans-serif'],
+          },
+          borderRadius: {
+            'pill': '500px',
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+    
+    body {
+      font-family: 'Roboto', Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #717171;
+      border-radius: 3px;
+    }
+
+    /* YouTube-style focus ring */
+    .yt-focus:focus {
+      outline: 2px solid #065FD4;
+      outline-offset: 2px;
+    }
+
+    /* Loading spinner */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin {
+      animation: spin 1s linear infinite;
+    }
+  </style>
 </head>
-<body>
-  <div id="app">
+<body class="bg-dark-canvas text-dark-ink font-roboto min-h-screen">
+  <div id="app" class="p-4">
+    
+    <!-- ═══════════════════════════════════════
+         ÉCRAN: AUTH
+         ═══════════════════════════════════════ -->
     <div id="screen-auth" class="screen">
-      <div class="logo-row">
-        <span class="logo-dot"></span>
-        <span class="logo-text">TrendHunter</span>
+      <div class="flex flex-col items-center text-center py-8 px-4">
+        <!-- Logo YouTube-style -->
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-8 h-8 bg-yt-red rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+          <span class="text-lg font-medium text-dark-ink">TrendHunter</span>
+        </div>
+        <p class="text-sm text-dark-ink-secondary mb-6">Connectez votre compte pour accéder aux tendances</p>
+        
+        <!-- Token Input - YouTube style -->
+        <input 
+          type="text" 
+          id="token-input" 
+          class="w-full h-10 px-4 bg-dark-surface border border-hairline-dark rounded-pill text-sm text-dark-ink placeholder:text-dark-ink-tertiary focus:outline-none focus:border-yt-link"
+          placeholder="Collez votre token API"
+        />
+        
+        <!-- Connect Button - YouTube primary style -->
+        <button 
+          id="btn-connect" 
+          class="w-full h-9 bg-dark-ink text-white rounded-pill text-sm font-medium mt-3 hover:bg-dark-overlay transition-colors yt-focus"
+        >
+          Connecter
+        </button>
+        
+        <!-- Link -->
+        <a 
+          href="http://localhost:3000/billing" 
+          target="_blank" 
+          class="text-sm text-yt-link mt-4 hover:underline"
+        >
+          Obtenir un token →
+        </a>
       </div>
-      <p class="subtitle">Connectez votre compte pour accéder aux tendances</p>
-      <input type="text" id="token-input" placeholder="Collez votre token API" />
-      <button id="btn-connect" class="btn-primary">Connecter</button>
-      <a href="http://localhost:3000/billing" target="_blank" class="link">
-        Obtenir un token →
-      </a>
     </div>
 
-    <div id="screen-main" class="screen hidden">
-      <div class="topbar">
-        <div class="logo-row">
-          <span class="logo-dot"></span>
-          <span class="logo-text">TrendHunter</span>
+    <!-- ═══════════════════════════════════════
+         ÉCRAN: MAIN
+         ═══════════════════════════════════════ -->
+    <div id="screen-main" class="screen hidden flex flex-col gap-4">
+      
+      <!-- Topbar -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 bg-yt-red rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+          <span class="text-lg font-medium text-dark-ink">TrendHunter</span>
         </div>
-        <select id="niche-select">
+        
+        <!-- Niche Select - YouTube chip style -->
+        <select 
+          id="niche-select" 
+          class="h-8 px-3 bg-dark-surface border border-hairline-dark rounded-pill text-sm text-dark-ink focus:outline-none focus:border-yt-link"
+        >
           <option value="finance-personnelle">Finance</option>
           <option value="tech-ia">Tech & IA</option>
           <option value="fitness">Fitness</option>
@@ -35,23 +152,44 @@
         </select>
       </div>
 
-      <div id="plan-badge" class="badge-free">Plan Free</div>
+      <!-- Plan Badge - YouTube badge style -->
+      <div id="plan-badge" class="inline-flex self-start px-2 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400">
+        Plan Free
+      </div>
 
-      <div id="trends-list"></div>
+      <!-- Trends List -->
+      <div id="trends-list" class="flex flex-col gap-3">
+        <!-- Trend cards will be injected here -->
+      </div>
 
-      <div id="upgrade-banner" class="hidden">
-        <p>Passez Pro pour voir toutes les tendances</p>
-        <a href="http://localhost:3000/pricing" target="_blank" class="btn-upgrade">
+      <!-- Upgrade Banner -->
+      <div id="upgrade-banner" class="hidden p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center">
+        <p class="text-sm text-amber-400 mb-2">Passez Pro pour voir toutes les tendances</p>
+        <a 
+          href="http://localhost:3000/pricing" 
+          target="_blank" 
+          class="inline-block px-4 py-1.5 bg-yt-red text-white text-sm font-medium rounded-pill hover:bg-yt-red-deep transition-colors"
+        >
           Passer Pro →
         </a>
       </div>
 
-      <button id="btn-logout" class="btn-ghost">Déconnecter</button>
+      <!-- Logout Button - Ghost style -->
+      <button 
+        id="btn-logout" 
+        class="w-full h-9 border border-hairline-dark text-dark-ink-secondary rounded-pill text-sm font-medium hover:bg-dark-surface transition-colors yt-focus"
+      >
+        Déconnecter
+      </button>
     </div>
 
-    <div id="screen-loading" class="screen hidden">
-      <div class="spinner"></div>
+    <!-- ═══════════════════════════════════════
+         ÉCRAN: LOADING
+         ═══════════════════════════════════════ -->
+    <div id="screen-loading" class="screen hidden flex items-center justify-center py-12">
+      <div class="w-8 h-8 border-2 border-hairline-dark border-t-yt-red rounded-full animate-spin"></div>
     </div>
+
   </div>
 
   <script src="app.js"></script>
