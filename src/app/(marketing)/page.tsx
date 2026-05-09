@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Separator } from "@/components/ui/separator"
+import { PLANS } from "@/lib/plans"
+import { prisma } from "@/lib/prisma"
 
 const features = [
   {
@@ -33,59 +35,9 @@ const features = [
   },
 ]
 
-const plans = [
-  {
-    name: "Free",
-    price: "0€",
-    period: "/mois",
-    description: "Pour découvrir TrendHunter",
-    features: [
-      "1 niche suivie",
-      "5 tendances par niche",
-      "Extension Chrome",
-      "Support par email",
-    ],
-    cta: "Commencer gratuit",
-    href: "/login",
-    popular: false,
-  },
-  {
-    name: "Pro",
-    price: "15€",
-    period: "/mois",
-    description: "Pour les créateurs de contenu",
-    features: [
-      "Toutes les niches",
-      "Tendances illimitées",
-      "Alertes en temps réel",
-      "Angles de contenu IA",
-      "Export CSV",
-      "Support prioritaire",
-    ],
-    cta: "Passer Pro",
-    href: "/login?plan=pro",
-    popular: true,
-  },
-  {
-    name: "Team",
-    price: "39€",
-    period: "/mois",
-    description: "Pour les équipes",
-    features: [
-      "Tout Pro",
-      "5 utilisateurs",
-      "API access",
-      "Webhooks",
-      "Account manager dédié",
-    ],
-    cta: "Contacter",
-    href: "mailto:contact@trendhunter.app",
-    popular: false,
-  },
-]
-
 export default async function LandingPage() {
   const session = await auth()
+  const userCount = await prisma.user.count()
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -178,14 +130,14 @@ export default async function LandingPage() {
 
                 <div className="flex flex-col sm:flex-row items-center gap-6 pt-8 justify-center lg:justify-start">
                   <div className="flex -space-x-3">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="w-10 h-10 rounded-full border-2 border-dark-canvas bg-dark-surface overflow-hidden shadow-xl">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i + 42}`} alt="User" />
+                    {["M", "L", "S", "C", "A"].map((letter, i) => (
+                      <div key={i} className="w-10 h-10 rounded-full border-2 border-dark-canvas bg-dark-surface flex items-center justify-center text-sm font-bold text-dark-ink-secondary">
+                        {letter}
                       </div>
                     ))}
                   </div>
                   <div className="text-sm">
-                    <p className="font-bold text-dark-ink">Rejoint par +1,200 créateurs</p>
+                    <p className="font-bold text-dark-ink">Rejoint par +{Math.max(userCount, 1200)} créateurs</p>
                     <div className="flex items-center gap-1 text-yt-red font-black text-[10px] uppercase tracking-widest">
                       <Zap className="w-3 h-3 fill-current" /> En direct de YouTube
                     </div>
@@ -198,12 +150,7 @@ export default async function LandingPage() {
                 <div className="absolute -inset-10 bg-yt-red/10 blur-[100px] rounded-full opacity-50" />
                 <div className="relative bg-dark-surface border border-hairline-dark p-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden group">
                   <div className="bg-black aspect-video relative overflow-hidden">
-                    <img
-                      src="https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=1000&auto=format&fit=crop"
-                      className="absolute inset-0 w-full h-full object-cover opacity-60 transition-transform duration-700 group-hover:scale-110"
-                      alt="YouTube Dashboard"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-dark-surface via-dark-canvas to-yt-red/20" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-20 h-20 bg-yt-red rounded-full flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
                         <Play className="w-8 h-8 text-white fill-current ml-1" />
@@ -274,10 +221,10 @@ export default async function LandingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-              {plans.map((plan) => (
+              {PLANS.map((plan) => (
                 <div
                   key={plan.name}
-                  className={`border p-8 flex flex-col relative ${
+                  className={`border p-6 flex flex-col relative ${
                     plan.popular
                       ? "border-yt-red bg-dark-surface"
                       : "border-hairline-dark bg-dark-surface/40"
@@ -288,36 +235,49 @@ export default async function LandingPage() {
                       POPULAIRE
                     </Badge>
                   )}
-                  <div className="mb-6">
+                  <div className="mb-4">
                     <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
                     <p className="text-dark-ink-secondary text-sm">{plan.description}</p>
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-4xl font-bold">{plan.price}</span>
+                    <div className="mt-3 flex items-baseline gap-1">
+                      <span className="text-3xl font-bold">{plan.price}</span>
                       <span className="text-dark-ink-secondary">{plan.period}</span>
                     </div>
                   </div>
 
-                  <Separator className="mb-6 opacity-20" />
+                  <Separator className="mb-4 opacity-20" />
 
-                  <ul className="space-y-3 flex-1 mb-8">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-3 text-sm">
-                        <Check className="w-4 h-4 text-yt-red shrink-0" />
+                  <ul className="space-y-2 mb-6 flex-1">
+                    {plan.features.slice(0, 3).map((feature) => (
+                      <li key={feature} className="flex items-center gap-2 text-xs">
+                        <Check className="w-3 h-3 text-yt-red shrink-0" />
                         <span className="text-dark-ink-secondary">{feature}</span>
                       </li>
                     ))}
+                    {plan.features.length > 3 && (
+                      <li className="text-xs text-dark-ink-tertiary pl-5">
+                        +{plan.features.length - 3} autres fonctionnalités
+                      </li>
+                    )}
                   </ul>
 
                   <Link href={plan.href}>
                     <Button
                       className="w-full"
                       variant={plan.popular ? "subscribe" : "outline"}
+                      size="default"
                     >
                       {plan.cta}
                     </Button>
                   </Link>
                 </div>
               ))}
+            </div>
+
+            <div className="text-center mt-10">
+              <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors">
+                Voir la comparaison détaillée
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </div>
           </div>
         </section>
@@ -351,8 +311,8 @@ export default async function LandingPage() {
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
             <Link href="#pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="#" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="#" className="hover:text-dark-ink">CGU</Link>
+            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
+            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">

@@ -1,8 +1,9 @@
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/dashboard/sidebar"
+import { MobileNav } from "@/components/dashboard/mobile-nav"
 import Link from "next/link"
-import { Play, LayoutDashboard, Target, Bell, CreditCard, Settings } from "lucide-react"
+import { Play } from "lucide-react"
 
 export default async function DashboardLayout({
   children,
@@ -46,28 +47,7 @@ export default async function DashboardLayout({
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-dark-surface border-t border-hairline-dark px-6 py-3 flex items-center justify-between z-50 pb-safe">
-        <Link href="/dashboard" className="flex flex-col items-center gap-1 text-yt-red">
-          <LayoutDashboard className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Trends</span>
-        </Link>
-        <Link href="/niches" className="flex flex-col items-center gap-1 text-dark-ink-secondary">
-          <Target className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Niches</span>
-        </Link>
-        <Link href="/alerts" className="flex flex-col items-center gap-1 text-dark-ink-secondary">
-          <Bell className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Alerts</span>
-        </Link>
-        <Link href="/billing" className="flex flex-col items-center gap-1 text-dark-ink-secondary">
-          <CreditCard className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Billing</span>
-        </Link>
-        <Link href="/settings" className="flex flex-col items-center gap-1 text-dark-ink-secondary">
-          <Settings className="w-5 h-5" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Paramètres</span>
-        </Link>
-      </nav>
+      <MobileNav />
     </div>
   )
 }

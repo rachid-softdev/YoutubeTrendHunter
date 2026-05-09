@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     data: { lastUsedAt: new Date() },
   })
 
-  const nicheSlug = req.nextUrl.searchParams.get("niche") ?? "tech"
+  const nicheSlug = req.nextUrl.searchParams.get("niche") ?? "tech-ia"
   const plan = await getUserPlan(apiToken.userId)
 
   const niche = await prisma.niche.findUnique({ where: { slug: nicheSlug } })

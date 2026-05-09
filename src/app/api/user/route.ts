@@ -1,19 +1,31 @@
-import { NextResponse } from "next/server"
+import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
+import { deleteAccountSchema } from "@/lib/schemas"
+import { withRateLimit } from "@/lib/rate-limit"
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  // Rate limit
+  const rateLimitResponse = await withRateLimit(req, "auth")
+  if (rateLimitResponse) return rateLimitResponse
+
   const session = await auth()
-
   if (!session?.user?.id) {
     return new NextResponse("Unauthorized", { status: 401 })
+  }
+
+  // Validate body
+  const body = await req.json().catch(() => ({}))
+  const parsed = deleteAccountSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Confirmation requise. Envoyez { confirm: true }" }, { status: 400 })
   }
 
   try {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      include: { subscription: true }
+      include: { subscription: true },
     })
 
     if (!user) {
@@ -26,14 +38,15 @@ export async function DELETE() {
         await stripe.subscriptions.cancel(user.subscription.stripeSubscriptionId)
       } catch (error) {
         console.error("Failed to cancel Stripe subscription:", error)
-        // We continue even if Stripe cancellation fails, as we want to allow account deletion
+        return NextResponse.json(
+          { error: "Impossible d'annuler votre abonnement. Contactez le support." },
+          { status: 500 }
+        )
       }
     }
 
-    // Delete user from database (Cascade will handle the rest)
-    await prisma.user.delete({
-      where: { id: user.id },
-    })
+    // Delete user (cascade handles related records)
+    await prisma.user.delete({ where: { id: user.id } })
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {

@@ -107,6 +107,16 @@
   --muted: #717171;
 }
 
+/* Light mode — when .dark class is absent */
+html:not(.dark) {
+  --background: #FFFFFF;
+  --foreground: #0F0F0F;
+  --surface: #F9F9F9;
+  --surface-overlay: #F2F2F2;
+  --border: #E5E5E5;
+  --muted: #606060;
+}
+
 
 
 body {

@@ -1,28 +1,27 @@
-import { auth } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { auth } from "@/lib/auth"
 
-async function proxy(req: Request) {
+export default async function middleware(req: NextRequest) {
   const session = await auth()
-  const isLoggedIn = !!session
-  const url = new URL(req.url)
-  const isOnDashboard = url.pathname.startsWith("/dashboard") ||
-    url.pathname.startsWith("/niches") ||
-    url.pathname.startsWith("/alerts") ||
-    url.pathname.startsWith("/billing")
+  const { pathname } = req.nextUrl
 
-  if (isOnDashboard && !isLoggedIn) {
+  // Protected routes: redirect to /login if not authenticated
+  const protectedPaths = ["/dashboard", "/niches", "/alerts", "/billing", "/settings"]
+  const isProtected = protectedPaths.some(p => pathname.startsWith(p))
+
+  if (isProtected && !session) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
-  if (isLoggedIn && url.pathname === "/login") {
+  // Auth page: redirect to /dashboard if already authenticated
+  if (pathname.startsWith("/login") && session) {
     return NextResponse.redirect(new URL("/dashboard", req.url))
   }
 
   return NextResponse.next()
 }
 
-export default proxy
-
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|file.svg|globe.svg|next.svg|vercel.svg|window.svg).*)"],
 }

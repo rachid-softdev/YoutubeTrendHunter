@@ -6,7 +6,7 @@ export async function getUserPlan(userId: string) {
     select: { plan: true, status: true, stripeCurrentPeriodEnd: true },
   })
 
-  if (!sub || sub.status === "CANCELED") return "FREE"
+  if (!sub || sub.status === "CANCELED" || sub.status === "INCOMPLETE") return "FREE"
   if (sub.stripeCurrentPeriodEnd < new Date()) return "FREE"
   return sub.plan
 }

@@ -61,7 +61,7 @@ async function main() {
       avgViews: 45000,
       contentAngles: ["Comment acheter de l'or", "OR vs actions", "Les meilleures offres"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
       nicheId: nichesData.find(n => n.slug === "finance-personnelle")?.id,
@@ -75,7 +75,7 @@ async function main() {
       avgViews: 23000,
       contentAngles: ["Acheter Bitcoin facilement", "Wallet cryptoconseils"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
       nicheId: nichesData.find(n => n.slug === "tech-ia")?.id,
@@ -89,7 +89,7 @@ async function main() {
       avgViews: 78000,
       contentAngles: ["Meilleurs prompts ChatGPT", "Automatiser votre travail", "IA pour coder"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
       nicheId: nichesData.find(n => n.slug === "tech-ia")?.id,
@@ -103,7 +103,7 @@ async function main() {
       avgViews: 18000,
       contentAngles: ["Bubble vs FlutterFlow", "Automatiser sans code"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
       nicheId: nichesData.find(n => n.slug === "fitness")?.id,
@@ -117,7 +117,7 @@ async function main() {
       avgViews: 56000,
       contentAngles: ["Programme gratuit 30 jours", "Poids du corps uniquement", "Progrès rapide"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
       nicheId: nichesData.find(n => n.slug === "cuisine")?.id,
@@ -131,7 +131,7 @@ async function main() {
       avgViews: 34000,
       contentAngles: ["5 repas en 2h", "Économie et santé"],
       detectedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   ]
 

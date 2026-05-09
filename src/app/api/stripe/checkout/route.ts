@@ -2,14 +2,25 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import { checkoutSchema } from "@/lib/schemas"
+import { withRateLimit } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
+  // Rate limit
+  const rateLimitResponse = await withRateLimit(req, "auth")
+  if (rateLimitResponse) return rateLimitResponse
+
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
   }
 
-  const { priceId } = await req.json()
+  const body = await req.json()
+  const parsed = checkoutSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Price ID requis" }, { status: 400 })
+  }
+  const { priceId } = parsed.data
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
