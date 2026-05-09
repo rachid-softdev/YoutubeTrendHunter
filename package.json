@@ -19,7 +19,9 @@
     "db:studio": "npx prisma studio",
     "dev:setup": "node scripts/setup-dev-env.js",
     "dev:services": "node scripts/setup-mailhog.js",
-    "dev:services:stop": "node scripts/stop-mailhog.js"
+    "dev:services:stop": "node scripts/stop-mailhog.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -43,18 +45,24 @@
     "resend": "^6.12.2",
     "stripe": "^22.1.0",
     "tailwind-merge": "^3.5.0",
-    "zod": "^4.4.2"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.5"
   }
 }

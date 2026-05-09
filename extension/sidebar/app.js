@@ -1,100 +1,153 @@
-async function init() {
-  showScreen("loading")
-  const { apiToken } = await chrome.storage.local.get("apiToken")
+(function () {
+  const API_BASE = "http://localhost:3000/api/extension"
 
-  if (!apiToken) {
-    showScreen("auth")
-    return
+  // Default niches (fallback if API is unreachable)
+  const DEFAULT_NICHES = [
+    { slug: "tech-ia", name: "Tech & IA" },
+    { slug: "finance-personnelle", name: "Finance" },
+    { slug: "fitness", name: "Fitness" },
+    { slug: "cuisine", name: "Cuisine" },
+    { slug: "business-en-ligne", name: "Business en ligne" },
+  ]
+
+  function $(id) { return document.getElementById(id) }
+
+  function showScreen(name) {
+    document.querySelectorAll(".screen").forEach(function (s) { s.classList.add("hidden") })
+    var el = document.getElementById("screen-" + name)
+    if (el) el.classList.remove("hidden")
   }
 
-  await loadTrends()
-}
+  function scoreClass(score) {
+    if (score >= 75) return "score-hot"
+    if (score >= 50) return "score-mid"
+    return "score-low"
+  }
 
-document.getElementById("btn-connect").addEventListener("click", async () => {
-  const token = document.getElementById("token-input").value.trim()
-  if (!token) return
+  function renderTrends(trends, plan) {
+    var badge = $("plan-badge")
+    badge.textContent = "Plan " + (plan || "Free")
 
-  await chrome.storage.local.set({ apiToken: token })
-  await loadTrends()
-})
+    var banner = $("upgrade-banner")
+    if (banner) banner.classList.toggle("hidden", plan !== "FREE")
 
-document.getElementById("btn-logout").addEventListener("click", async () => {
-  await chrome.storage.local.remove("apiToken")
-  showScreen("auth")
-})
+    var list = $("trends-list")
+    if (!trends || trends.length === 0) {
+      list.innerHTML = '<div class="empty-state"><p>Aucune tendance trouvée pour cette niche.</p></div>'
+      return
+    }
 
-document.getElementById("niche-select").addEventListener("change", async (e) => {
-  await chrome.storage.local.set({ selectedNiche: e.target.value })
-  await loadTrends()
-})
+    list.innerHTML = trends.map(function (t) {
+      var isHot = t.score >= 75
+      return (
+        '<div class="trend-card' + (isHot ? " trend-hot" : "") + '">' +
+        '<div class="trend-score ' + scoreClass(t.score) + '">' + Math.round(t.score) + '</div>' +
+        '<div class="trend-content">' +
+        '<div class="trend-title">' + (t.title || t.keyword || "Sans titre") + '</div>' +
+        '<div class="trend-meta">' +
+        (t.videoCount || "?") + ' vidéos · +' + Math.round(t.velocity || 0) + '%' +
+        '</div>' +
+        '</div>' +
+        '</div>'
+      )
+    }).join("")
+  }
 
-async function loadTrends() {
-  showScreen("loading")
+  async function loadTrends() {
+    showScreen("loading")
 
-  const response = await new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "GET_TRENDS" }, resolve)
+    var { selectedNiche } = await chrome.storage.local.get("selectedNiche")
+    var niche = selectedNiche || "tech-ia"
+
+    var response = await new Promise(function (resolve) {
+      chrome.runtime.sendMessage({ type: "GET_TRENDS" }, resolve)
+    })
+
+    if (response && response.error === "NOT_AUTHENTICATED") {
+      showScreen("auth")
+      return
+    }
+
+    if (response && response.error) {
+      showScreen("main")
+      $("trends-list").innerHTML =
+        '<div class="empty-state"><p>Erreur de connexion. Vérifiez votre token.</p></div>'
+      return
+    }
+
+    if (response && response.data) {
+      renderTrends(response.data.trends, response.data.plan)
+    }
+
+    showScreen("main")
+  }
+
+  async function loadNiches() {
+    var select = $("niche-select")
+    select.innerHTML = ''
+
+    try {
+      var res = await fetch(API_BASE + "/trends/niches")
+      var niches = await res.json()
+      populateSelect(niches)
+    } catch (e) {
+      populateSelect(DEFAULT_NICHES)
+    }
+  }
+
+  function populateSelect(niches) {
+    var select = $("niche-select")
+    select.innerHTML = ''
+
+    niches.forEach(function (n) {
+      var opt = document.createElement("option")
+      opt.value = n.slug
+      opt.textContent = n.name
+      select.appendChild(opt)
+    })
+
+    // Restore saved selection
+    chrome.storage.local.get("selectedNiche", function (result) {
+      if (result.selectedNiche) {
+        select.value = result.selectedNiche
+      }
+    })
+  }
+
+  // ── Event Listeners ──
+  $("btn-connect").addEventListener("click", async function () {
+    var token = $("token-input").value.trim()
+    if (!token) return
+    await chrome.storage.local.set({ apiToken: token })
+    await loadNiches()
+    await loadTrends()
   })
 
-  if (response.error === "NOT_AUTHENTICATED") {
+  $("btn-logout").addEventListener("click", async function () {
+    await chrome.storage.local.remove("apiToken")
+    $("token-input").value = ""
     showScreen("auth")
-    return
+  })
+
+  $("niche-select").addEventListener("change", async function (e) {
+    await chrome.storage.local.set({ selectedNiche: e.target.value })
+    await loadTrends()
+  })
+
+  // ── Init ──
+  async function init() {
+    showScreen("loading")
+
+    var { apiToken } = await chrome.storage.local.get("apiToken")
+
+    if (!apiToken) {
+      showScreen("auth")
+      return
+    }
+
+    await loadNiches()
+    await loadTrends()
   }
 
-  if (response.error) {
-    showError("Erreur de connexion. Réessayez.")
-    return
-  }
-
-  const { trends, plan } = response.data
-  renderTrends(trends, plan)
-  showScreen("main")
-}
-
-function renderTrends(trends, plan) {
-  const badge = document.getElementById("plan-badge")
-  
-  // YouTube-style badge with pill shape
-  if (plan === "FREE") {
-    badge.className = "inline-flex self-start px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800"
-    badge.textContent = "Plan Free"
-  } else if (plan === "PRO") {
-    badge.className = "inline-flex self-start px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800"
-    badge.textContent = "Plan Pro"
-  } else if (plan === "TEAM") {
-    badge.className = "inline-flex self-start px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800"
-    badge.textContent = "Plan Team"
-  }
-
-  const upgradeBanner = document.getElementById("upgrade-banner")
-  upgradeBanner.classList.toggle("hidden", plan !== "FREE")
-
-  const list = document.getElementById("trends-list")
-  list.innerHTML = trends.map(function(t) {
-    const isHot = t.score >= 75
-    return '<div class="flex gap-3 p-3 bg-dark-surface rounded-xl ' + (isHot ? "border border-red-500/30" : "border border-hairline-dark") + '">' +
-      '<div class="w-12 h-12 flex-shrink-0 flex items-center justify-center rounded-lg font-bold text-white ' + scoreClass(t.score) + '">' + t.score + '</div>' +
-      '<div class="flex-1 min-w-0">' +
-        '<div class="text-sm font-medium text-dark-ink truncate">' + t.title + '</div>' +
-        '<div class="text-xs text-dark-ink-secondary mt-1">' + (t.videoCount || "?") + ' vidéos · +' + Math.round(t.velocity) + '%</div>' +
-      '</div>' +
-    '</div>'
-  }).join("")
-}
-
-function scoreClass(score) {
-  if (score >= 75) return "bg-red-500"       // Hot - YouTube red
-  if (score >= 50) return "bg-amber-500"     // Mid - Amber
-  return "bg-green-500"                       // Low - Green
-}
-
-function showScreen(name) {
-  document.querySelectorAll(".screen").forEach(function(s) { s.classList.add("hidden") })
-  document.getElementById("screen-" + name)?.classList.remove("hidden")
-}
-
-function showError(msg) {
-  showScreen("main")
-  document.getElementById("trends-list").innerHTML = '<div class="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-center text-sm text-red-400">' + msg + '</div>'
-}
-
-init()
+  init()
+})()

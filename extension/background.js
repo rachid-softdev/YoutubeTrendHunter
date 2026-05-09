@@ -35,4 +35,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })
     return true
   }
+
+  if (message.type === "ANALYZE_VIDEO") {
+    chrome.storage.local.get("apiToken", async ({ apiToken }) => {
+      if (!apiToken) {
+        sendResponse({ error: "NOT_AUTHENTICATED" })
+        return
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/extension/analyze`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ videoId: message.videoId }),
+        })
+        const data = await res.json()
+        sendResponse({ data })
+      } catch (err) {
+        sendResponse({ error: "FETCH_ERROR" })
+      }
+    })
+    return true
+  }
 })

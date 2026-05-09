@@ -9,8 +9,31 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "TrendHunter — Veille YouTube IA",
-  description: "Détectez les tendances YouTube émergentes avant vos concurrents.",
+  title: {
+    default: "TrendHunter — Veille YouTube IA",
+    template: "%s | TrendHunter",
+  },
+  description: "Détectez les tendances YouTube émergentes avant vos concurrents. Analyse IA, alertes temps réel, extension Chrome.",
+  keywords: ["YouTube", "tendances", "trends", "créateurs", "YouTube analytics", "niches YouTube"],
+  authors: [{ name: "TrendHunter" }],
+  creator: "TrendHunter",
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: process.env.NEXTAUTH_URL,
+    siteName: "TrendHunter",
+    title: "TrendHunter — Veille YouTube IA",
+    description: "Détectez les tendances YouTube émergentes avant vos concurrents.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TrendHunter — Veille YouTube IA",
+    description: "Détectez les tendances YouTube émergentes avant vos concurrents.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

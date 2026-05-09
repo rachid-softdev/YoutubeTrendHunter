@@ -13,14 +13,14 @@ export function SettingsContent({ user }: { user: any }) {
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDeleteAccount = async () => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) {
-      return
-    }
+    const confirmed = window.confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")
+    if (!confirmed) return
 
     setIsDeleting(true)
     try {
       const response = await fetch("/api/user", {
         method: "DELETE",
+        body: JSON.stringify({ confirm: true }),
       })
 
       if (response.ok) {
