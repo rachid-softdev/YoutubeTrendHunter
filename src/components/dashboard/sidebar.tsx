@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator"
 
 const navItems = [
   { href: "/dashboard", label: "Tendances", icon: LayoutDashboard },
-  { href: "/niches", label: "Niches", icon: Target },
+  { href: "/my-niches", label: "Niches", icon: Target },
   { href: "/alerts", label: "Alertes", icon: Bell },
   { href: "/billing", label: "Facturation", icon: CreditCard },
   { href: "/settings", label: "Paramètres", icon: Settings },

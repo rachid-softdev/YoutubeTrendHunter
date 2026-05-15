@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
+import { PostHogProvider } from "./providers";
+import { CookieConsent } from "@/components/cookie-consent";
 
 const roboto = Roboto({
   weight: ["400", "500", "700"],
@@ -64,7 +66,10 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-roboto bg-dark-canvas text-dark-ink">
-        {children}
+        <PostHogProvider>
+          {children}
+          <CookieConsent />
+        </PostHogProvider>
       </body>
     </html>
   );
