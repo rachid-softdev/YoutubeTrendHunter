@@ -27,7 +27,9 @@ export const alertCreateSchema = z.object({
   channel: z.enum(["EMAIL", "WEBHOOK"]).default("EMAIL"),
 })
 
-export const alertUpdateSchema = alertCreateSchema.partial()
+export const alertUpdateSchema = alertCreateSchema.extend({
+  isActive: z.boolean().optional(),
+}).partial()
 
 // ─── User ───
 export const deleteAccountSchema = z.object({

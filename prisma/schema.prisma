@@ -58,6 +58,7 @@ model User {
   watchedNiches UserNiche[]
   alerts        Alert[]
   apiTokens     ApiToken[]
+  auditLogs     AuditLog[]
 
   stripeCustomerId String? @unique
 }
@@ -103,6 +104,7 @@ model Niche {
 
   trends      Trend[]
   userNiches  UserNiche[]
+  alerts       Alert[]
 }
 
 model UserNiche {
@@ -160,7 +162,8 @@ model Alert {
   lastSentAt DateTime?
   createdAt DateTime    @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  niche Niche? @relation(fields: [nicheId], references: [id], onDelete: SetNull)
 }
 
 enum AlertType {
@@ -184,4 +187,18 @@ model ApiToken {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }

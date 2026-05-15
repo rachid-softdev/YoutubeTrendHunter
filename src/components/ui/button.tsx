@@ -10,7 +10,7 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
   VariantProps<typeof buttonVariants> {
   asChild?: boolean
-  variant?: "default" | "destructive" | "outline" | "ghost" | "subscribe" | "subscribed"
+  variant?: "default" | "destructive" | "outline" | "ghost" | "secondary" | "subscribe" | "subscribed"
   size?: "default" | "sm" | "lg" | "icon"
 }
 

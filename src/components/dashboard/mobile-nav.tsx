@@ -6,7 +6,7 @@ import { LayoutDashboard, Target, Bell, CreditCard, Settings } from "lucide-reac
 
 const links = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Trends" },
-  { href: "/niches", icon: Target, label: "Niches" },
+  { href: "/my-niches", icon: Target, label: "Niches" },
   { href: "/alerts", icon: Bell, label: "Alerts" },
   { href: "/billing", icon: CreditCard, label: "Billing" },
   { href: "/settings", icon: Settings, label: "Paramètres" },

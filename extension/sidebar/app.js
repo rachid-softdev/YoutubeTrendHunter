@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = "http://localhost:3000/api/extension"
+  const API_BASE = "https://trendhunter.app/api/extension"
 
   // Default niches (fallback if API is unreachable)
   const DEFAULT_NICHES = [
