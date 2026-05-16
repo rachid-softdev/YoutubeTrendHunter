@@ -98,7 +98,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function NichePage({ params }: Props) {
   const { slug } = await params
 
-  // Fetch niche and its trends
+  // Fetch niche and its trends with count in a single query
   const niche = await prisma.niche.findUnique({
     where: { slug, isActive: true },
     include: {
@@ -109,6 +109,14 @@ export default async function NichePage({ params }: Props) {
         orderBy: { score: "desc" },
         take: 10,
       },
+      // Count trends directly in the same query to avoid N+1
+      _count: {
+        select: {
+          trends: {
+            where: { expiresAt: { gt: new Date() } }
+          }
+        }
+      },
     },
   })
 
@@ -116,12 +124,8 @@ export default async function NichePage({ params }: Props) {
     notFound()
   }
 
-  const trendCount = await prisma.trend.count({
-    where: {
-      nicheId: niche.id,
-      expiresAt: { gt: new Date() },
-    },
-  })
+  // Access count directly from the _count field - no separate query needed!
+  const trendCount = niche._count.trends
 
   // JSON-LD schemas
   const jsonLd = {

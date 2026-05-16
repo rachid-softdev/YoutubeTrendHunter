@@ -643,3 +643,66 @@ select:focus-visible {
   outline: 2px solid #065FD4;
   outline-offset: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PERFORMANCE OPTIMIZATIONS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Respect user preference for reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  /* Disable all animations */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Disable Tailwind animations */
+  .animate-pulse-glow,
+  .animate-float,
+  .animate-pulse-border {
+    animation: none !important;
+  }
+
+  /* Disable smooth scrolling */
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* GPU-accelerated animations - use transform and opacity only */
+.animate-float {
+  will-change: transform;
+}
+
+.animate-pulse-glow {
+  will-change: opacity;
+}
+
+.animate-pulse-border {
+  will-change: box-shadow;
+}
+
+/* Optimize transitions - only animate transform and opacity */
+.transition-all {
+  transition-property: transform, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-colors {
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Optimize hover states with transform */
+.group:hover .group-hover\:scale-125 {
+  transform: scale(1.125);
+  will-change: transform;
+}
+
+/* Remove will-change after animation completes to free GPU memory */
+.animate-float:not(:hover) {
+  will-change: auto;
+}

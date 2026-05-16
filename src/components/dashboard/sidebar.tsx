@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Bell, CreditCard, Target, Play, LogOut, Settings } from "lucide-react"
 import { signOut } from "next-auth/react"
@@ -62,9 +63,16 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
       </button>
 
       <div className="flex items-center gap-3 p-3 bg-dark-overlay rounded-none">
-        <div className="w-8 h-8 rounded-none bg-dark-surface border border-hairline-dark overflow-hidden">
+        <div className="w-8 h-8 rounded-none bg-dark-surface border border-hairline-dark overflow-hidden relative">
           {user.image ? (
-            <img src={user.image} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <Image
+              src={user.image}
+              alt={user.name || "Avatar"}
+              fill
+              className="object-cover"
+              referrerPolicy="no-referrer"
+              sizes="32px"
+            />
           ) : (
             <div className="w-full h-full bg-yt-red/20 flex items-center justify-center">
               <span className="text-xs font-bold text-yt-red">

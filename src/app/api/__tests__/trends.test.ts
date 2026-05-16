@@ -69,8 +69,8 @@ describe("GET /api/trends", () => {
     } as any)
 
     const { GET } = await import("../trends/route")
-    const { safeParse } = await import("@/lib/schemas")
-    vi.mocked(safeParse).mockReturnValue({ success: false })
+    const { trendsQuerySchema } = await import("@/lib/schemas")
+    vi.mocked(trendsQuerySchema.safeParse).mockReturnValue({ success: false })
 
     const req = new Request("http://localhost:3000/api/trends")
     const res = await GET(req)

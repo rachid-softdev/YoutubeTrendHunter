@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -37,19 +37,34 @@ export function AlertsClient({
   const [alerts, setAlerts] = useState<AlertData[]>(initialAlerts)
   const [isCreating, setIsCreating] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
 
-  const handleCreateAlert = async (data: {
+  // Cleanup all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      abortControllersRef.current.forEach((controller) => {
+        controller.abort()
+      })
+      abortControllersRef.current.clear()
+    }
+  }, [])
+
+  const handleCreateAlert = useCallback(async (data: {
     type: "SCORE_THRESHOLD" | "DAILY_DIGEST" | "SPIKE"
     threshold: number
     channel: "EMAIL" | "WEBHOOK"
     nicheId?: string
   }) => {
+    const controller = new AbortController()
+    abortControllersRef.current.set("create", controller)
+
     setIsLoading(true)
     try {
       const response = await fetch("/api/alerts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        signal: controller.signal,
       })
 
       if (!response.ok) {
@@ -60,39 +75,72 @@ export function AlertsClient({
       const result = await response.json()
       setAlerts((prev) => [result.alert, ...prev])
       setIsCreating(false)
+    } catch (error) {
+      // Ignore aborted requests
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      throw error
     } finally {
       setIsLoading(false)
+      abortControllersRef.current.delete("create")
     }
-  }
+  }, [])
 
-  const handleToggleActive = async (alertId: string, isActive: boolean) => {
-    const response = await fetch(`/api/alerts/${alertId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive }),
-    })
+  const handleToggleActive = useCallback(async (alertId: string, isActive: boolean) => {
+    const controller = new AbortController()
+    abortControllersRef.current.set(`toggle-${alertId}`, controller)
 
-    if (!response.ok) {
-      throw new Error("Erreur lors de la mise à jour")
+    try {
+      const response = await fetch(`/api/alerts/${alertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error("Erreur lors de la mise à jour")
+      }
+
+      const result = await response.json()
+      setAlerts((prev) =>
+        prev.map((a) => (a.id === alertId ? result.alert : a))
+      )
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      throw error
+    } finally {
+      abortControllersRef.current.delete(`toggle-${alertId}`)
     }
+  }, [])
 
-    const result = await response.json()
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === alertId ? result.alert : a))
-    )
-  }
+  const handleDeleteAlert = useCallback(async (alertId: string) => {
+    const controller = new AbortController()
+    abortControllersRef.current.set(`delete-${alertId}`, controller)
 
-  const handleDeleteAlert = async (alertId: string) => {
-    const response = await fetch(`/api/alerts/${alertId}`, {
-      method: "DELETE",
-    })
+    try {
+      const response = await fetch(`/api/alerts/${alertId}`, {
+        method: "DELETE",
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      throw new Error("Erreur lors de la suppression")
+      if (!response.ok) {
+        throw new Error("Erreur lors de la suppression")
+      }
+
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId))
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      throw error
+    } finally {
+      abortControllersRef.current.delete(`delete-${alertId}`)
     }
-
-    setAlerts((prev) => prev.filter((a) => a.id !== alertId))
-  }
+  }, [])
 
   return (
     <div className="max-w-4xl">

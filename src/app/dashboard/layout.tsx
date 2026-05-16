@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { MobileNav } from "@/components/dashboard/mobile-nav"
 import Link from "next/link"
+import Image from "next/image"
 import { Play } from "lucide-react"
 
 export default async function DashboardLayout({
@@ -19,7 +20,7 @@ export default async function DashboardLayout({
       <div className="hidden md:block">
         <Sidebar user={session.user} />
       </div>
-      
+
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-hairline-dark bg-dark-surface z-50">
         <Link href="/" className="flex items-center gap-1">
@@ -28,9 +29,16 @@ export default async function DashboardLayout({
           </div>
           <span className="font-bold">TrendHunter</span>
         </Link>
-        <div className="w-8 h-8 rounded-none bg-dark-surface border border-hairline-dark overflow-hidden">
+        <div className="w-8 h-8 rounded-none bg-dark-surface border border-hairline-dark overflow-hidden relative">
           {session.user.image ? (
-            <img src={session.user.image} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <Image
+              src={session.user.image}
+              alt={session.user.name || "Avatar"}
+              fill
+              className="object-cover"
+              referrerPolicy="no-referrer"
+              sizes="32px"
+            />
           ) : (
             <div className="w-full h-full bg-yt-red/10 flex items-center justify-center">
               <span className="text-[10px] font-black text-yt-red">{session.user.name?.charAt(0)}</span>
