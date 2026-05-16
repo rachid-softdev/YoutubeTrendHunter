@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { auth } from "@/lib/auth"
 import { TrendingUp, Play, Bell, BarChart3, Video, Sparkles, Zap, ArrowRight, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Separator } from "@/components/ui/separator"
 import { PLANS } from "@/lib/plans"
 import { prisma } from "@/lib/prisma"
+import { unstable_cache } from "next/cache"
 
 const features = [
   {
@@ -24,7 +26,7 @@ const features = [
   {
     icon: Bell,
     title: "Alertes Stratégiques",
-    description: "Soyez le premier prévenu quand un sujet commence à buzzer.",
+    description: "Soyez le premier prévient quand un sujet commence à buzzer.",
     badge: "NEW"
   },
   {
@@ -35,9 +37,20 @@ const features = [
   },
 ]
 
+// Cached user count - revalidated every hour
+const getUserCountCached = unstable_cache(
+  async () => {
+    "use no-store"
+    return prisma.user.count()
+  },
+  ["user-count"],
+  { revalidate: 3600 }
+)
+
 export default async function LandingPage() {
   const session = await auth()
-  const userCount = await prisma.user.count()
+  // Use cached count to avoid DB query on every request
+  const userCount = await getUserCountCached()
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -63,7 +76,14 @@ export default async function LandingPage() {
               <Link href="/dashboard">
                 <Button variant="subscribe" size="default" className="font-bold flex items-center gap-2">
                   {session.user?.image ? (
-                    <img src={session.user.image} alt="" className="w-4 h-4 rounded-none" referrerPolicy="no-referrer" />
+                    <Image
+                      src={session.user.image}
+                      alt=""
+                      width={16}
+                      height={16}
+                      className="rounded-none"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : (
                     <div className="w-4 h-4 bg-white/20 flex items-center justify-center rounded-none text-[8px]">
                       {session.user?.name?.charAt(0)}
@@ -146,7 +166,10 @@ export default async function LandingPage() {
               </div>
 
               {/* Right Column: Visual Player */}
-              <div className="flex-1 w-full max-w-2xl lg:max-w-none relative animate-float" style={{ animationDuration: '4s' }}>
+              <div
+                className="flex-1 w-full max-w-2xl lg:max-w-none relative animate-float"
+                style={{ animationDuration: '4s', willChange: 'transform' }}
+              >
                 <div className="absolute -inset-10 bg-yt-red/10 blur-[100px] rounded-full opacity-50" />
                 <div className="relative bg-dark-surface border border-hairline-dark p-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden group">
                   <div className="bg-black aspect-video relative overflow-hidden">

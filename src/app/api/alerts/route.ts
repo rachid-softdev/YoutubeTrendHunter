@@ -16,26 +16,29 @@ export async function GET(req: NextRequest) {
     const plan = await getUserPlan(session.user.id)
     const limits = PLAN_LIMITS[plan]
 
-    // Get user's alerts with niche info
-    const alerts = await prisma.alert.findMany({
-      where: { userId: session.user.id },
-      include: {
-        niche: {
-          select: { id: true, name: true, slug: true },
+    // Execute all queries in parallel for better performance
+    const [alerts, userNiches] = await Promise.all([
+      // Get user's alerts with niche info
+      prisma.alert.findMany({
+        where: { userId: session.user.id },
+        include: {
+          niche: {
+            select: { id: true, name: true, slug: true },
+          },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+        orderBy: { createdAt: "desc" },
+      }),
 
-    // Get user's followed niches for the alert creation form
-    const userNiches = await prisma.userNiche.findMany({
-      where: { userId: session.user.id },
-      include: {
-        niche: {
-          select: { id: true, name: true, slug: true },
+      // Get user's followed niches for the alert creation form
+      prisma.userNiche.findMany({
+        where: { userId: session.user.id },
+        include: {
+          niche: {
+            select: { id: true, name: true, slug: true },
+          },
         },
-      },
-    })
+      }),
+    ])
 
     return NextResponse.json({
       alerts,
