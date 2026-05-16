@@ -79,6 +79,10 @@ export async function GET(req: NextRequest) {
     // Get last 100 audit logs
     const auditLogs = await getAuditLogs(userId, 100)
 
+    // Check format parameter
+    const format = req.nextUrl.searchParams.get("format") || "json"
+    const includeTrends = req.nextUrl.searchParams.get("trends") === "true"
+
     // Build export data
     const exportData = {
       profile: {
@@ -127,6 +131,79 @@ export async function GET(req: NextRequest) {
         createdAt: l.createdAt.toISOString(),
       })),
       exportedAt: new Date().toISOString(),
+    }
+
+    // CSV export - trends per niche
+    if (format === "csv" && includeTrends) {
+      const trendsData = []
+
+      for (const un of watchedNiches) {
+        const trends = await prisma.trend.findMany({
+          where: {
+            nicheId: un.niche.id,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { score: "desc" },
+          take: 50,
+        })
+
+        for (const trend of trends) {
+          trendsData.push({
+            niche: un.niche.name,
+            title: trend.title,
+            score: trend.score,
+            status: trend.status,
+            avgViews: trend.avgViews || 0,
+            contentAngles: (trend.contentAngles || []).join(" | "),
+            detectedAt: trend.detectedAt.toISOString(),
+          })
+        }
+      }
+
+      const headers = ["niche", "title", "score", "status", "avgViews", "contentAngles", "detectedAt"]
+      const csvRows = [headers.join(",")]
+
+      for (const row of trendsData) {
+        const values = headers.map((h) => {
+          const val = row[h as keyof typeof row]
+          if (typeof val === "string" && (val.includes(",") || val.includes('"') || val.includes("\n"))) {
+            return `"${val.replace(/"/g, '""')}"`
+          }
+          return val ?? ""
+        })
+        csvRows.push(values.join(","))
+      }
+
+      const filename = `trendhunter-trends-${new Date().toISOString().split("T")[0]}.csv`
+
+      return new NextResponse(csvRows.join("\n"), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      })
+    }
+
+    // CSV export - summary
+    if (format === "csv") {
+      const csvRows = [
+        "Type,Nom,Détails,Date",
+        `Profile,${user.name || "N/A"},${user.email},${user.createdAt.toISOString()}`,
+        ...watchedNiches.map((un) => `Niche,${un.niche.name},${un.niche.slug},${un.createdAt.toISOString()}`),
+        ...alerts.map((a) => `Alerte,${a.type},${a.channel},${a.createdAt.toISOString()}`),
+        ...apiTokens.map((t) => `Token,${t.name},ID:${t.id.slice(0, 8)},${t.createdAt.toISOString()}`),
+      ]
+
+      const filename = `trendhunter-export-${new Date().toISOString().split("T")[0]}.csv`
+
+      return new NextResponse(csvRows.join("\n"), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      })
     }
 
     // Generate filename

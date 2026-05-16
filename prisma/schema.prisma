@@ -71,10 +71,15 @@ model Subscription {
   stripeCurrentPeriodEnd DateTime
   status               SubscriptionStatus @default(ACTIVE)
   plan                 Plan               @default(FREE)
+  trialEnd             DateTime?          // Fin de la période d'essai
+  trialStart           DateTime?          // Début de la période d'essai
+  firstMonthFree      Boolean            @default(false) // Premier mois gratuit
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum SubscriptionStatus {
@@ -158,12 +163,15 @@ model Alert {
   type      AlertType
   threshold Int         @default(70)
   channel   AlertChannel @default(EMAIL)
+  webhookUrl String?    @db.Text // URL du webhook pour les alertes
   isActive  Boolean     @default(true)
   lastSentAt DateTime?
   createdAt DateTime    @default(now())
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   niche Niche? @relation(fields: [nicheId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isActive])
 }
 
 enum AlertType {
@@ -180,13 +188,15 @@ enum AlertChannel {
 model ApiToken {
   id        String   @id @default(cuid())
   userId    String
-  token     String   @unique @default(cuid())
+  token     String   @unique // Stocké hashé (SHA-256)
   name      String   @default("Extension Chrome")
   lastUsedAt DateTime?
   expiresAt DateTime?
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model AuditLog {

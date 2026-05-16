@@ -2,6 +2,52 @@ import { prisma } from "@/lib/prisma"
 import { sendAlertEmail, sendDigestEmail } from "@/lib/email"
 import type { Alert, Trend } from "@prisma/client"
 
+type WebhookAlert = Alert & {
+  webhookUrl: string | null
+}
+
+export async function sendWebhookAlert(alert: WebhookAlert, trends: Trend[]): Promise<boolean> {
+  const webhookUrl = alert.webhookUrl
+  if (!webhookUrl) return false
+
+  try {
+    const payload = {
+      event: "trend_alert",
+      alert: {
+        id: alert.id,
+        type: alert.type,
+        threshold: alert.threshold,
+        nicheId: alert.nicheId,
+      },
+      trends: trends.map((t) => ({
+        id: t.id,
+        title: t.title,
+        score: t.score,
+        status: t.status,
+        avgViews: t.avgViews,
+        velocity: t.velocity,
+        detectedAt: t.detectedAt.toISOString(),
+      })),
+      timestamp: new Date().toISOString(),
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "TrendHunter/1.0",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
+    })
+
+    return response.ok
+  } catch (error) {
+    console.error("Webhook failed:", error)
+    return false
+  }
+}
+
 export async function checkAlertsForUser(userId: string): Promise<number> {
   const alerts = await prisma.alert.findMany({
     where: { userId, isActive: true },
@@ -11,9 +57,24 @@ export async function checkAlertsForUser(userId: string): Promise<number> {
   let sent = 0
 
   for (const alert of alerts) {
-    if (!alert.user.email) continue
     const trends = await getTrendsForAlert(alert)
     if (trends.length === 0) continue
+
+    // Handle webhook alerts
+    if (alert.channel === "WEBHOOK" && alert.webhookUrl) {
+      const success = await sendWebhookAlert(alert as WebhookAlert, trends)
+      if (success) {
+        sent++
+        await prisma.alert.update({
+          where: { id: alert.id },
+          data: { lastSentAt: new Date() },
+        })
+      }
+      continue
+    }
+
+    // Handle email alerts
+    if (!alert.user.email) continue
 
     switch (alert.type) {
       case "SCORE_THRESHOLD": {

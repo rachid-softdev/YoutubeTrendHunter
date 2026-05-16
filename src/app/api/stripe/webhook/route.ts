@@ -92,6 +92,16 @@ export async function POST(req: NextRequest) {
       })
       break
     }
+
+    case "customer.subscription.trial_will_end": {
+      // Envoyer email de reminder 3 jours avant fin de trial
+      const subscription = event.data.object as any
+      const userId = subscription.metadata.userId
+
+      // Log pour envoi d'email de reminder
+      console.log(`Trial will end soon for user ${userId}`)
+      break
+    }
   }
 
   return NextResponse.json({ received: true })

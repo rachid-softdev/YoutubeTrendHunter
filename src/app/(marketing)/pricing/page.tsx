@@ -8,8 +8,17 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
 export const metadata: Metadata = {
-  title: "Tarifs",
-  description: "Choisissez le plan TrendHunter qui correspond à vos besoins. Free, Pro ou Team.",
+  title: "Tarifs - TrendHunter",
+  description: "Choisissez le plan TrendHunter qui correspond à vos besoins. Free, Pro ou Team. Accès aux tendances YouTube IA.",
+  openGraph: {
+    title: "Tarifs TrendHunter - Choisissez votre plan",
+    description: "Accédez aux tendances YouTube en temps réel avec l'IA. Plans starting at 0€.",
+    url: "/pricing",
+    type: "website",
+  },
+  alternates: {
+    canonical: "/pricing",
+  },
 }
 
 export default function PricingPage() {
