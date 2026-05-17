@@ -1,0 +1,642 @@
+// ============================================
+// FeatureGateService Tests
+// ============================================
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { FeatureGateService } from "../lib/feature-flags/service"
+import type { IEntitlementRepository, ICacheService } from "../lib/feature-flags/types"
+import type { Plan, Feature, PlanFeature, Subscription, EntitlementOverride, UsageTracking } from "@prisma/client"
+
+// ============================================
+// Mock Repository
+// ============================================
+
+class MockEntitlementRepository implements IEntitlementRepository {
+  plans: Map<string, Plan> = new Map()
+  features: Map<string, Feature> = new Map()
+  planFeatures: Map<string, PlanFeature[]> = new Map()
+  subscriptions: Map<string, Subscription> = new Map()
+  overrides: EntitlementOverride[] = []
+  usage: Map<string, UsageTracking> = new Map()
+  stripeEvents: Set<string> = new Set()
+
+  // Plan methods
+  async getPlan(planKey: string): Promise<Plan | null> {
+    return this.plans.get(planKey) ?? null
+  }
+
+  async getAllPlans(): Promise<Plan[]> {
+    return Array.from(this.plans.values())
+  }
+
+  async getActivePlans(): Promise<Plan[]> {
+    return Array.from(this.plans.values()).filter(p => p.isActive)
+  }
+
+  // Feature methods
+  async getFeature(featureKey: string): Promise<Feature | null> {
+    return this.features.get(featureKey) ?? null
+  }
+
+  async getAllFeatures(): Promise<Feature[]> {
+    return Array.from(this.features.values())
+  }
+
+  async getActiveFeatures(): Promise<Feature[]> {
+    return Array.from(this.features.values()).filter(f => f.isActive)
+  }
+
+  // Plan feature methods
+  async getPlanFeatures(planId: string): Promise<any[]> {
+    return this.planFeatures.get(planId) ?? []
+  }
+
+  async getPlanFeature(planId: string, featureKey: string): Promise<any | null> {
+    const features = this.planFeatures.get(planId) ?? []
+    const feature = features.find(f => f.feature?.key === featureKey)
+    return feature ?? null
+  }
+
+  // Organization (not used in these tests)
+  async getOrganization(orgId: string): Promise<any | null> {
+    return null
+  }
+
+  // Subscription methods
+  async getActiveSubscription(orgId: string): Promise<Subscription | null> {
+    return this.subscriptions.get(orgId) ?? null
+  }
+
+  async updateSubscription(orgId: string, data: Partial<Subscription>): Promise<Subscription> {
+    const existing = this.subscriptions.get(orgId)
+    if (!existing) throw new Error("No subscription")
+    const updated = { ...existing, ...data }
+    this.subscriptions.set(orgId, updated)
+    return updated
+  }
+
+  async createSubscription(orgId: string, planKey: string, data?: Partial<Subscription>): Promise<Subscription> {
+    const sub: Subscription = {
+      id: `sub_${orgId}`,
+      orgId,
+      planKey,
+      status: "ACTIVE",
+      stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
+      stripePriceId: data?.stripePriceId ?? null,
+      currentPeriodStart: data?.currentPeriodStart ?? new Date(),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      trialEnd: data?.trialEnd ?? null,
+      trialStart: data?.trialStart ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+    this.subscriptions.set(orgId, sub)
+    return sub
+  }
+
+  // Override methods
+  async getOverride(scope: "ORG" | "USER", scopeId: string, featureKey: string): Promise<EntitlementOverride | null> {
+    const now = new Date()
+    return this.overrides.find(o => 
+      o.scope === scope && 
+      o.scopeId === scopeId && 
+      o.featureKey === featureKey &&
+      (!o.expiresAt || o.expiresAt > now)
+    ) ?? null
+  }
+
+  async getOverridesForOrg(orgId: string): Promise<EntitlementOverride[]> {
+    const now = new Date()
+    return this.overrides.filter(o => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now))
+  }
+
+  async getOverridesForUser(userId: string): Promise<EntitlementOverride[]> {
+    const now = new Date()
+    return this.overrides.filter(o => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now))
+  }
+
+  async createOverride(data: any): Promise<EntitlementOverride> {
+    const override: EntitlementOverride = {
+      id: `override_${Date.now()}`,
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+    this.overrides.push(override)
+    return override
+  }
+
+  async updateOverride(id: string, data: Partial<EntitlementOverride>): Promise<EntitlementOverride> {
+    const idx = this.overrides.findIndex(o => o.id === id)
+    if (idx === -1) throw new Error("Override not found")
+    this.overrides[idx] = { ...this.overrides[idx], ...data }
+    return this.overrides[idx]
+  }
+
+  async deleteOverride(id: string): Promise<void> {
+    this.overrides = this.overrides.filter(o => o.id !== id)
+  }
+
+  // Usage methods
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTracking | null> {
+    return this.usage.get(`${orgId}:${featureKey}`) ?? null
+  }
+
+  async getUsageForPeriod(orgId: string, featureKey: string, periodStart: Date): Promise<UsageTracking | null> {
+    return this.usage.get(`${orgId}:${featureKey}:${periodStart.getTime()}`) ?? null
+  }
+
+  async createUsage(orgId: string, featureKey: string, periodStart: Date, periodEnd: Date): Promise<UsageTracking> {
+    const usage: UsageTracking = {
+      id: `usage_${Date.now()}`,
+      orgId,
+      featureKey,
+      usageCount: 0,
+      periodStart,
+      periodEnd
+    }
+    this.usage.set(`${orgId}:${featureKey}`, usage)
+    return usage
+  }
+
+  async consumeUsage(orgId: string, featureKey: string, amount: number): Promise<UsageTracking | null> {
+    const existing = this.usage.get(`${orgId}:${featureKey}`)
+    if (existing) {
+      existing.usageCount += amount
+      this.usage.set(`${orgId}:${featureKey}`, existing)
+      return existing
+    }
+    return this.createUsage(orgId, featureKey, new Date(), new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+  }
+
+  // Stripe events
+  async hasStripeEventBeenProcessed(eventId: string): Promise<boolean> {
+    return this.stripeEvents.has(eventId)
+  }
+
+  async markStripeEventProcessed(eventId: string, type: string): Promise<void> {
+    this.stripeEvents.add(eventId)
+  }
+}
+
+// ============================================
+// Mock Cache
+// ============================================
+
+class MockCacheService implements ICacheService {
+  cache = new Map<string, any>()
+
+  async get<T>(key: string): Promise<T | null> {
+    return this.cache.get(key) ?? null
+  }
+
+  async set<T>(key: string, data: T, ttlSeconds: number): Promise<void> {
+    this.cache.set(key, data)
+  }
+
+  async del(key: string): Promise<void> {
+    this.cache.delete(key)
+  }
+
+  async delPattern(pattern: string): Promise<void> {
+    // Simple implementation
+    const prefix = pattern.replace("*", "")
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key)
+      }
+    }
+  }
+
+  async publishInvalidation(orgId: string): Promise<void> {
+    // No-op for tests
+  }
+
+  subscribe(callback: (orgId: string) => void): () => void {
+    return () => {}
+  }
+}
+
+// ============================================
+// Test Setup
+// ============================================
+
+describe("FeatureGateService", () => {
+  let repository: MockEntitlementRepository
+  let cache: MockCacheService
+  let service: FeatureGateService
+
+  beforeEach(() => {
+    repository = new MockEntitlementRepository()
+    cache = new MockCacheService()
+    service = new FeatureGateService(repository, cache)
+
+    // Setup test data
+    repository.plans.set("free", {
+      id: "plan_free",
+      key: "free",
+      name: "Free",
+      priceMonthly: 0,
+      isActive: true,
+      sortOrder: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+
+    repository.plans.set("pro", {
+      id: "plan_pro",
+      key: "pro",
+      name: "Pro",
+      priceMonthly: 1500,
+      isActive: true,
+      sortOrder: 1,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+
+    repository.features.set("EXPORT_PDF", {
+      id: "feature_export",
+      key: "EXPORT_PDF",
+      name: "Export PDF",
+      description: "Export to PDF",
+      type: "LIMIT",
+      defaultConfig: null,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+
+    repository.features.set("AI_SUMMARY", {
+      id: "feature_ai",
+      key: "AI_SUMMARY",
+      name: "AI Summary",
+      description: "AI-powered summaries",
+      type: "BOOLEAN",
+      defaultConfig: null,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+
+    repository.features.set("NEW_DASHBOARD", {
+      id: "feature_experiment",
+      key: "NEW_DASHBOARD",
+      name: "New Dashboard",
+      description: "A/B test",
+      type: "EXPERIMENT",
+      defaultConfig: { percentage: 50, seed: "NEW_DASHBOARD_v1" },
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    })
+  })
+
+  // ============================================
+  // Feature Active via Plan
+  // ============================================
+
+  it("should return true when feature is enabled in plan", async () => {
+    // Setup: Pro plan has EXPORT_PDF enabled with limit 10
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const hasFeature = await service.hasFeature("org_1", "EXPORT_PDF")
+    expect(hasFeature).toBe(true)
+  })
+
+  it("should return false when feature is disabled in plan", async () => {
+    // Free plan doesn't have EXPORT_PDF
+    await repository.createSubscription("org_1", "free")
+
+    const hasFeature = await service.hasFeature("org_1", "EXPORT_PDF")
+    expect(hasFeature).toBe(false)
+  })
+
+  // ============================================
+  // Override Tests
+  // ============================================
+
+  it("should use org override when present", async () => {
+    // Setup: Pro plan has EXPORT_PDF enabled
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    // Add org override to disable
+    await repository.createOverride({
+      scope: "ORG",
+      scopeId: "org_1",
+      featureKey: "EXPORT_PDF",
+      enabled: false,
+      limitValue: null,
+      configJson: null,
+      expiresAt: null,
+      reason: "Test override"
+    })
+
+    const hasFeature = await service.hasFeature("org_1", "EXPORT_PDF")
+    expect(hasFeature).toBe(false)
+  })
+
+  it("should use expired override and fall back to plan", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    // Add expired override
+    await repository.createOverride({
+      scope: "ORG",
+      scopeId: "org_1",
+      featureKey: "EXPORT_PDF",
+      enabled: false,
+      limitValue: null,
+      configJson: null,
+      expiresAt: new Date(Date.now() - 1000), // Expired
+      reason: "Test expired override"
+    })
+
+    const hasFeature = await service.hasFeature("org_1", "EXPORT_PDF")
+    expect(hasFeature).toBe(true) // Should use plan value
+  })
+
+  // ============================================
+  // Limit Tests
+  // ============================================
+
+  it("should return limit from plan", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const limit = await service.getLimit("org_1", "EXPORT_PDF")
+    expect(limit).toBe(10)
+  })
+
+  it("should return null for unlimited", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: null, // Unlimited
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const limit = await service.getLimit("org_1", "EXPORT_PDF")
+    expect(limit).toBe(null)
+  })
+
+  // ============================================
+  // Consume Tests
+  // ============================================
+
+  it("should consume quota successfully", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const result = await service.consume("org_1", "EXPORT_PDF", 1)
+    
+    expect(result.success).toBe(true)
+    expect(result.used).toBe(1)
+    expect(result.remaining).toBe(9)
+  })
+
+  it("should reject when limit reached", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    // Consume all 10
+    for (let i = 0; i < 10; i++) {
+      await service.consume("org_1", "EXPORT_PDF", 1)
+    }
+
+    // Try one more
+    const result = await service.consume("org_1", "EXPORT_PDF", 1)
+    
+    expect(result.success).toBe(false)
+    expect(result.error).toBe("LIMIT_REACHED")
+    expect(result.limitReached?.limit).toBe(10)
+    expect(result.limitReached?.used).toBe(10)
+  })
+
+  it("should allow unlimited when limit is null", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: null, // Unlimited
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    // Try many consumes
+    for (let i = 0; i < 100; i++) {
+      const result = await service.consume("org_1", "EXPORT_PDF", 1)
+      expect(result.success).toBe(true)
+    }
+  })
+
+  // ============================================
+  // A/B Testing
+  // ============================================
+
+  it("should return stable bucket for same user", async () => {
+    const userId = "user_123"
+    
+    // Call multiple times
+    const results = Array(10).fill(0).map(() => 
+      service.isInExperiment(userId, "NEW_DASHBOARD")
+    )
+    
+    // All results should be the same
+    expect(results.every(r => r === results[0])).toBe(true)
+  })
+
+  it("should distribute roughly 50% across users", async () => {
+    const results = Array(1000).fill(0).map((_, i) => 
+      service.isInExperiment(`user_${i}`, "NEW_DASHBOARD")
+    )
+    
+    const percentage = results.filter(r => r).length / results.length
+    
+    // Should be roughly 50% (+/- 5%)
+    expect(percentage).toBeGreaterThan(0.45)
+    expect(percentage).toBeLessThan(0.55)
+  })
+
+  // ============================================
+  // Debug Trace
+  // ============================================
+
+  it("should return debug trace with resolution source", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf_1",
+      planId: "plan_pro",
+      featureId: "feature_export",
+      enabled: true,
+      limitValue: 10,
+      configJson: null,
+      downgradeStrategy: "GRACEFUL",
+      sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const trace = await service.getDebugTrace("org_1", "EXPORT_PDF")
+    
+    expect(trace.feature).toBe("EXPORT_PDF")
+    expect(trace.resolvedVia).toBe("plan")
+    expect(trace.planKey).toBe("pro")
+    expect(trace.value).toBe(true)
+  })
+
+  // ============================================
+  // Fallback
+  // ============================================
+
+  it("should return false for unknown org with no subscription", async () => {
+    const hasFeature = await service.hasFeature("unknown_org", "EXPORT_PDF")
+    expect(hasFeature).toBe(false)
+  })
+
+  it("should use fallback when no subscription", async () => {
+    const trace = await service.getDebugTrace("unknown_org", "EXPORT_PDF")
+    expect(trace.resolvedVia).toBe("fallback")
+    expect(trace.planKey).toBe("free")
+  })
+})
+
+// ============================================
+// Additional Integration Tests
+// ============================================
+
+describe("FeatureGateService Integration", () => {
+  let repository: MockEntitlementRepository
+  let cache: MockCacheService
+  let service: FeatureGateService
+
+  beforeEach(() => {
+    repository = new MockEntitlementRepository()
+    cache = new MockCacheService()
+    service = new FeatureGateService(repository, cache)
+
+    // Setup base data
+    repository.plans.set("free", {
+      id: "plan_free", key: "free", name: "Free", priceMonthly: 0, 
+      isActive: true, sortOrder: 0, createdAt: new Date(), updatedAt: new Date()
+    })
+    repository.plans.set("pro", {
+      id: "plan_pro", key: "pro", name: "Pro", priceMonthly: 1500, 
+      isActive: true, sortOrder: 1, createdAt: new Date(), updatedAt: new Date()
+    })
+
+    repository.features.set("EXPORT_PDF", {
+      id: "f1", key: "EXPORT_PDF", name: "Export", description: "Export", 
+      type: "LIMIT", defaultConfig: null, isActive: true, createdAt: new Date(), updatedAt: new Date()
+    })
+  })
+
+  it("should get all entitlements", async () => {
+    repository.planFeatures.set("plan_pro", [{
+      id: "pf1", planId: "plan_pro", featureId: "f1", enabled: true, 
+      limitValue: 10, configJson: null, downgradeStrategy: "GRACEFUL", sortOrder: 0,
+      feature: repository.features.get("EXPORT_PDF")!
+    }])
+
+    await repository.createSubscription("org_1", "pro")
+
+    const entitlements = await service.getAllEntitlements("org_1")
+    
+    expect(entitlements.planKey).toBe("pro")
+    expect(entitlements.features.EXPORT_PDF).toBe(true)
+    expect(entitlements.limits.EXPORT_PDF).toBe(10)
+  })
+
+  it("should invalidate cache", async () => {
+    await repository.createSubscription("org_1", "pro")
+    
+    // Set cache
+    await cache.set("entitlements:org_1", { planKey: "pro", version: 1 }, 300)
+    
+    // Invalidate
+    await service.invalidateCache("org_1")
+    
+    // Cache should be cleared
+    const cached = await cache.get("entitlements:org_1")
+    expect(cached).toBeNull()
+  })
+})
