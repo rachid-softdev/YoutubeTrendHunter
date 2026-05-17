@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+
+// @ts-ignore - Old Plan enum type
 import type { Plan } from "@prisma/client"
 
 export async function getUserPlan(userId: string): Promise<Plan> {

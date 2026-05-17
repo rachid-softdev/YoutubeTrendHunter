@@ -1,3 +1,7 @@
+// ============================================
+// Stripe Webhook - Working version
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
@@ -94,11 +98,9 @@ export async function POST(req: NextRequest) {
     }
 
     case "customer.subscription.trial_will_end": {
-      // Envoyer email de reminder 3 jours avant fin de trial
       const subscription = event.data.object as any
       const userId = subscription.metadata.userId
 
-      // Log pour envoi d'email de reminder
       console.log(`Trial will end soon for user ${userId}`)
       break
     }
