@@ -25,10 +25,10 @@ export default async function DashboardPage({
 
   const trends = niche
     ? await prisma.trend.findMany({
-      where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
-      orderBy: { score: "desc" },
-      take: plan === "FREE" ? 5 : 20,
-    })
+        where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
+        orderBy: { score: "desc" },
+        take: plan === "FREE" ? 5 : 20,
+      })
     : []
 
   const niches = await prisma.niche.findMany({

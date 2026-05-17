@@ -94,3 +94,44 @@ export async function getTrendingVideos(regionCode: string = "FR", categoryId?: 
     thumbnails: item.snippet.thumbnails,
   }))
 }
+
+export interface YouTubeVideoDetails {
+  videoId: string
+  title: string
+  description: string
+  channelTitle: string
+  channelId: string
+  publishedAt: string
+  thumbnailUrl: string
+  tags: string[]
+  categoryId: string
+}
+
+export async function getVideoDetails(videoId: string): Promise<YouTubeVideoDetails> {
+  const params = new URLSearchParams({
+    part: "snippet,statistics",
+    id: videoId,
+    key: YOUTUBE_API_KEY,
+  })
+
+  const res = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`)
+  if (!res.ok) throw new Error(`YouTube video details failed: ${res.status}`)
+  const data = await res.json()
+
+  if (!data.items || data.items.length === 0) {
+    throw new Error("Video not found")
+  }
+
+  const item = data.items[0]
+  return {
+    videoId: item.id,
+    title: item.snippet.title,
+    description: item.snippet.description,
+    channelTitle: item.snippet.channelTitle,
+    channelId: item.snippet.channelId,
+    publishedAt: item.snippet.publishedAt,
+    thumbnailUrl: item.snippet.thumbnails?.high?.url ?? item.snippet.thumbnails?.medium?.url ?? "",
+    tags: item.snippet.tags ?? [],
+    categoryId: item.snippet.categoryId,
+  }
+}
