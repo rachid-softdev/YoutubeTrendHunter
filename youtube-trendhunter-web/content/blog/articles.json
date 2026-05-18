@@ -1,0 +1,510 @@
+{
+  "meta": {
+    "lastUpdated": "2026-05-15T10:00:00Z",
+    "totalArticles": 5,
+    "version": "1.0"
+  },
+  "categories": [
+    {
+      "slug": "analyses",
+      "name": "Analyses",
+      "description": "Analyses approfondies des tendances YouTube",
+      "color": "red"
+    },
+    {
+      "slug": "guides",
+      "name": "Guides",
+      "description": "Tutoriels et conseils pratiques pour créateurs",
+      "color": "blue"
+    },
+    {
+      "slug": "strategies",
+      "name": "Stratégies",
+      "description": "Stratégies de croissance et最佳的实践",
+      "color": "green"
+    },
+    {
+      "slug": "actualites",
+      "name": "Actualités",
+      "description": "Dernières nouvelles de l'écosystème YouTube",
+      "color": "purple"
+    }
+  ],
+  "articles": [
+    {
+      "id": "1",
+      "slug": "ia-productivite-tendance-2026-youtube",
+      "status": "published",
+      "featured": true,
+      "category": "analyses",
+      "niche": "IA & Productivité",
+      "language": "fr",
+      "title": "IA & Productivité : La niche YouTube à surveiller en 2026",
+      "titleEn": "AI & Productivity: The YouTube Niche to Watch in 2026",
+      "subtitle": "Comment l'explosion de l'IA génère des opportunités massives pour les créateurs de contenu",
+      "excerpt": "L'intelligence artificielle transforme le paysage YouTube. Découvrez pourquoi cette niche explose et comment en profiter.",
+      "content": {
+        "fr": {
+          "sections": [
+            {
+              "type": "intro",
+              "content": "Le marché de l'IA explose littéralement sur YouTube. En 2025, les vidéos sur l'intelligence artificielle ont généré plus de 2 milliards de vues. Cette tendance n'est pas prête de ralentir, bien au contraire."
+            },
+            {
+              "type": "h2",
+              "heading": "Pourquoi l'IA & Productivité explose en 2026",
+              "content": "Plusieurs facteurs convergent pour faire de cette niche l'une des plus performantes de l'année.",
+              "subsections": [
+                {
+                  "type": "h3",
+                  "heading": "Adoption massive par le grand public",
+                  "content": "Les outils comme ChatGPT, Claude et Midjourney sont devenus accessibles à tous. Résultat : une demande colossale de contenus explicatifs."
+                },
+                {
+                  "type": "h3",
+                  "heading": "Évolution rapide = contenu infini",
+                  "content": "Chaque semaine apporte son lot de nouvelles fonctionnalités. Les créateurs peuvent publier quotidiennement sans se répéter."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "tip",
+              "text": "Le moment idéal pour démarrer ? Maintenant. Les statistiques montrent que les chaînes lancées en early 2025 ont vu leur croissance multiplier par 3 en 6 mois."
+            },
+            {
+              "type": "stats",
+              "items": [
+                { "label": "Vues 2025", "value": "2B+" },
+                { "label": "Croissance", "value": "+340%" },
+                { "label": "Upload/jour", "value": "15K" },
+                { "label": "Avg CTR", "value": "8.2%" }
+              ]
+            },
+            {
+              "type": "h2",
+              "heading": "Les formats qui cartonnent",
+              "content": "Tous les formats ne se valent pas. Voici ceux qui performent le mieux.",
+              "items": [
+                "Tutoriels IA pour débutants (10-15 min)",
+                "Comparatifs d'outils (15-20 min)",
+                "Prompt engineering avancé (8-12 min)",
+                "Workflows automatisés (12-18 min)",
+                "Actualités IA hebdo (5-8 min)"
+              ]
+            },
+            {
+              "type": "quote",
+              "text": "En 6 mois sur cette niche, j'ai atteint 50K abonnés sans aucune publication sponsorisée. Le contenu speaks for itself.",
+              "author": "Créateur anonyme, chaîne IA francophone"
+            },
+            {
+              "type": "h2",
+              "heading": "Comment se différencier",
+              "content": "Le marché devient crowded. Voici comment vous démarquer.",
+              "subsections": [
+                {
+                  "type": "h3",
+                  "heading": "Niche dans la niche",
+                  "content": "Plutôt que 'IA générale', ciblez 'IA pour freelancers' ou 'IA pour développeurs'. Moins de concurrence, plus d'engagement."
+                },
+                {
+                  "type": "h3",
+                  "heading": "Cas d'usage concrets",
+                  "content": "Les tutoriels abstraits perdent en audience. Préférez les cas d'usage réels avec résultats mesurables."
+                }
+              ]
+            },
+            {
+              "type": "conclusion",
+              "heading": "Verdict : opportunité majeure",
+              "content": "L'IA & Productivité reste une des niches les plus accessibles et à plus fort potentiel en 2026. La clé : être constant, produire du contenu de qualité, et surtout, rester à jour sur les évolutions du marché."
+            }
+          ],
+          "tags": ["IA", "Productivité", "YouTube", "2026", "Tutoriel", "Automation"],
+          "readTime": 8,
+          "difficulty": "intermédiaire"
+        }
+      },
+      "seo": {
+        "metaTitle": "IA & Productivité YouTube 2026 : Analyse Complète | TrendHunter",
+        "metaDescription": "Découvrez pourquoi la niche IA & Productivité explose sur YouTube en 2026. Stats, formats gagnants, et stratégies pour en profiter.",
+        "keywords": ["tendance youtube 2026", "IA productivité youtube", "niche youtube rentable", "youtube IA français"]
+      },
+      "media": {
+        "coverImage": {
+          "url": "",
+          "alt": "IA Productivité YouTube 2026"
+        }
+      },
+      "author": {
+        "name": "TrendHunter AI",
+        "avatar": "",
+        "bio": "Analyse automatique des tendances YouTube par l'intelligence artificielle TrendHunter"
+      },
+      "timestamps": {
+        "publishedAt": "2026-05-10T08:00:00Z",
+        "updatedAt": "2026-05-15T10:00:00Z"
+      },
+      "relatedArticles": ["2", "3"]
+    },
+    {
+      "id": "2",
+      "slug": "comment-creer-chaine-youtube-rentable",
+      "status": "published",
+      "featured": false,
+      "category": "guides",
+      "niche": null,
+      "language": "fr",
+      "title": "Comment créer une chaîne YouTube rentable en 2026",
+      "titleEn": "How to Create a Profitable YouTube Channel in 2026",
+      "subtitle": "Le guide complet pour passer de zero à rentabilisation",
+      "excerpt": "Vous voulez créer une chaîne YouTube qui génère des revenus ? Voici la méthode paso a paso.",
+      "content": {
+        "fr": {
+          "sections": [
+            {
+              "type": "intro",
+              "content": "Créer une chaîne YouTube rentable n'est pas une question de chance. C'est une question de méthode. Dans ce guide, je vous révèle les étapes exactes que suivent les créateurs qui passent le cap des 1000 abonnés."
+            },
+            {
+              "type": "h2",
+              "heading": "Étape 1 : Trouvez votre niche rentable",
+              "content": "Le choix de la niche est决定ur. Une niche trop large = pas de communauté. Une niche trop étroite = pas assez de volume.",
+              "subsections": [
+                {
+                  "type": "h3",
+                  "heading": "Les critères d'une bonne niche",
+                  "content": "Elle doit avoir : assez de recherche (volume), une communauté engagée, et un potentiel de monétisation."
+                }
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "warning",
+              "text": "Ne copiez pas une niche parce qu'elle marche pour quelqu'un d'autre. Analysez vos propres compétences et passions."
+            },
+            {
+              "type": "h2",
+              "heading": "Étape 2 : Optimisez votre chaîne",
+              "content": "Avant de publier, votre chaîne doit être ready. Cela inclut votre banner, votre description, et vos playlists.",
+              "items": [
+                "Banner cohérente avec votre niche",
+                "Description optimisée SEO (premiers 150 mots cruciaux)",
+                "Playlists structurées par thématique",
+                "Logo reconnaissable"
+              ]
+            },
+            {
+              "type": "stats",
+              "items": [
+                { "label": "Temps avg", "value": "6-12 mois" },
+                { "label": "Vues/ vidéo", "value": "1K-10K" },
+                { "label": "Retention", "value": "50%+" },
+                { "label": "CTR", "value": "6%+" }
+              ]
+            },
+            {
+              "type": "conclusion",
+              "heading": "La clé du succès",
+              "content": "Consistance + qualité + patience. Pas de raccourcis, mais une méthode éprouvée."
+            }
+          ],
+          "tags": ["Guide", "Création de chaîne", "Monétisation", "Débutant"],
+          "readTime": 6,
+          "difficulty": "débutant"
+        }
+      },
+      "seo": {
+        "metaTitle": "Comment créer une chaîne YouTube rentable | Guide 2026",
+        "metaDescription": "Le guide complet pour créer une chaîne YouTube rentable : niche, optimisation, croissance.",
+        "keywords": ["créer chaîne youtube", "youtube rentable", "guide youtube", "monétisation youtube"]
+      },
+      "media": {
+        "coverImage": {
+          "url": "",
+          "alt": "Créer une chaîne YouTube rentable"
+        }
+      },
+      "author": {
+        "name": "TrendHunter AI",
+        "avatar": "",
+        "bio": "Analyse automatique des tendances YouTube par l'intelligence artificielle TrendHunter"
+      },
+      "timestamps": {
+        "publishedAt": "2026-05-08T10:00:00Z",
+        "updatedAt": "2026-05-08T10:00:00Z"
+      },
+      "relatedArticles": ["1"]
+    },
+    {
+      "id": "3",
+      "slug": "algorithme-youtube-2026-tout-savoir",
+      "status": "published",
+      "featured": false,
+      "category": "analyses",
+      "niche": null,
+      "language": "fr",
+      "title": "Comment l'algorithme YouTube fonctionne en 2026",
+      "titleEn": "How the YouTube Algorithm Works in 2026",
+      "subtitle": "Décryptage complet des signaux qui font exploser vos vidéos",
+      "excerpt": "L'algorithme de YouTube reste un mystère pour beaucoup. Décryptons ensemble ses secrets.",
+      "content": {
+        "fr": {
+          "sections": [
+            {
+              "type": "intro",
+              "content": "Comprendre l'algorithme YouTube, c'est comprendre le jeu. Et comme tout jeu, il a ses règles. En 2026, ces règles ont évolué. Voici ce qu'il faut savoir."
+            },
+            {
+              "type": "h2",
+              "heading": "Les 3 piliers de l'algorithme",
+              "content": "YouTube évalue vos vidéos sur trois critères principaux :",
+              "items": [
+                "Engagement : likes, commentaires, partages, temps de visionnage",
+                "Satisfaction : retours utilisateurs, watch time moyen",
+                "Qualité : autorité de la chaîne, cohérence des publications"
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "text": "Le temps de visionnage reste le signal le plus important. YouTube privilégie les vidéos qui gardent l'attention."
+            },
+            {
+              "type": "h2",
+              "heading": "Les signaux à optimiser",
+              "content": "Voici les éléments techniques à maîtriser pour donner toutes les chances à vos vidéos.",
+              "subsections": [
+                {
+                  "type": "h3",
+                  "heading": "CTR (Click Through Rate)",
+                  "content": "Le ratio entre impressions et clics. Un bon CTR se situe entre 6% et 10%."
+                },
+                {
+                  "type": "h3",
+                  "heading": "Average View Duration",
+                  "content": "La durée moyenne de visionnage. YouTube veut des vidéos que les gens regardent jusqu'au bout."
+                }
+              ]
+            },
+            {
+              "type": "stats",
+              "items": [
+                { "label": "CTR idéal", "value": "6-10%" },
+                { "label": "Avg duration", "value": "50%+" },
+                { "label": "Comments", "value": "1%+ views" },
+                { "label": "Likes", "value": "5%+ views" }
+              ]
+            },
+            {
+              "type": "quote",
+              "text": "En 2026, l'algorithme rewards la consistency plus que jamais. Publish regularly or get buried.",
+              "author": "Analyse TrendHunter"
+            },
+            {
+              "type": "conclusion",
+              "heading": "L'algorithme n'est pas votre ennemi",
+              "content": "Il est là pour servir les viewers, pas les créateurs. En créant du contenu que vos spectateurs veulent voir, vous gagnez automatiquement."
+            }
+          ],
+          "tags": ["Algorithme", "YouTube", "SEO", "2026", "Conseil"],
+          "readTime": 7,
+          "difficulty": "intermédiaire"
+        }
+      },
+      "seo": {
+        "metaTitle": "Algorithme YouTube 2026 : Guide complet | TrendHunter",
+        "metaDescription": "Découvez comment fonctionne l'algorithme YouTube en 2026 : CTR, watch time, engagement, tous les signaux expliqués.",
+        "keywords": ["algorithme youtube", "youtube algorithm 2026", "CTR youtube", "watch time"]
+      },
+      "media": {
+        "coverImage": {
+          "url": "",
+          "alt": "Algorithme YouTube 2026"
+        }
+      },
+      "author": {
+        "name": "TrendHunter AI",
+        "avatar": "",
+        "bio": "Analyse automatique des tendances YouTube par l'intelligence artificielle TrendHunter"
+      },
+      "timestamps": {
+        "publishedAt": "2026-05-05T12:00:00Z",
+        "updatedAt": "2026-05-05T12:00:00Z"
+      },
+      "relatedArticles": ["1", "2"]
+    },
+    {
+      "id": "4",
+      "slug": "niches-youtube-croissance-rapide",
+      "status": "published",
+      "featured": false,
+      "category": "strategies",
+      "niche": null,
+      "language": "fr",
+      "title": "Les 5 niches YouTube à croissance rapide en 2026",
+      "titleEn": "5 Fast-Growing YouTube Niches in 2026",
+      "subtitle": "Découvrez les niches où les créateurs explosent en 2026",
+      "excerpt": "Toutes les niches ne se valent pas. Voici celles qui offrent le meilleur potentiel de croissance.",
+      "content": {
+        "fr": {
+          "sections": [
+            {
+              "type": "intro",
+              "content": "Vous cherchez une niche où il y a moins de concurrence et plus d'opportunités ? Voici le top 5 des niches à croissance rapide identifiées par TrendHunter."
+            },
+            {
+              "type": "h2",
+              "heading": "1. IA & Automatisation",
+              "content": "Le marché explose. Des millions de gens cherchent à apprendre à utiliser les outils IA.",
+              "variant": "highlight"
+            },
+            {
+              "type": "h2",
+              "heading": "2. Bien-être mental",
+              "content": "Le burnout et l'anxiété sont des sujets majeurs. La demande explose."
+            },
+            {
+              "type": "h2",
+              "heading": "3. Crypto & Web3",
+              "content": "Malgré les bulles, le intérêt reste fort. Le marché a maturé."
+            },
+            {
+              "type": "h2",
+              "heading": "4. Lifestyle minimaliste",
+              "content": "Contre-courant du consumerisme. Une communauté engagée et fidèle."
+            },
+            {
+              "type": "h2",
+              "heading": "5. Éducation financière",
+              "content": "L'argent reste un sujet tabou mais demandé. Forte intention de recherche."
+            },
+            {
+              "type": "callout",
+              "variant": "tip",
+              "text": "Choisissez une niche qui vous passionne vraiment. You'll be in it for the long haul."
+            },
+            {
+              "type": "conclusion",
+              "heading": "Faites votre choix",
+              "content": "Ces 5 niches offrent des opportunités réelles. À vous de trouver votre angle unique."
+            }
+          ],
+          "tags": ["Niches", "Croissance", "Stratégie", "2026"],
+          "readTime": 5,
+          "difficulty": "débutant"
+        }
+      },
+      "seo": {
+        "metaTitle": "5 niches YouTube à croissance rapide 2026 | TrendHunter",
+        "metaDescription": "Découvrez les 5 niches YouTube qui explosent en 2026. Croissance rapide, faible concurrence, fort potentiel.",
+        "keywords": ["niches youtube", "niche youtube rentable", "croissance youtube", "2026"]
+      },
+      "media": {
+        "coverImage": {
+          "url": "",
+          "alt": "Niches YouTube croissance rapide"
+        }
+      },
+      "author": {
+        "name": "TrendHunter AI",
+        "avatar": "",
+        "bio": "Analyse automatique des tendances YouTube par l'intelligence artificielle TrendHunter"
+      },
+      "timestamps": {
+        "publishedAt": "2026-05-01T09:00:00Z",
+        "updatedAt": "2026-05-01T09:00:00Z"
+      },
+      "relatedArticles": ["1"]
+    },
+    {
+      "id": "5",
+      "slug": "youtube-shorts-vs-long-form-2026",
+      "status": "published",
+      "featured": false,
+      "category": "actualites",
+      "niche": null,
+      "language": "fr",
+      "title": "YouTube Shorts vs Long Form : Le match en 2026",
+      "titleEn": "YouTube Shorts vs Long Form: The Showdown in 2026",
+      "subtitle": "Quel format choisir pour maximiser votre croissance ?",
+      "excerpt": "Shorts oulong-form ? La réponse nuancedepend de votre objectif.",
+      "content": {
+        "fr": {
+          "sections": [
+            {
+              "type": "intro",
+              "content": "YouTube Shorts ou long-form ? La question que tout créateur se pose. En 2026, le paysage a évolué. Voici l'analyse complète."
+            },
+            {
+              "type": "h2",
+              "heading": "Les Shorts en 2026",
+              "content": "Les shorts c'est : discovery rapide, faible friction, mais moins d'engagement profond.",
+              "items": [
+                "Perfect pour la découverte",
+                "Algorithm Rewards la frequence",
+                "Moins de watch time = moins de revenue potentiel",
+                "Bon pour grow rapidement"
+              ]
+            },
+            {
+              "type": "callout",
+              "variant": "info",
+              "text": "Le meilleur strategy en 2026 : utilisez les Shorts comme funnel vers vos longs-formes."
+            },
+            {
+              "type": "h2",
+              "heading": "Le Long Form reste ROI",
+              "content": "C'est toujours le format qui génère le plus de revenue et de communauté.",
+              "items": [
+                "Meilleur CPM",
+                "Communauté plus engagée",
+                "Meilleur pour le personal brand",
+                "Reconvertible en short"
+              ]
+            },
+            {
+              "type": "stats",
+              "items": [
+                { "label": "Shorts views", "value": "50B+/mois" },
+                { "label": "Long avg CPM", "value": "$4-8" },
+                { "label": "Short avg CPM", "value": "$0.5-2" },
+                { "label": "Conversion", "value": "2-5%" }
+              ]
+            },
+            {
+              "type": "conclusion",
+              "heading": "Le combo gagner",
+              "content": "Shorts + Long-form ensemble. Les shorts attirent, les longs retiennent et monétisent."
+            }
+          ],
+          "tags": ["Shorts", "Long-form", "Format", "Strategy", "2026"],
+          "readTime": 6,
+          "difficulty": "intermédiaire"
+        }
+      },
+      "seo": {
+        "metaTitle": "YouTube Shorts vs Long Form 2026 | TrendHunter",
+        "metaDescription": "Shorts ou long-form YouTube en 2026 ? Analyse comparative complète pour optimiser votre stratégie.",
+        "keywords": ["youtube shorts", "long form youtube", "format youtube", "2026"]
+      },
+      "media": {
+        "coverImage": {
+          "url": "",
+          "alt": "Shorts vs Long Form YouTube"
+        }
+      },
+      "author": {
+        "name": "TrendHunter AI",
+        "avatar": "",
+        "bio": "Analyse automatique des tendances YouTube par l'intelligence artificielle TrendHunter"
+      },
+      "timestamps": {
+        "publishedAt": "2026-04-28T14:00:00Z",
+        "updatedAt": "2026-04-28T14:00:00Z"
+      },
+      "relatedArticles": ["3"]
+    }
+  ]
+}

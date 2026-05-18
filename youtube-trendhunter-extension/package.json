@@ -1,0 +1,11 @@
+{
+  "name": "@youtube-trendhunter/extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Extension dev - use browser dev mode'",
+    "build": "echo 'Extension build'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
