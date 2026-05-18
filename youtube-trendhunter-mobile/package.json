@@ -1,0 +1,11 @@
+{
+  "name": "@youtube-trendhunter/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Mobile placeholder'",
+    "build": "echo 'Mobile placeholder'",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'No tests'"
+  }
+}

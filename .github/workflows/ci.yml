@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: trendhunter_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trendhunter_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/trendhunter_test
+      AUTH_SECRET: test-secret
+      NEXTAUTH_URL: http://localhost:3000
+      AUTH_GOOGLE_ID: test-google-id
+      AUTH_GOOGLE_SECRET: test-google-secret
+      STRIPE_SECRET_KEY: sk_test_fake
+      STRIPE_WEBHOOK_SECRET: whsec_fake
+      STRIPE_PRO_PRICE_ID: price_fake
+      STRIPE_TEAM_PRICE_ID: price_fake
+      ANTHROPIC_API_KEY: sk-ant-fake
+      UPSTASH_REDIS_REST_URL: https://fake.upstash.io
+      UPSTASH_REDIS_REST_TOKEN: fake
+      YOUTUBE_API_KEY: fake
+      RESEND_API_KEY: re_fake
+      EMAIL_FROM: test@trendhunter.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma db push --skip-generate
+      - run: npm run test:ci
+        env:
+          VITEST_UI: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRO_PRICE_ID: ${{ secrets.STRIPE_PRO_PRICE_ID }}
+          STRIPE_TEAM_PRICE_ID: ${{ secrets.STRIPE_TEAM_PRICE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm audit --audit-level=high

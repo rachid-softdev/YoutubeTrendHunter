@@ -1,0 +1,6 @@
+packages:
+  - 'packages/*'
+  - 'youtube-trendhunter-web'
+  - 'youtube-trendhunter-desktop'
+  - 'youtube-trendhunter-extension'
+  - 'youtube-trendhunter-mobile'

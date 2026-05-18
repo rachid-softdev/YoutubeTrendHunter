@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "tendances",
+    "name": "Tendances",
+    "description": "Analyses des tendances YouTube actuelles",
+    "color": "#FF0000"
+  },
+  {
+    "slug": "guides",
+    "name": "Guides",
+    "description": "Tutoriels et guides pratiques",
+    "color": "#065FD4"
+  },
+  {
+    "slug": "comparatifs",
+    "name": "Comparatifs",
+    "description": "Comparatifs d'outils et stratégies",
+    "color": "#FFD600"
+  },
+  {
+    "slug": "analyses",
+    "name": "Analyses",
+    "description": "Analyses approfondies du marché",
+    "color": "#2BA640"
+  },
+  {
+    "slug": "actualites",
+    "name": "Actualités",
+    "description": "Nouveautés et mises à jour",
+    "color": "#6A0DAD"
+  }
+]
