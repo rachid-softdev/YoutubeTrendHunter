@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "es2022"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -17,7 +17,20 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "useUnknownInCatchVariables": true
   },
-  "exclude": ["node_modules", "youtube-trendhunter-web/node_modules", "youtube-trendhunter-desktop/node_modules", "youtube-trendhunter-extension/node_modules", "youtube-trendhunter-mobile/node_modules", "packages/*/node_modules"]
+  "exclude": [
+    "node_modules",
+    "youtube-trendhunter-web/node_modules",
+    "youtube-trendhunter-desktop/node_modules",
+    "youtube-trendhunter-extension/node_modules",
+    "youtube-trendhunter-mobile/node_modules",
+    "packages/*/node_modules"
+  ]
 }
