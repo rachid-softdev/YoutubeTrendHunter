@@ -1,83 +1,79 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Bell, Mail, Webhook, Trash2, Loader2 } from "lucide-react"
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Bell, Mail, Webhook, Trash2, Loader2 } from "lucide-react";
 
 interface AlertListProps {
   alerts: Array<{
-    id: string
-    type: string
-    threshold: number
-    channel: string
-    isActive: boolean
-    niche: { id: string; name: string; slug: string } | null
-  }>
-  onToggleActive: (alertId: string, isActive: boolean) => Promise<void>
-  onDelete: (alertId: string) => Promise<void>
+    id: string;
+    type: string;
+    threshold: number;
+    channel: string;
+    isActive: boolean;
+    niche: { id: string; name: string; slug: string } | null;
+  }>;
+  onToggleActive: (alertId: string, isActive: boolean) => Promise<void>;
+  onDelete: (alertId: string) => Promise<void>;
 }
 
-export function AlertList({
-  alerts,
-  onToggleActive,
-  onDelete,
-}: AlertListProps) {
-  const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+export function AlertList({ alerts, onToggleActive, onDelete }: AlertListProps) {
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const getTypeBadgeVariant = (type: string) => {
     switch (type) {
       case "SCORE_THRESHOLD":
-        return "default"
+        return "default";
       case "DAILY_DIGEST":
-        return "secondary"
+        return "secondary";
       case "SPIKE":
-        return "destructive"
+        return "destructive";
       default:
-        return "default"
+        return "default";
     }
-  }
+  };
 
   const getTypeLabel = (type: string) => {
     switch (type) {
       case "SCORE_THRESHOLD":
-        return "Score seuil"
+        return "Score seuil";
       case "DAILY_DIGEST":
-        return "Résumé quotidien"
+        return "Résumé quotidien";
       case "SPIKE":
-        return "Pic d'activité"
+        return "Pic d'activité";
       default:
-        return type
+        return type;
     }
-  }
+  };
 
   const handleToggle = async (alertId: string, currentActive: boolean) => {
-    setLoadingId(alertId)
+    setLoadingId(alertId);
     try {
-      await onToggleActive(alertId, !currentActive)
+      await onToggleActive(alertId, !currentActive);
     } catch (error) {
-      console.error("Error toggling alert:", error)
-      alert("Erreur lors de la mise à jour")
+      console.error("Error toggling alert:", error);
+      alert("Erreur lors de la mise à jour");
     } finally {
-      setLoadingId(null)
+      setLoadingId(null);
     }
-  }
+  };
 
   const handleDelete = async (alertId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette alerte ?")) return
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette alerte ?")) return;
 
-    setDeletingId(alertId)
+    setDeletingId(alertId);
     try {
-      await onDelete(alertId)
+      await onDelete(alertId);
     } catch (error) {
-      console.error("Error deleting alert:", error)
-      alert("Erreur lors de la suppression")
+      console.error("Error deleting alert:", error);
+      alert("Erreur lors de la suppression");
     } finally {
-      setDeletingId(null)
+      setDeletingId(null);
     }
-  }
+  };
 
   if (alerts.length === 0) {
     return (
@@ -87,7 +83,7 @@ export function AlertList({
           <p>Aucune alerte configurée</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -101,9 +97,7 @@ export function AlertList({
                   {getTypeLabel(alert.type)}
                 </Badge>
                 {alert.type !== "DAILY_DIGEST" && (
-                  <span className="text-sm text-dark-ink-secondary">
-                    Seuil: {alert.threshold}%
-                  </span>
+                  <span className="text-sm text-dark-ink-secondary">Seuil: {alert.threshold}%</span>
                 )}
               </div>
               <div className="flex items-center gap-3 text-sm text-dark-ink-tertiary">
@@ -116,9 +110,7 @@ export function AlertList({
                   {alert.channel === "EMAIL" ? "Email" : "Webhook"}
                 </span>
                 {alert.niche && (
-                  <span className="text-dark-ink-secondary">
-                    • {alert.niche.name}
-                  </span>
+                  <span className="text-dark-ink-secondary">• {alert.niche.name}</span>
                 )}
               </div>
             </div>
@@ -160,5 +152,5 @@ export function AlertList({
         </Card>
       ))}
     </div>
-  )
+  );
 }

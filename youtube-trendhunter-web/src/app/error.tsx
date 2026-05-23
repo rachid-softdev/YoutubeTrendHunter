@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import Link from "next/link"
-import { Play, RotateCcw } from "lucide-react"
+import { useEffect } from "react";
+import Link from "next/link";
+import { Play, RotateCcw } from "lucide-react";
 
 export default function Error({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Application error:", error)
-  }, [error])
+    console.error("Application error:", error);
+  }, [error]);
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink flex items-center justify-center px-4">
@@ -42,5 +42,5 @@ export default function Error({
         </div>
       </div>
     </div>
-  )
+  );
 }

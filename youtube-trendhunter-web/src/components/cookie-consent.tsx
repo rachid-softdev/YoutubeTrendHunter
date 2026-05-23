@@ -1,54 +1,54 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { X, Cookie } from "lucide-react"
-import Link from "next/link"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { X, Cookie } from "lucide-react";
+import Link from "next/link";
 
-const COOKIE_CONSENT_KEY = "cookie_consent"
-const CONSENT_DELAY = 2000
+const COOKIE_CONSENT_KEY = "cookie_consent";
+const CONSENT_DELAY = 2000;
 
 export function CookieConsent() {
-  const [show, setShow] = useState(false)
-  const [isVisible, setIsVisible] = useState(false)
+  const [show, setShow] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     // Check if consent was already given
-    const consent = localStorage.getItem(COOKIE_CONSENT_KEY)
+    const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
     if (consent) {
-      return
+      return;
     }
 
     // Show after delay
     const timer = setTimeout(() => {
-      setShow(true)
+      setShow(true);
       // Trigger animation
       requestAnimationFrame(() => {
-        setIsVisible(true)
-      })
-    }, CONSENT_DELAY)
+        setIsVisible(true);
+      });
+    }, CONSENT_DELAY);
 
-    return () => clearTimeout(timer)
-  }, [])
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleAccept = () => {
-    localStorage.setItem(COOKIE_CONSENT_KEY, "accepted")
-    setIsVisible(false)
-    setTimeout(() => setShow(false), 300)
+    localStorage.setItem(COOKIE_CONSENT_KEY, "accepted");
+    setIsVisible(false);
+    setTimeout(() => setShow(false), 300);
 
     // Fire PostHog opt-in if available
     if (typeof window !== "undefined" && (window as any).posthog) {
-      ;(window as any).posthog.opt_in_capturing()
+      (window as any).posthog.opt_in_capturing();
     }
-  }
+  };
 
   const handleEssentialOnly = () => {
-    localStorage.setItem(COOKIE_CONSENT_KEY, "essential")
-    setIsVisible(false)
-    setTimeout(() => setShow(false), 300)
-  }
+    localStorage.setItem(COOKIE_CONSENT_KEY, "essential");
+    setIsVisible(false);
+    setTimeout(() => setShow(false), 300);
+  };
 
-  if (!show) return null
+  if (!show) return null;
 
   return (
     <>
@@ -90,12 +90,7 @@ export function CookieConsent() {
               >
                 Essentiels seulement
               </Button>
-              <Button
-                variant="subscribe"
-                size="sm"
-                onClick={handleAccept}
-                className="font-bold"
-              >
+              <Button variant="subscribe" size="sm" onClick={handleAccept} className="font-bold">
                 Tout accepter
               </Button>
             </div>
@@ -103,5 +98,5 @@ export function CookieConsent() {
         </div>
       </div>
     </>
-  )
+  );
 }

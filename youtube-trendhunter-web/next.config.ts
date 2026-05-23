@@ -25,7 +25,9 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/api/(.*)",
-        headers: [{ key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" }],
+        headers: [
+          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" },
+        ],
       },
       {
         source: "/(.*).(js|css|woff|woff2|ttf|eot|svg|ico|jpg|jpeg|png|webp|avif|json)",

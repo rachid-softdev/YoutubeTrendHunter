@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Check, X, ChevronRight, Target, Eye, Bell, Users } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Check, X, ChevronRight, Target, Eye, Bell, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface OnboardingChecklistProps {
-  className?: string
+  className?: string;
 }
 
 interface Step {
-  id: string
-  title: string
-  description: string
-  href: string
-  icon: React.ReactNode
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  icon: React.ReactNode;
 }
 
 const steps: Step[] = [
@@ -46,52 +46,52 @@ const steps: Step[] = [
     href: "/settings",
     icon: <Users className="w-5 h-5" />,
   },
-]
+];
 
 export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
-  const router = useRouter()
-  const [completedSteps, setCompletedSteps] = useState<string[]>([])
-  const [isVisible, setIsVisible] = useState(false)
-  const [isSkipped, setIsSkipped] = useState(false)
+  const router = useRouter();
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isSkipped, setIsSkipped] = useState(false);
 
   useEffect(() => {
     // Check localStorage for completion
-    const stored = localStorage.getItem("onboarding-completed-steps")
+    const stored = localStorage.getItem("onboarding-completed-steps");
     if (stored) {
-      const parsed = JSON.parse(stored)
-      setCompletedSteps(parsed)
+      const parsed = JSON.parse(stored);
+      setCompletedSteps(parsed);
     }
 
     // Check if skipped
-    const skipped = localStorage.getItem("onboarding-skipped")
+    const skipped = localStorage.getItem("onboarding-skipped");
     if (skipped) {
-      setIsSkipped(true)
-      return
+      setIsSkipped(true);
+      return;
     }
 
     // Animate entrance
-    const timer = setTimeout(() => setIsVisible(true), 100)
-    return () => clearTimeout(timer)
-  }, [])
+    const timer = setTimeout(() => setIsVisible(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleCompleteStep = (stepId: string) => {
-    const newCompleted = [...completedSteps, stepId]
-    setCompletedSteps(newCompleted)
-    localStorage.setItem("onboarding-completed-steps", JSON.stringify(newCompleted))
-  }
+    const newCompleted = [...completedSteps, stepId];
+    setCompletedSteps(newCompleted);
+    localStorage.setItem("onboarding-completed-steps", JSON.stringify(newCompleted));
+  };
 
   const handleSkip = () => {
-    setIsSkipped(true)
-    localStorage.setItem("onboarding-skipped", "true")
-    setIsVisible(false)
-  }
+    setIsSkipped(true);
+    localStorage.setItem("onboarding-skipped", "true");
+    setIsVisible(false);
+  };
 
   // Don't show if more than 1 step completed or skipped
   if (completedSteps.length >= 1 || isSkipped) {
-    return null
+    return null;
   }
 
-  const progress = (completedSteps.length / steps.length) * 100
+  const progress = (completedSteps.length / steps.length) * 100;
 
   return (
     <div
@@ -126,7 +126,7 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
       {/* Steps */}
       <div className="space-y-3">
         {steps.map((step, index) => {
-          const isCompleted = completedSteps.includes(step.id)
+          const isCompleted = completedSteps.includes(step.id);
           return (
             <div
               key={step.id}
@@ -139,16 +139,10 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
               {/* Checkbox / Icon */}
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${
-                  isCompleted
-                    ? "bg-yt-red text-white"
-                    : "bg-dark-surface text-dark-ink-secondary"
+                  isCompleted ? "bg-yt-red text-white" : "bg-dark-surface text-dark-ink-secondary"
                 }`}
               >
-                {isCompleted ? (
-                  <Check className="w-5 h-5" />
-                ) : (
-                  step.icon
-                )}
+                {isCompleted ? <Check className="w-5 h-5" /> : step.icon}
               </div>
 
               {/* Content */}
@@ -160,17 +154,15 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
                 >
                   {step.title}
                 </h3>
-                <p className="text-sm text-dark-ink-secondary truncate">
-                  {step.description}
-                </p>
+                <p className="text-sm text-dark-ink-secondary truncate">{step.description}</p>
               </div>
 
               {/* CTA */}
               {!isCompleted && (
                 <button
                   onClick={() => {
-                    handleCompleteStep(step.id)
-                    router.push(step.href)
+                    handleCompleteStep(step.id);
+                    router.push(step.href);
                   }}
                   className="flex items-center gap-1 text-sm font-medium text-yt-link hover:text-yt-link/80 transition-colors"
                 >
@@ -179,7 +171,7 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
                 </button>
               )}
             </div>
-          )
+          );
         })}
       </div>
 
@@ -192,5 +184,5 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
         </div>
       )}
     </div>
-  )
+  );
 }

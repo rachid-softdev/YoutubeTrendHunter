@@ -1,27 +1,27 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { AlertTriangle, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useEffect } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function GlobalError({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Global error:", error)
+    console.error("Global error:", error);
 
     if (typeof window !== "undefined" && window.Sentry) {
       window.Sentry.captureException(error, {
         extra: {
           digest: error.digest,
         },
-      })
+      });
     }
-  }, [error])
+  }, [error]);
 
   return (
     <html lang="fr">
@@ -47,5 +47,5 @@ export default function GlobalError({
         </div>
       </body>
     </html>
-  )
+  );
 }

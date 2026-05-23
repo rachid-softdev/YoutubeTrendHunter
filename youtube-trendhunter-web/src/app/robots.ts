@@ -1,4 +1,4 @@
-import { MetadataRoute } from "next"
+import { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -6,14 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: [
-          "/dashboard",
-          "/settings",
-          "/billing",
-          "/alerts",
-          "/niches/",
-          "/api/",
-        ],
+        disallow: ["/dashboard", "/settings", "/billing", "/alerts", "/niches/", "/api/"],
       },
       {
         userAgent: "GPTBot",
@@ -21,5 +14,5 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: `${process.env.NEXTAUTH_URL || "https://trendhunter.app"}/sitemap.xml`,
-  }
+  };
 }

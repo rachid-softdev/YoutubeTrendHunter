@@ -1,14 +1,22 @@
-import { Metadata } from "next"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Check, X, ArrowRight, Play, Sparkles, Zap } from "lucide-react"
+import { Metadata } from "next";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Check, X, ArrowRight, Play, Sparkles, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "vidIQ vs TrendHunter - Comparatif 2026 | TrendHunter",
-  description: "Comparaison approfondie entre vidIQ et TrendHunter. Découvrez quelle outil de détection de tendances YouTube est le meilleur en 2026. Analyse des fonctionnalités, prix et performances.",
-  keywords: ["vidIQ vs TrendHunter", "vidIQ alternative", "comparatif vidIQ TrendHunter", "meilleur outil youtube 2026", "vidIQ review", "TrendHunter vs vidIQ"],
+  description:
+    "Comparaison approfondie entre vidIQ et TrendHunter. Découvrez quelle outil de détection de tendances YouTube est le meilleur en 2026. Analyse des fonctionnalités, prix et performances.",
+  keywords: [
+    "vidIQ vs TrendHunter",
+    "vidIQ alternative",
+    "comparatif vidIQ TrendHunter",
+    "meilleur outil youtube 2026",
+    "vidIQ review",
+    "TrendHunter vs vidIQ",
+  ],
   openGraph: {
     title: "vidIQ vs TrendHunter - Le comparatif définitif 2026",
     description: "Quelle outil de détection de tendances YouTube choisir ? Analyse complète.",
@@ -20,7 +28,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://trendhunter.app/comparatif/vidiq-trendhunter",
   },
-}
+};
 
 // Feature comparison
 const comparisonFeatures = [
@@ -32,23 +40,26 @@ const comparisonFeatures = [
   { feature: "Alertes automatiques", vidIQ: true, trendHunter: true },
   { feature: "Prix gratuit", vidIQ: "limité", trendHunter: true },
   { feature: "Support français", vidIQ: false, trendHunter: true },
-]
+];
 
 // FAQ for JSON-LD
 const faqSchema = [
   {
     question: "vidIQ est-il gratuit ?",
-    answer: "vidIQ propose une version gratuite avec des fonctionnalités limitées. La version payante commence à 19$/mois. TrendHunter offre un plan gratuit plus généreux.",
+    answer:
+      "vidIQ propose une version gratuite avec des fonctionnalités limitées. La version payante commence à 19$/mois. TrendHunter offre un plan gratuit plus généreux.",
   },
   {
     question: "Quelle outil est meilleur pour les créateurs français ?",
-    answer: "TrendHunter est spécifiquement conçu pour le marché francophone avec des niches本地isées et un support en français. vidIQ est principalement orienté anglophone.",
+    answer:
+      "TrendHunter est spécifiquement conçu pour le marché francophone avec des niches本地isées et un support en français. vidIQ est principalement orienté anglophone.",
   },
   {
     question: "TrendHunter dispose-t-il d'une extension Chrome ?",
-    answer: "Oui, TrendHunter propose une extension Chrome gratuite qui affiche les données de tendance directement sous chaque vidéo YouTube.",
+    answer:
+      "Oui, TrendHunter propose une extension Chrome gratuite qui affiche les données de tendance directement sous chaque vidéo YouTube.",
   },
-]
+];
 
 export default function VidIQComparisonPage() {
   const jsonLd = {
@@ -66,7 +77,7 @@ export default function VidIQComparisonPage() {
         })),
       },
     ],
-  }
+  };
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -87,8 +98,12 @@ export default function VidIQComparisonPage() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="/niches" className="hover:text-dark-ink transition-colors">Niches</Link>
-            <Link href="/pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
+            <Link href="/niches" className="hover:text-dark-ink transition-colors">
+              Niches
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
           </nav>
 
           <Link href="/login">
@@ -103,9 +118,13 @@ export default function VidIQComparisonPage() {
         {/* Breadcrumb */}
         <nav className="mb-8">
           <div className="flex items-center gap-2 text-sm text-dark-ink-secondary">
-            <Link href="/" className="hover:text-dark-ink transition-colors">Accueil</Link>
+            <Link href="/" className="hover:text-dark-ink transition-colors">
+              Accueil
+            </Link>
             <span>/</span>
-            <Link href="/pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
+            <Link href="/pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
             <span>/</span>
             <span className="text-dark-ink font-medium">Comparatif vidIQ</span>
           </div>
@@ -113,12 +132,15 @@ export default function VidIQComparisonPage() {
 
         {/* Hero */}
         <section className="text-center mb-16">
-          <Badge variant="live" className="mb-4">COMPARATIF 2026</Badge>
+          <Badge variant="live" className="mb-4">
+            COMPARATIF 2026
+          </Badge>
           <h1 className="text-4xl md:text-5xl font-black mb-4">
             vidIQ <span className="text-dark-ink-tertiary">vs</span> TrendHunter
           </h1>
           <p className="text-dark-ink-secondary text-lg max-w-2xl mx-auto mb-8">
-            Le comparatif définitif entre les deux outils de détection de tendances YouTube les plus populaires.
+            Le comparatif définitif entre les deux outils de détection de tendances YouTube les plus
+            populaires.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -138,13 +160,17 @@ export default function VidIQComparisonPage() {
 
         {/* Comparison Table */}
         <section className="mb-16">
-          <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Comparaison des fonctionnalités</h2>
+          <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
+            Comparaison des fonctionnalités
+          </h2>
 
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-hairline-dark">
-                  <th className="text-left py-4 px-4 font-bold text-dark-ink-secondary">Fonctionnalité</th>
+                  <th className="text-left py-4 px-4 font-bold text-dark-ink-secondary">
+                    Fonctionnalité
+                  </th>
                   <th className="text-center py-4 px-4 font-bold w-48">
                     <span className="text-yt-red">vidIQ</span>
                   </th>
@@ -188,7 +214,9 @@ export default function VidIQComparisonPage() {
 
         {/* Pricing Comparison */}
         <section className="mb-16">
-          <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Comparaison des tarifs</h2>
+          <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
+            Comparaison des tarifs
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
             {/* vidIQ */}
@@ -308,11 +336,10 @@ export default function VidIQComparisonPage() {
 
         {/* CTA */}
         <section className="text-center py-12 bg-dark-surface border border-hairline-dark">
-          <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            Prêt à essayer TrendHunter ?
-          </h2>
+          <h2 className="text-2xl md:text-3xl font-bold mb-4">Prêt à essayer TrendHunter ?</h2>
           <p className="text-dark-ink-secondary mb-6 max-w-xl mx-auto">
-            Profitez du plan gratuit pour tester TrendHunter et détecter les tendances avant vos concurrents.
+            Profitez du plan gratuit pour tester TrendHunter et détecter les tendances avant vos
+            concurrents.
           </p>
           <Link href="/login">
             <Button variant="subscribe" size="lg" className="h-12 px-10 font-bold">
@@ -320,19 +347,23 @@ export default function VidIQComparisonPage() {
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </Link>
-          <p className="text-sm text-dark-ink-tertiary mt-4">
-            Aucune carte de crédit requise
-          </p>
+          <p className="text-sm text-dark-ink-tertiary mt-4">Aucune carte de crédit requise</p>
         </section>
 
         {/* Related Links */}
         <section className="mt-12 text-center">
           <p className="text-dark-ink-secondary mb-4">Autres comparatifs :</p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/comparatif/tubebuddy-trendhunter" className="text-yt-red hover:text-yt-red-deep transition-colors font-bold">
+            <Link
+              href="/comparatif/tubebuddy-trendhunter"
+              className="text-yt-red hover:text-yt-red-deep transition-colors font-bold"
+            >
               TubeBuddy vs TrendHunter →
             </Link>
-            <Link href="/comparatif/meilleur-outil-tendances-youtube" className="text-yt-red hover:text-yt-red-deep transition-colors font-bold">
+            <Link
+              href="/comparatif/meilleur-outil-tendances-youtube"
+              className="text-yt-red hover:text-yt-red-deep transition-colors font-bold"
+            >
               Meilleurs outils tendances YouTube →
             </Link>
           </div>
@@ -350,9 +381,15 @@ export default function VidIQComparisonPage() {
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/niches" className="hover:text-dark-ink">Niches</Link>
-            <Link href="/pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
+            <Link href="/niches" className="hover:text-dark-ink">
+              Niches
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -361,5 +398,5 @@ export default function VidIQComparisonPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

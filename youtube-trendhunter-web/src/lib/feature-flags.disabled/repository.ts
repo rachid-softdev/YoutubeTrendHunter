@@ -2,57 +2,72 @@
 // Entitlement Repository - Prisma Implementation
 // ============================================
 
-import { PrismaClient, type Plan, type Feature, type PlanFeature, type Organization, type Subscription, type EntitlementOverride, type UsageTracking, type OverrideScope, type SubscriptionStatus } from "@prisma/client"
-import { prisma } from "@/lib/prisma"
-import type { IEntitlementRepository, PlanFeatureWithFeature, OrganizationWithSubscription } from "./types"
+import {
+  PrismaClient,
+  type Plan,
+  type Feature,
+  type PlanFeature,
+  type Organization,
+  type Subscription,
+  type EntitlementOverride,
+  type UsageTracking,
+  type OverrideScope,
+  type SubscriptionStatus,
+} from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import type {
+  IEntitlementRepository,
+  PlanFeatureWithFeature,
+  OrganizationWithSubscription,
+} from "./types";
 
 export class EntitlementRepository implements IEntitlementRepository {
-  private prisma: PrismaClient
+  private prisma: PrismaClient;
 
   constructor(prismaClient?: PrismaClient) {
-    this.prisma = prismaClient || prisma
+    this.prisma = prismaClient || prisma;
   }
 
   // ========== PLAN ==========
 
   async getPlan(planKey: string): Promise<Plan | null> {
     return this.prisma.plan.findUnique({
-      where: { key: planKey }
-    })
+      where: { key: planKey },
+    });
   }
 
   async getAllPlans(): Promise<Plan[]> {
     return this.prisma.plan.findMany({
-      orderBy: { sortOrder: "asc" }
-    })
+      orderBy: { sortOrder: "asc" },
+    });
   }
 
   async getActivePlans(): Promise<Plan[]> {
     return this.prisma.plan.findMany({
       where: { isActive: true },
-      orderBy: { sortOrder: "asc" }
-    })
+      orderBy: { sortOrder: "asc" },
+    });
   }
 
   // ========== FEATURE ==========
 
   async getFeature(featureKey: string): Promise<Feature | null> {
     return this.prisma.feature.findUnique({
-      where: { key: featureKey }
-    })
+      where: { key: featureKey },
+    });
   }
 
   async getAllFeatures(): Promise<Feature[]> {
     return this.prisma.feature.findMany({
-      orderBy: { key: "asc" }
-    })
+      orderBy: { key: "asc" },
+    });
   }
 
   async getActiveFeatures(): Promise<Feature[]> {
     return this.prisma.feature.findMany({
       where: { isActive: true },
-      orderBy: { key: "asc" }
-    })
+      orderBy: { key: "asc" },
+    });
   }
 
   // ========== PLAN FEATURES ==========
@@ -60,23 +75,23 @@ export class EntitlementRepository implements IEntitlementRepository {
   async getPlanFeatures(planId: string): Promise<PlanFeatureWithFeature[]> {
     return this.prisma.planFeature.findMany({
       where: { planId },
-      include: { feature: true }
-    }) as Promise<PlanFeatureWithFeature[]>
+      include: { feature: true },
+    }) as Promise<PlanFeatureWithFeature[]>;
   }
 
   async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureWithFeature | null> {
     const feature = await this.prisma.feature.findUnique({
-      where: { key: featureKey }
-    })
-    if (!feature) return null
+      where: { key: featureKey },
+    });
+    if (!feature) return null;
 
     return this.prisma.planFeature.findFirst({
-      where: { 
+      where: {
         planId,
-        featureId: feature.id
+        featureId: feature.id,
       },
-      include: { feature: true }
-    }) as Promise<PlanFeatureWithFeature | null>
+      include: { feature: true },
+    }) as Promise<PlanFeatureWithFeature | null>;
   }
 
   // ========== ORGANIZATION ==========
@@ -87,13 +102,13 @@ export class EntitlementRepository implements IEntitlementRepository {
       include: {
         subscriptions: {
           where: {
-            status: { in: ["ACTIVE", "TRIALING"] }
+            status: { in: ["ACTIVE", "TRIALING"] },
           },
           orderBy: { createdAt: "desc" },
-          take: 1
-        }
-      }
-    }) as Promise<OrganizationWithSubscription | null>
+          take: 1,
+        },
+      },
+    }) as Promise<OrganizationWithSubscription | null>;
   }
 
   // ========== SUBSCRIPTION ==========
@@ -102,32 +117,36 @@ export class EntitlementRepository implements IEntitlementRepository {
     return this.prisma.subscription.findFirst({
       where: {
         orgId,
-        status: { in: ["ACTIVE", "TRIALING"] }
+        status: { in: ["ACTIVE", "TRIALING"] },
       },
-      orderBy: { createdAt: "desc" }
-    })
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async updateSubscription(orgId: string, data: Partial<Subscription>): Promise<Subscription> {
-    const existing = await this.getActiveSubscription(orgId)
+    const existing = await this.getActiveSubscription(orgId);
     if (!existing) {
-      throw new Error(`No active subscription found for org ${orgId}`)
+      throw new Error(`No active subscription found for org ${orgId}`);
     }
     return this.prisma.subscription.update({
       where: { id: existing.id },
-      data
-    })
+      data,
+    });
   }
 
-  async createSubscription(orgId: string, planKey: string, data?: Partial<Subscription>): Promise<Subscription> {
+  async createSubscription(
+    orgId: string,
+    planKey: string,
+    data?: Partial<Subscription>,
+  ): Promise<Subscription> {
     // Désactiver les autres subscriptions actives
     await this.prisma.subscription.updateMany({
       where: {
         orgId,
-        status: { in: ["ACTIVE", "TRIALING"] }
+        status: { in: ["ACTIVE", "TRIALING"] },
       },
-      data: { status: "CANCELED" }
-    })
+      data: { status: "CANCELED" },
+    });
 
     return this.prisma.subscription.create({
       data: {
@@ -139,26 +158,27 @@ export class EntitlementRepository implements IEntitlementRepository {
         currentPeriodStart: data?.currentPeriodStart || new Date(),
         currentPeriodEnd: data?.currentPeriodEnd,
         trialEnd: data?.trialEnd,
-        trialStart: data?.trialStart
-      }
-    })
+        trialStart: data?.trialStart,
+      },
+    });
   }
 
   // ========== ENTITLEMENT OVERRIDES ==========
 
-  async getOverride(scope: OverrideScope, scopeId: string, featureKey: string): Promise<EntitlementOverride | null> {
+  async getOverride(
+    scope: OverrideScope,
+    scopeId: string,
+    featureKey: string,
+  ): Promise<EntitlementOverride | null> {
     // Check pour override non expirée
     return this.prisma.entitlementOverride.findFirst({
       where: {
         scope,
         scopeId,
         featureKey,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } }
-        ]
-      }
-    })
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
   }
 
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverride[]> {
@@ -166,12 +186,9 @@ export class EntitlementRepository implements IEntitlementRepository {
       where: {
         scope: "ORG",
         scopeId: orgId,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } }
-        ]
-      }
-    })
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverride[]> {
@@ -179,110 +196,125 @@ export class EntitlementRepository implements IEntitlementRepository {
       where: {
         scope: "USER",
         scopeId: userId,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } }
-        ]
-      }
-    })
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
   }
 
-  async createOverride(data: Omit<EntitlementOverride, "id" | "createdAt" | "updatedAt">): Promise<EntitlementOverride> {
+  async createOverride(
+    data: Omit<EntitlementOverride, "id" | "createdAt" | "updatedAt">,
+  ): Promise<EntitlementOverride> {
     return this.prisma.entitlementOverride.create({
-      data
-    })
+      data,
+    });
   }
 
-  async updateOverride(id: string, data: Partial<EntitlementOverride>): Promise<EntitlementOverride> {
+  async updateOverride(
+    id: string,
+    data: Partial<EntitlementOverride>,
+  ): Promise<EntitlementOverride> {
     return this.prisma.entitlementOverride.update({
       where: { id },
-      data
-    })
+      data,
+    });
   }
 
   async deleteOverride(id: string): Promise<void> {
     await this.prisma.entitlementOverride.delete({
-      where: { id }
-    })
+      where: { id },
+    });
   }
 
   // ========== USAGE TRACKING ==========
 
   async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTracking | null> {
-    const now = new Date()
+    const now = new Date();
     return this.prisma.usageTracking.findFirst({
       where: {
         orgId,
         featureKey,
-        periodEnd: { gt: now }
+        periodEnd: { gt: now },
       },
-      orderBy: { periodStart: "desc" }
-    })
+      orderBy: { periodStart: "desc" },
+    });
   }
 
-  async getUsageForPeriod(orgId: string, featureKey: string, periodStart: Date): Promise<UsageTracking | null> {
+  async getUsageForPeriod(
+    orgId: string,
+    featureKey: string,
+    periodStart: Date,
+  ): Promise<UsageTracking | null> {
     return this.prisma.usageTracking.findFirst({
       where: {
         orgId,
         featureKey,
-        periodStart
-      }
-    })
+        periodStart,
+      },
+    });
   }
 
-  async createUsage(orgId: string, featureKey: string, periodStart: Date, periodEnd: Date): Promise<UsageTracking> {
+  async createUsage(
+    orgId: string,
+    featureKey: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<UsageTracking> {
     return this.prisma.usageTracking.create({
       data: {
         orgId,
         featureKey,
         usageCount: 0,
         periodStart,
-        periodEnd
-      }
-    })
+        periodEnd,
+      },
+    });
   }
 
-  async consumeUsage(orgId: string, featureKey: string, amount: number): Promise<UsageTracking | null> {
-    const now = new Date()
-    
+  async consumeUsage(
+    orgId: string,
+    featureKey: string,
+    amount: number,
+  ): Promise<UsageTracking | null> {
+    const now = new Date();
+
     // Trouver ou créer la période de tracking courante
-    let usage = await this.getCurrentUsage(orgId, featureKey)
-    
+    let usage = await this.getCurrentUsage(orgId, featureKey);
+
     if (!usage) {
       // Créer une nouvelle période mensuelle
-      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
-      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-      usage = await this.createUsage(orgId, featureKey, periodStart, periodEnd)
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      usage = await this.createUsage(orgId, featureKey, periodStart, periodEnd);
     }
 
     // Mise à jour atomique
     const updated = await this.prisma.usageTracking.updateMany({
       where: {
         id: usage.id,
-        periodEnd: { gt: now }
+        periodEnd: { gt: now },
       },
       data: {
-        usageCount: { increment: amount }
-      }
-    })
+        usageCount: { increment: amount },
+      },
+    });
 
     if (updated.count === 0) {
       // La période a expiré entre-temps, réessayer
-      return this.consumeUsage(orgId, featureKey, amount)
+      return this.consumeUsage(orgId, featureKey, amount);
     }
 
     return this.prisma.usageTracking.findUnique({
-      where: { id: usage.id }
-    })
+      where: { id: usage.id },
+    });
   }
 
   // ========== STRIPE EVENTS (Idempotency) ==========
 
   async hasStripeEventBeenProcessed(eventId: string): Promise<boolean> {
     const event = await this.prisma.stripeEvent.findUnique({
-      where: { eventId }
-    })
-    return event?.processed ?? false
+      where: { eventId },
+    });
+    return event?.processed ?? false;
   }
 
   async markStripeEventProcessed(eventId: string, type: string): Promise<void> {
@@ -291,15 +323,15 @@ export class EntitlementRepository implements IEntitlementRepository {
       create: {
         eventId,
         type,
-        processed: true
+        processed: true,
       },
       update: {
         processed: true,
-        type
-      }
-    })
+        type,
+      },
+    });
   }
 }
 
 // Export singleton
-export const entitlementRepository = new EntitlementRepository()
+export const entitlementRepository = new EntitlementRepository();

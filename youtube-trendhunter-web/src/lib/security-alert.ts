@@ -5,25 +5,25 @@ export type SecurityAlertType =
   | "api_abuse"
   | "subscription_anomaly"
   | "data_breach_attempt"
-  | "payment_failed"
+  | "payment_failed";
 
 interface SecurityAlert {
-  type: SecurityAlertType
-  severity: "low" | "medium" | "high" | "critical"
-  message: string
-  metadata: Record<string, unknown>
-  userId?: string
-  ip?: string
+  type: SecurityAlertType;
+  severity: "low" | "medium" | "high" | "critical";
+  message: string;
+  metadata: Record<string, unknown>;
+  userId?: string;
+  ip?: string;
 }
 
 export async function securityAlert(alert: SecurityAlert) {
-  const timestamp = new Date().toISOString()
-  
-  console.error(`[SECURITY_ALERT] ${timestamp}`, JSON.stringify(alert))
+  const timestamp = new Date().toISOString();
+
+  console.error(`[SECURITY_ALERT] ${timestamp}`, JSON.stringify(alert));
 
   if (process.env.SLACK_WEBHOOK_URL) {
     try {
-      const severityEmoji = { low: "ℹ️", medium: "⚠️", high: "🔴", critical: "🚨" }
+      const severityEmoji = { low: "ℹ️", medium: "⚠️", high: "🔴", critical: "🚨" };
       await fetch(process.env.SLACK_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -40,14 +40,17 @@ export async function securityAlert(alert: SecurityAlert) {
             {
               type: "context",
               elements: [
-                { type: "mrkdwn", text: `\`${timestamp}\` | User: ${alert.userId || "anonymous"} | IP: ${alert.ip || "unknown"}` },
+                {
+                  type: "mrkdwn",
+                  text: `\`${timestamp}\` | User: ${alert.userId || "anonymous"} | IP: ${alert.ip || "unknown"}`,
+                },
               ],
             },
           ],
         }),
-      })
+      });
     } catch (err) {
-      console.error("Slack security alert failed:", err)
+      console.error("Slack security alert failed:", err);
     }
   }
 }

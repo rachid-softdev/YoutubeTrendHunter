@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import Image from "next/image"
-import { usePathname } from "next/navigation"
-import { LayoutDashboard, Bell, CreditCard, Target, Play, LogOut, Settings } from "lucide-react"
-import { signOut } from "next-auth/react"
-import { cn } from "@/lib/utils"
-import { Separator } from "@/components/ui/separator"
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Bell, CreditCard, Target, Play, LogOut, Settings } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 
 const navItems = [
   { href: "/dashboard", label: "Tendances", icon: LayoutDashboard },
@@ -14,10 +14,10 @@ const navItems = [
   { href: "/alerts", label: "Alertes", icon: Bell },
   { href: "/billing", label: "Facturation", icon: CreditCard },
   { href: "/settings", label: "Paramètres", icon: Settings },
-]
+];
 
 export function Sidebar({ user }: { user: { name?: string | null; image?: string | null } }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <aside className="w-64 bg-dark-surface border-r border-hairline-dark px-4 py-6 flex flex-col h-screen">
@@ -32,8 +32,8 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
 
       <nav className="space-y-1 flex-1">
         {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
           return (
             <Link
               key={item.href}
@@ -42,13 +42,13 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
                 "flex items-center gap-3 px-3 py-2 rounded-none text-sm font-medium transition-colors",
                 isActive
                   ? "bg-yt-red text-white"
-                  : "text-dark-ink-secondary hover:bg-dark-overlay hover:text-dark-ink"
+                  : "text-dark-ink-secondary hover:bg-dark-overlay hover:text-dark-ink",
               )}
             >
               <Icon className="w-5 h-5" />
               {item.label}
             </Link>
-          )
+          );
         })}
       </nav>
 
@@ -86,5 +86,5 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
         </div>
       </div>
     </aside>
-  )
+  );
 }

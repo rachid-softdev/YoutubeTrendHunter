@@ -1,13 +1,14 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { Play, Clock, ArrowRight, Sparkles } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Play, Clock, ArrowRight, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
   title: "Blog - Conseils et Analyses YouTube | TrendHunter",
-  description: "Découvrez nos guides, analyses et stratégies pour grew votre chaîne YouTube. Actualités, tutoriels et meilleures pratiques.",
+  description:
+    "Découvrez nos guides, analyses et stratégies pour grew votre chaîne YouTube. Actualités, tutoriels et meilleures pratiques.",
   openGraph: {
     title: "Blog TrendHunter - Ressources pour Créateurs YouTube",
     description: "Conseils, analyses et stratégies pour développer votre chaîne YouTube.",
@@ -17,136 +18,134 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/blog",
   },
-}
+};
 
 interface BlogArticle {
-  id: string
-  slug: string
-  title: string
-  titleEn?: string
-  subtitle?: string
-  excerpt: string
-  category: string
-  niche: string | null
-  language: string
-  status: string
-  featured: boolean
+  id: string;
+  slug: string;
+  title: string;
+  titleEn?: string;
+  subtitle?: string;
+  excerpt: string;
+  category: string;
+  niche: string | null;
+  language: string;
+  status: string;
+  featured: boolean;
   content: {
     fr: {
-      sections: Array<{ type: string }>
-      readTime: number
-      difficulty: string
-      tags: string[]
-    }
-  }
+      sections: Array<{ type: string }>;
+      readTime: number;
+      difficulty: string;
+      tags: string[];
+    };
+  };
   seo: {
-    metaTitle: string
-    metaDescription: string
-    keywords: string[]
-  }
+    metaTitle: string;
+    metaDescription: string;
+    keywords: string[];
+  };
   media: {
-    coverImage: { url: string; alt: string }
-  }
+    coverImage: { url: string; alt: string };
+  };
   author: {
-    name: string
-    avatar: string
-    bio: string
-  }
+    name: string;
+    avatar: string;
+    bio: string;
+  };
   timestamps: {
-    publishedAt: string
-    updatedAt: string
-  }
+    publishedAt: string;
+    updatedAt: string;
+  };
 }
 
 interface BlogData {
-  meta: { lastUpdated: string; totalArticles: number; version: string }
-  categories: Array<{ slug: string; name: string; description: string; color: string }>
-  articles: BlogArticle[]
+  meta: { lastUpdated: string; totalArticles: number; version: string };
+  categories: Array<{ slug: string; name: string; description: string; color: string }>;
+  articles: BlogArticle[];
 }
 
 async function getBlogData(): Promise<BlogData | null> {
   try {
-    const fs = await import("fs")
-    const path = await import("path")
-    const articlesPath = path.join(process.cwd(), "content", "blog", "articles.json")
+    const fs = await import("fs");
+    const path = await import("path");
+    const articlesPath = path.join(process.cwd(), "content", "blog", "articles.json");
 
     if (!fs.existsSync(articlesPath)) {
-      return null
+      return null;
     }
 
-    const raw = fs.readFileSync(articlesPath, "utf-8")
-    return JSON.parse(raw) as BlogData
+    const raw = fs.readFileSync(articlesPath, "utf-8");
+    return JSON.parse(raw) as BlogData;
   } catch (error) {
-    console.error("Error loading blog data:", error)
-    return null
+    console.error("Error loading blog data:", error);
+    return null;
   }
 }
 
 function formatDate(dateString: string): string {
-  const date = new Date(dateString)
+  const date = new Date(dateString);
   return date.toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "long",
     year: "numeric",
-  })
+  });
 }
 
 function getDifficultyColor(difficulty: string): string {
   switch (difficulty) {
     case "débutant":
-      return "bg-green-500/20 text-green-400 border-green-500/30"
+      return "bg-green-500/20 text-green-400 border-green-500/30";
     case "intermédiaire":
-      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
     case "avancé":
-      return "bg-red-500/20 text-red-400 border-red-500/30"
+      return "bg-red-500/20 text-red-400 border-red-500/30";
     default:
-      return "bg-gray-500/20 text-gray-400 border-gray-500/30"
+      return "bg-gray-500/20 text-gray-400 border-gray-500/30";
   }
 }
 
 function getCategoryColor(color: string): string {
   switch (color) {
     case "red":
-      return "text-red-400 bg-red-500/10 border-red-500/20"
+      return "text-red-400 bg-red-500/10 border-red-500/20";
     case "blue":
-      return "text-blue-400 bg-blue-500/10 border-blue-500/20"
+      return "text-blue-400 bg-blue-500/10 border-blue-500/20";
     case "green":
-      return "text-green-400 bg-green-500/10 border-green-500/20"
+      return "text-green-400 bg-green-500/10 border-green-500/20";
     case "purple":
-      return "text-purple-400 bg-purple-500/10 border-purple-500/20"
+      return "text-purple-400 bg-purple-500/10 border-purple-500/20";
     default:
-      return "text-gray-400 bg-gray-500/10 border-gray-500/20"
+      return "text-gray-400 bg-gray-500/10 border-gray-500/20";
   }
 }
 
 export default async function BlogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; page?: string }>
+  searchParams: Promise<{ category?: string; page?: string }>;
 }) {
-  const { category, page } = await searchParams
-  const blogData = await getBlogData()
+  const { category, page } = await searchParams;
+  const blogData = await getBlogData();
 
   if (!blogData) {
-    notFound()
+    notFound();
   }
 
-  const currentPage = parseInt(page || "1", 10)
-  const itemsPerPage = 6
-  const totalPages = Math.ceil(blogData.articles.length / itemsPerPage)
+  const currentPage = parseInt(page || "1", 10);
+  const itemsPerPage = 6;
+  const totalPages = Math.ceil(blogData.articles.length / itemsPerPage);
 
   const filteredArticles = category
-    ? blogData.articles.filter(
-        (a) => a.category === category && a.status === "published"
-      )
-    : blogData.articles.filter((a) => a.status === "published")
+    ? blogData.articles.filter((a) => a.category === category && a.status === "published")
+    : blogData.articles.filter((a) => a.status === "published");
 
   const paginatedArticles = filteredArticles.slice(
     (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+    currentPage * itemsPerPage,
+  );
 
-  const currentCategory = blogData.categories.find((c) => c.slug === category)
+  const currentCategory = blogData.categories.find((c) => c.slug === category);
 
   // JSON-LD for blog
   const jsonLd = {
@@ -166,7 +165,7 @@ export default async function BlogPage({
         name: article.author.name,
       },
     })),
-  }
+  };
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -187,9 +186,15 @@ export default async function BlogPage({
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="/niches" className="hover:text-dark-ink transition-colors">Niches</Link>
-            <Link href="/pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
-            <Link href="/blog" className="text-dark-ink font-medium">Blog</Link>
+            <Link href="/niches" className="hover:text-dark-ink transition-colors">
+              Niches
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
+            <Link href="/blog" className="text-dark-ink font-medium">
+              Blog
+            </Link>
           </nav>
 
           <Link href="/login">
@@ -210,9 +215,7 @@ export default async function BlogPage({
             </span>
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-black mb-4">
-            Blog TrendHunter
-          </h1>
+          <h1 className="text-4xl md:text-5xl font-black mb-4">Blog TrendHunter</h1>
           <p className="text-dark-ink-secondary text-lg max-w-2xl mx-auto">
             Conseils, analyses et stratégies pour développer votre chaîne YouTube.
           </p>
@@ -256,21 +259,20 @@ export default async function BlogPage({
             >
               <div className="grid md:grid-cols-2 gap-0">
                 <div className="p-8 md:p-12 flex flex-col justify-center">
-                  <Badge className="w-fit mb-4 bg-yt-red text-white">
-                    À la une
-                  </Badge>
+                  <Badge className="w-fit mb-4 bg-yt-red text-white">À la une</Badge>
                   <h2 className="text-2xl md:text-3xl font-black mb-4 group-hover:text-yt-red transition-colors">
                     {filteredArticles[0].title}
                   </h2>
-                  <p className="text-dark-ink-secondary mb-6">
-                    {filteredArticles[0].excerpt}
-                  </p>
+                  <p className="text-dark-ink-secondary mb-6">{filteredArticles[0].excerpt}</p>
                   <div className="flex items-center gap-4 text-sm text-dark-ink-tertiary">
                     <span className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
                       {filteredArticles[0].content.fr.readTime} min
                     </span>
-                    <Badge variant="outline" className={getDifficultyColor(filteredArticles[0].content.fr.difficulty)}>
+                    <Badge
+                      variant="outline"
+                      className={getDifficultyColor(filteredArticles[0].content.fr.difficulty)}
+                    >
                       {filteredArticles[0].content.fr.difficulty}
                     </Badge>
                     <span>{formatDate(filteredArticles[0].timestamps.publishedAt)}</span>
@@ -290,7 +292,9 @@ export default async function BlogPage({
         {currentCategory && (
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold flex items-center justify-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-sm border ${getCategoryColor(currentCategory.color)}`}>
+              <span
+                className={`px-3 py-1 rounded-full text-sm border ${getCategoryColor(currentCategory.color)}`}
+              >
                 {currentCategory.name}
               </span>
             </h2>
@@ -302,7 +306,7 @@ export default async function BlogPage({
         <section className="mb-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedArticles.map((article) => {
-              const articleCategory = blogData.categories.find((c) => c.slug === article.category)
+              const articleCategory = blogData.categories.find((c) => c.slug === article.category);
               return (
                 <Link
                   key={article.id}
@@ -340,7 +344,7 @@ export default async function BlogPage({
                     </div>
                   </div>
                 </Link>
-              )
+              );
             })}
           </div>
         </section>
@@ -394,9 +398,15 @@ export default async function BlogPage({
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
+            <Link href="/pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
+            <Link href="/terms" className="hover:text-dark-ink">
+              CGU
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -405,5 +415,5 @@ export default async function BlogPage({
         </div>
       </footer>
     </div>
-  )
+  );
 }

@@ -1,17 +1,28 @@
-import { Metadata } from "next"
-import Link from "next/link"
-import { prisma } from "@/lib/prisma"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { TrendingUp, ArrowRight, Play, BarChart3, Sparkles } from "lucide-react"
+import { Metadata } from "next";
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, ArrowRight, Play, BarChart3, Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Niches YouTube - Détectez les tendances par catégorie | TrendHunter",
-  description: "Explorez les niches YouTube les plus prometteuses : Tech, Finance, Fitness, Cuisine, Business. Identifiez les tendances en croissance rapide et créez du contenu qui explose.",
-  keywords: ["niche youtube", "tendance youtube par niche", "niche tech youtube", "niche finance youtube", "niche fitness youtube", "niche cuisine youtube", "niche business youtube", "detection tendance youtube"],
+  description:
+    "Explorez les niches YouTube les plus prometteuses : Tech, Finance, Fitness, Cuisine, Business. Identifiez les tendances en croissance rapide et créez du contenu qui explose.",
+  keywords: [
+    "niche youtube",
+    "tendance youtube par niche",
+    "niche tech youtube",
+    "niche finance youtube",
+    "niche fitness youtube",
+    "niche cuisine youtube",
+    "niche business youtube",
+    "detection tendance youtube",
+  ],
   openGraph: {
     title: "Niches YouTube - Trouvez votre prochaine niche à succès | TrendHunter",
-    description: "Explorez les niches YouTube les plus prometteuses. Analysez les tendances en temps réel.",
+    description:
+      "Explorez les niches YouTube les plus prometteuses. Analysez les tendances en temps réel.",
     url: "https://trendhunter.app/niches",
     siteName: "TrendHunter",
     locale: "fr_FR",
@@ -20,7 +31,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://trendhunter.app/niches",
   },
-}
+};
 
 // Niche cards configuration
 const nicheCards = [
@@ -74,7 +85,7 @@ const nicheCards = [
     description: "Marketing, start-up, développement personnel",
     keywords: ["Marketing", "Start-up", "Productivité", "Entrepreneuriat"],
   },
-]
+];
 
 export default async function NichesPage() {
   // Get trend counts for each niche
@@ -82,7 +93,7 @@ export default async function NichesPage() {
     nicheCards.map(async (card) => {
       const niche = await prisma.niche.findUnique({
         where: { slug: card.slug, isActive: true },
-      })
+      });
 
       const trendCount = niche
         ? await prisma.trend.count({
@@ -91,15 +102,15 @@ export default async function NichesPage() {
               expiresAt: { gt: new Date() },
             },
           })
-        : 0
+        : 0;
 
       return {
         ...card,
         trendCount,
         isActive: !!niche,
-      }
-    })
-  )
+      };
+    }),
+  );
 
   // JSON-LD for Organization
   const jsonLd = {
@@ -109,7 +120,7 @@ export default async function NichesPage() {
     url: "https://trendhunter.app",
     logo: "https://trendhunter.app/logo.png",
     sameAs: ["https://twitter.com/trendhunterapp"],
-  }
+  };
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -130,8 +141,12 @@ export default async function NichesPage() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="/niches" className="text-dark-ink font-medium">Niches</Link>
-            <Link href="/pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
+            <Link href="/niches" className="text-dark-ink font-medium">
+              Niches
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
           </nav>
 
           <Link href="/login">
@@ -147,14 +162,15 @@ export default async function NichesPage() {
         <section className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yt-red/10 border border-yt-red/20 mb-6">
             <Sparkles className="w-4 h-4 text-yt-red" />
-            <span className="text-[10px] font-black text-yt-red tracking-[0.2em] uppercase">5 Niches Surveillées</span>
+            <span className="text-[10px] font-black text-yt-red tracking-[0.2em] uppercase">
+              5 Niches Surveillées
+            </span>
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-black mb-4">
-            Explorez les niches YouTube
-          </h1>
+          <h1 className="text-4xl md:text-5xl font-black mb-4">Explorez les niches YouTube</h1>
           <p className="text-dark-ink-secondary text-lg max-w-2xl mx-auto mb-8">
-            Analysez les tendances en temps réel pour chaque niche. Identifiez les opportunités de contenu avant la concurrence.
+            Analysez les tendances en temps réel pour chaque niche. Identifiez les opportunités de
+            contenu avant la concurrence.
           </p>
 
           <Link href="/login">
@@ -179,7 +195,9 @@ export default async function NichesPage() {
                 }`}
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className={`w-12 h-12 ${niche.bgColor} flex items-center justify-center border ${niche.borderColor}`}>
+                  <div
+                    className={`w-12 h-12 ${niche.bgColor} flex items-center justify-center border ${niche.borderColor}`}
+                  >
                     <niche.icon className={`w-6 h-6 ${niche.color}`} />
                   </div>
                   {niche.trendCount > 0 && (
@@ -193,9 +211,7 @@ export default async function NichesPage() {
                   {niche.name}
                 </h2>
 
-                <p className="text-dark-ink-secondary text-sm mb-4">
-                  {niche.description}
-                </p>
+                <p className="text-dark-ink-secondary text-sm mb-4">{niche.description}</p>
 
                 <div className="flex flex-wrap gap-2">
                   {niche.keywords.map((keyword) => (
@@ -240,11 +256,10 @@ export default async function NichesPage() {
 
         {/* CTA Section */}
         <section className="text-center py-12">
-          <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            Trouvez votre niche à succès
-          </h2>
+          <h2 className="text-2xl md:text-3xl font-bold mb-4">Trouvez votre niche à succès</h2>
           <p className="text-dark-ink-secondary mb-6 max-w-xl mx-auto">
-            Pas besoin de deviner quelles niches explosent. TrendHunter analyse les données pour vous.
+            Pas besoin de deviner quelles niches explosent. TrendHunter analyse les données pour
+            vous.
           </p>
           <Link href="/login">
             <Button variant="subscribe" size="lg" className="h-12 px-10 font-bold">
@@ -265,9 +280,15 @@ export default async function NichesPage() {
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
+            <Link href="/pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
+            <Link href="/terms" className="hover:text-dark-ink">
+              CGU
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -276,5 +297,5 @@ export default async function NichesPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

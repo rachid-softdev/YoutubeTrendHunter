@@ -1,60 +1,69 @@
-import Link from "next/link"
-import Image from "next/image"
-import { auth } from "@/lib/auth"
-import { TrendingUp, Play, Bell, BarChart3, Video, Sparkles, Zap, ArrowRight, Check } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { Separator } from "@/components/ui/separator"
-import { PLANS } from "@/lib/plans"
-import { prisma } from "@/lib/prisma"
-import { unstable_cache } from "next/cache"
+import Link from "next/link";
+import Image from "next/image";
+import { auth } from "@/lib/auth";
+import {
+  TrendingUp,
+  Play,
+  Bell,
+  BarChart3,
+  Video,
+  Sparkles,
+  Zap,
+  ArrowRight,
+  Check,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Separator } from "@/components/ui/separator";
+import { PLANS } from "@/lib/plans";
+import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 
 const features = [
   {
     icon: TrendingUp,
     title: "Algorithme de Détection",
     description: "Repérez les niches à explosion imminente avant qu'elles ne saturent.",
-    badge: "IA"
+    badge: "IA",
   },
   {
     icon: Video,
     title: "Analyse de Concurrents",
     description: "Disséquez les stratégies qui fonctionnent pour les plus gros créateurs.",
-    badge: "LIVE"
+    badge: "LIVE",
   },
   {
     icon: Bell,
     title: "Alertes Stratégiques",
     description: "Soyez le premier prévient quand un sujet commence à buzzer.",
-    badge: "NEW"
+    badge: "NEW",
   },
   {
     icon: BarChart3,
     title: "Extension Chrome",
     description: "Les données TrendHunter directement sous chaque vidéo YouTube.",
-    badge: "POPULAIRE"
+    badge: "POPULAIRE",
   },
-]
+];
 
 // Cached user count - revalidated every hour
 const getUserCountCached = unstable_cache(
   async () => {
-    "use no-store"
-    return prisma.user.count()
+    "use no-store";
+    return prisma.user.count();
   },
   ["user-count"],
-  { revalidate: 3600 }
-)
+  { revalidate: 3600 },
+);
 
 export default async function LandingPage() {
-  const session = await auth()
+  const session = await auth();
   // Use cached count to avoid DB query on every request
-  const userCount = await getUserCountCached()
+  const userCount = await getUserCountCached();
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
-
       {/* --- Top Navigation --- */}
       <header className="sticky top-0 z-50 bg-dark-canvas/80 backdrop-blur-md border-b border-hairline-dark">
         <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
@@ -66,15 +75,23 @@ export default async function LandingPage() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="#features" className="hover:text-dark-ink transition-colors">Fonctionnalités</Link>
-            <Link href="#pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
+            <Link href="#features" className="hover:text-dark-ink transition-colors">
+              Fonctionnalités
+            </Link>
+            <Link href="#pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
             {session ? (
               <Link href="/dashboard">
-                <Button variant="subscribe" size="default" className="font-bold flex items-center gap-2">
+                <Button
+                  variant="subscribe"
+                  size="default"
+                  className="font-bold flex items-center gap-2"
+                >
                   {session.user?.image ? (
                     <Image
                       src={session.user.image}
@@ -94,7 +111,10 @@ export default async function LandingPage() {
               </Link>
             ) : (
               <>
-                <Link href="/login" className="text-sm font-medium hover:text-dark-ink transition-colors hidden sm:block">
+                <Link
+                  href="/login"
+                  className="text-sm font-medium hover:text-dark-ink transition-colors hidden sm:block"
+                >
                   Se connecter
                 </Link>
                 <Link href="/login">
@@ -117,32 +137,52 @@ export default async function LandingPage() {
               <div className="flex-1 space-y-10 text-center lg:text-left">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yt-red/10 border border-yt-red/20">
                   <Sparkles className="w-4 h-4 text-yt-red" />
-                  <span className="text-[10px] font-black text-yt-red tracking-[0.2em] uppercase">Intelligence Stratégique YouTube</span>
+                  <span className="text-[10px] font-black text-yt-red tracking-[0.2em] uppercase">
+                    Intelligence Stratégique YouTube
+                  </span>
                 </div>
 
                 <h1 className="text-5xl md:text-7xl xl:text-8xl font-black leading-[1] tracking-tighter">
                   Hacker <br className="hidden lg:block" />
                   <span className="text-yt-red relative">
                     l'Algorithme.
-                    <svg className="absolute -bottom-2 left-0 w-full h-3 text-yt-red/20" viewBox="0 0 100 10" preserveAspectRatio="none">
-                      <path d="M0 5 Q 25 0 50 5 T 100 5" fill="none" stroke="currentColor" strokeWidth="4" />
+                    <svg
+                      className="absolute -bottom-2 left-0 w-full h-3 text-yt-red/20"
+                      viewBox="0 0 100 10"
+                      preserveAspectRatio="none"
+                    >
+                      <path
+                        d="M0 5 Q 25 0 50 5 T 100 5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
                     </svg>
                   </span>
                 </h1>
 
                 <p className="text-lg md:text-xl text-dark-ink-secondary max-w-2xl mx-auto lg:mx-0 leading-relaxed font-medium">
-                  TrendHunter analyse des millions de vidéos pour vous livrer les niches à explosion imminente. Ne suivez plus les tendances, créez-les.
+                  TrendHunter analyse des millions de vidéos pour vous livrer les niches à explosion
+                  imminente. Ne suivez plus les tendances, créez-les.
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
                   <Link href="/login" className="w-full sm:w-auto">
-                    <Button variant="subscribe" size="lg" className="w-full h-12 px-10 text-base font-bold group">
+                    <Button
+                      variant="subscribe"
+                      size="lg"
+                      className="w-full h-12 px-10 text-base font-bold group"
+                    >
                       DÉMARRER L'ANALYSE
                       <Zap className="ml-2 w-4 h-4 group-hover:scale-125 transition-transform" />
                     </Button>
                   </Link>
                   <Link href="#features" className="w-full sm:w-auto">
-                    <Button variant="outline" size="lg" className="w-full h-12 px-10 text-base font-bold border-hairline-dark hover:bg-dark-surface transition-colors">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full h-12 px-10 text-base font-bold border-hairline-dark hover:bg-dark-surface transition-colors"
+                    >
                       VOIR LES FONCTIONNALITÉS
                     </Button>
                   </Link>
@@ -151,13 +191,18 @@ export default async function LandingPage() {
                 <div className="flex flex-col sm:flex-row items-center gap-6 pt-8 justify-center lg:justify-start">
                   <div className="flex -space-x-3">
                     {["M", "L", "S", "C", "A"].map((letter, i) => (
-                      <div key={i} className="w-10 h-10 rounded-full border-2 border-dark-canvas bg-dark-surface flex items-center justify-center text-sm font-bold text-dark-ink-secondary">
+                      <div
+                        key={i}
+                        className="w-10 h-10 rounded-full border-2 border-dark-canvas bg-dark-surface flex items-center justify-center text-sm font-bold text-dark-ink-secondary"
+                      >
                         {letter}
                       </div>
                     ))}
                   </div>
                   <div className="text-sm">
-                    <p className="font-bold text-dark-ink">Rejoint par +{Math.max(userCount, 1200)} créateurs</p>
+                    <p className="font-bold text-dark-ink">
+                      Rejoint par +{Math.max(userCount, 1200)} créateurs
+                    </p>
                     <div className="flex items-center gap-1 text-yt-red font-black text-[10px] uppercase tracking-widest">
                       <Zap className="w-3 h-3 fill-current" /> En direct de YouTube
                     </div>
@@ -168,7 +213,7 @@ export default async function LandingPage() {
               {/* Right Column: Visual Player */}
               <div
                 className="flex-1 w-full max-w-2xl lg:max-w-none relative animate-float"
-                style={{ animationDuration: '4s', willChange: 'transform' }}
+                style={{ animationDuration: "4s", willChange: "transform" }}
               >
                 <div className="absolute -inset-10 bg-yt-red/10 blur-[100px] rounded-full opacity-50" />
                 <div className="relative bg-dark-surface border border-hairline-dark p-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden group">
@@ -181,13 +226,22 @@ export default async function LandingPage() {
                     </div>
 
                     <div className="absolute top-6 left-6 flex items-center gap-3">
-                      <Badge variant="live" className="px-3 py-1 font-black">ULTRA-TRENDING</Badge>
-                      <Badge variant="outline" className="bg-black/50 border-white/20 text-[10px] font-bold tracking-widest">98.4% SCORE</Badge>
+                      <Badge variant="live" className="px-3 py-1 font-black">
+                        ULTRA-TRENDING
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="bg-black/50 border-white/20 text-[10px] font-bold tracking-widest"
+                      >
+                        98.4% SCORE
+                      </Badge>
                     </div>
 
                     <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between">
                       <div className="space-y-2">
-                        <div className="text-xs font-black tracking-widest text-white/50 uppercase">Niche: IA & PRODUCTIVITÉ</div>
+                        <div className="text-xs font-black tracking-widest text-white/50 uppercase">
+                          Niche: IA & PRODUCTIVITÉ
+                        </div>
                         <div className="h-1.5 w-40 bg-white/20 rounded-full overflow-hidden">
                           <div className="h-full w-[85%] bg-yt-red" />
                         </div>
@@ -215,14 +269,19 @@ export default async function LandingPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {features.map((feature, idx) => (
-                <div key={idx} className="group p-6 bg-dark-canvas border border-hairline-dark hover:border-yt-red/50 transition-all hover:-translate-y-1 relative overflow-hidden">
+                <div
+                  key={idx}
+                  className="group p-6 bg-dark-canvas border border-hairline-dark hover:border-yt-red/50 transition-all hover:-translate-y-1 relative overflow-hidden"
+                >
                   <div className="absolute inset-0 bg-gradient-to-br from-yt-red/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="w-12 h-12 bg-dark-surface flex items-center justify-center mb-6 group-hover:bg-yt-red/10 transition-colors">
                     <feature.icon className="w-6 h-6 text-dark-ink-secondary group-hover:text-yt-red transition-colors" />
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold text-lg">{feature.title}</h3>
-                    <Badge variant="outline" className="text-[10px] opacity-50">{feature.badge}</Badge>
+                    <Badge variant="outline" className="text-[10px] opacity-50">
+                      {feature.badge}
+                    </Badge>
                   </div>
                   <p className="text-dark-ink-secondary text-sm leading-relaxed">
                     {feature.description}
@@ -254,7 +313,10 @@ export default async function LandingPage() {
                   }`}
                 >
                   {plan.popular && (
-                    <Badge variant="live" className="w-fit mb-4 text-[10px] font-bold tracking-widest">
+                    <Badge
+                      variant="live"
+                      className="w-fit mb-4 text-[10px] font-bold tracking-widest"
+                    >
                       POPULAIRE
                     </Badge>
                   )}
@@ -297,7 +359,10 @@ export default async function LandingPage() {
             </div>
 
             <div className="text-center mt-10">
-              <Link href="/pricing" className="inline-flex items-center gap-2 text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors">
+              <Link
+                href="/pricing"
+                className="inline-flex items-center gap-2 text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors"
+              >
                 Voir la comparaison détaillée
                 <ArrowRight className="w-4 h-4" />
               </Link>
@@ -333,9 +398,15 @@ export default async function LandingPage() {
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="#pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
+            <Link href="#pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
+            <Link href="/terms" className="hover:text-dark-ink">
+              CGU
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -344,5 +415,5 @@ export default async function LandingPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

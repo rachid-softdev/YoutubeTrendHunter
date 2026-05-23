@@ -4,6 +4,10 @@
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "scripts": {
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
+    "prepare": "husky",
     "dev": "turbo run dev --parallel",
     "dev:web": "turbo run dev --filter=youtube-trendhunter-web",
     "build": "turbo run build",
@@ -24,6 +28,20 @@
     "dev:services:stop": "node scripts/stop-mailhog.js"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "turbo": "^2.4.4"
+  },
+  "lint-staged": {
+    "*": [
+      "biome format --write --no-errors-on-unmatched --files-ignore-unknown=true"
+    ],
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "pnpm run typecheck"
+    ]
   }
 }

@@ -1,15 +1,16 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { PLANS } from "@/lib/plans"
-import { Check, Play, Sparkles, ArrowRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PLANS } from "@/lib/plans";
+import { Check, Play, Sparkles, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 export const metadata: Metadata = {
   title: "Tarifs - TrendHunter",
-  description: "Choisissez le plan TrendHunter qui correspond à vos besoins. Free, Pro ou Team. Accès aux tendances YouTube IA.",
+  description:
+    "Choisissez le plan TrendHunter qui correspond à vos besoins. Free, Pro ou Team. Accès aux tendances YouTube IA.",
   openGraph: {
     title: "Tarifs TrendHunter - Choisissez votre plan",
     description: "Accédez aux tendances YouTube en temps réel avec l'IA. Plans starting at 0€.",
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/pricing",
   },
-}
+};
 
 export default function PricingPage() {
   return (
@@ -27,7 +28,7 @@ export default function PricingPage() {
       {/* Background Orbs - static, no animation */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-yt-red/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-yt-link/5 blur-[120px] rounded-full pointer-events-none" />
-      
+
       <div className="max-w-[1400px] mx-auto relative z-10">
         <div className="text-center mb-20 space-y-4">
           <Link href="/" className="inline-flex items-center gap-2 mb-4 group">
@@ -36,9 +37,13 @@ export default function PricingPage() {
             </div>
             <span className="text-xl font-bold tracking-tighter">TrendHunter</span>
           </Link>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tighter italic">Investissez dans <br className="sm:hidden" /> <span className="text-yt-red">votre succès.</span></h1>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tighter italic">
+            Investissez dans <br className="sm:hidden" />{" "}
+            <span className="text-yt-red">votre succès.</span>
+          </h1>
           <p className="text-lg md:text-xl text-dark-ink-secondary max-w-2xl mx-auto font-medium leading-relaxed">
-            Des outils puissants pour transformer votre chaîne en machine à vues. Choisissez le plan qui propulsera votre carrière.
+            Des outils puissants pour transformer votre chaîne en machine à vues. Choisissez le plan
+            qui propulsera votre carrière.
           </p>
         </div>
 
@@ -54,7 +59,10 @@ export default function PricingPage() {
             >
               <CardHeader className="p-8">
                 {plan.popular && (
-                  <Badge variant="live" className="w-fit mb-4 animate-pulse-glow font-black tracking-widest px-4">
+                  <Badge
+                    variant="live"
+                    className="w-fit mb-4 animate-pulse-glow font-black tracking-widest px-4"
+                  >
                     <Sparkles className="w-3 h-3 mr-1" /> POPULAIRE
                   </Badge>
                 )}
@@ -94,9 +102,11 @@ export default function PricingPage() {
         </div>
 
         <div className="mt-24 text-center">
-          <p className="text-dark-ink-tertiary text-sm font-bold uppercase tracking-[0.2em]">Paiement sécurisé par Stripe • Sans engagement</p>
+          <p className="text-dark-ink-tertiary text-sm font-bold uppercase tracking-[0.2em]">
+            Paiement sécurisé par Stripe • Sans engagement
+          </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

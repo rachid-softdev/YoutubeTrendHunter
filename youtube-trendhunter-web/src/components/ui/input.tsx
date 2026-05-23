@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  variant?: "default" | "search" | "underline"
+  variant?: "default" | "search" | "underline";
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -18,20 +18,23 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           // Variant styles
           {
             // Default - border only
-            default: "h-10 w-full rounded-none border border-hairline-dark bg-dark-overlay px-3 py-2 text-sm text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
+            default:
+              "h-10 w-full rounded-none border border-hairline-dark bg-dark-overlay px-3 py-2 text-sm text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
             // Search - YouTube style pill
-            search: "h-10 w-full rounded-none border border-hairline-dark bg-dark-overlay px-4 py-2 text-base text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
+            search:
+              "h-10 w-full rounded-none border border-hairline-dark bg-dark-overlay px-4 py-2 text-base text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
             // Underline - YouTube comment style
-            underline: "h-auto w-full bg-transparent border-b border-hairline-dark px-0 py-1 text-base text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
+            underline:
+              "h-auto w-full bg-transparent border-b border-hairline-dark px-0 py-1 text-base text-dark-ink placeholder:text-dark-ink-tertiary focus:border-yt-link",
           }[variant],
-          className
+          className,
         )}
         ref={ref}
         {...props}
       />
-    )
-  }
-)
-Input.displayName = "Input"
+    );
+  },
+);
+Input.displayName = "Input";
 
-export { Input }
+export { Input };

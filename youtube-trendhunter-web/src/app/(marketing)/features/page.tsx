@@ -1,26 +1,40 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { Play, TrendingUp, Sparkles, Bell, BarChart3, Zap, Target, Rocket, Shield, ArrowRight, Check } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  Play,
+  TrendingUp,
+  Sparkles,
+  Bell,
+  BarChart3,
+  Zap,
+  Target,
+  Rocket,
+  Shield,
+  ArrowRight,
+  Check,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 export const metadata: Metadata = {
   title: "Fonctionnalités - TrendHunter",
-  description: "Découvrez toutes les fonctionnalités de TrendHunter : détection de tendances IA, alertes en temps réel, extension Chrome, analytics avancés.",
+  description:
+    "Découvrez toutes les fonctionnalités de TrendHunter : détection de tendances IA, alertes en temps réel, extension Chrome, analytics avancés.",
   openGraph: {
     title: "Fonctionnalités TrendHunter",
     description: "Tous les outils pour grow votre chaîne YouTube",
     url: "/features",
     type: "website",
   },
-}
+};
 
 const features = [
   {
     icon: TrendingUp,
     title: "Détection de Tendances IA",
-    description: "Notre algorithme analyse des millions de vidéos YouTube pour identifier les tendances émergentes avant qu'elles n'explosent.",
+    description:
+      "Notre algorithme analyse des millions de vidéos YouTube pour identifier les tendances émergentes avant qu'elles n'explosent.",
     highlights: ["Analyse en temps réel", "Score de potencial", "Prédictions 48h"],
     color: "text-yt-red",
     bgColor: "bg-yt-red/10",
@@ -28,7 +42,8 @@ const features = [
   {
     icon: Sparkles,
     title: "Angles de Contenu IA",
-    description: "L'IA génère automatiquement des angles de vidéo adaptés à chaque tendance, avec des titres accrocheurs et des hooks.",
+    description:
+      "L'IA génère automatiquement des angles de vidéo adaptés à chaque tendance, avec des titres accrocheurs et des hooks.",
     highlights: ["3 angles par tendance", "Titres optimisés", "Hooks prêts à utiliser"],
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
@@ -36,7 +51,8 @@ const features = [
   {
     icon: Bell,
     title: "Alertes en Temps Réel",
-    description: "Soyez le premier prévient quand une niche commence à buzzer. Notifications email, Slack ou webhook.",
+    description:
+      "Soyez le premier prévient quand une niche commence à buzzer. Notifications email, Slack ou webhook.",
     highlights: ["Seuils personnalisables", "Multi-canaux", "Filtres par niche"],
     color: "text-yellow-400",
     bgColor: "bg-yellow-500/10",
@@ -44,7 +60,8 @@ const features = [
   {
     icon: BarChart3,
     title: "Extension Chrome",
-    description: "Accédez aux données TrendHunter directement depuis YouTube. Analysez les vidéos sans quitter la plateforme.",
+    description:
+      "Accédez aux données TrendHunter directement depuis YouTube. Analysez les vidéos sans quitter la plateforme.",
     highlights: ["Side panel intégré", "Stats sous chaque vidéo", "Détection de niche auto"],
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
@@ -52,7 +69,8 @@ const features = [
   {
     icon: Target,
     title: "Filtrage par Niche",
-    description: "Suivez les niches qui vous intéressent. Tech, Finance, Fitness, Cuisine... Vous gardé le contrôle.",
+    description:
+      "Suivez les niches qui vous intéressent. Tech, Finance, Fitness, Cuisine... Vous gardé le contrôle.",
     highlights: ["5 niches incluses", "Niches illimitées (Pro)", "Ajout personnalisé"],
     color: "text-green-400",
     bgColor: "bg-green-500/10",
@@ -60,12 +78,13 @@ const features = [
   {
     icon: Rocket,
     title: "Export et Intégrations",
-    description: "Exportez vos données en CSV, intégrez avec Zapier, ou utilisez notre API pour automatiser vos workflows.",
+    description:
+      "Exportez vos données en CSV, intégrez avec Zapier, ou utilisez notre API pour automatiser vos workflows.",
     highlights: ["Export CSV", "API complete", "Webhooks Zapier"],
     color: "text-orange-400",
     bgColor: "bg-orange-500/10",
   },
-]
+];
 
 const comparisons = [
   {
@@ -104,7 +123,7 @@ const comparisons = [
     vidiq: false,
     tubebuddy: false,
   },
-]
+];
 
 export default function FeaturesPage() {
   return (
@@ -120,9 +139,15 @@ export default function FeaturesPage() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="/features" className="text-dark-ink font-medium">Fonctionnalités</Link>
-            <Link href="/pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
-            <Link href="/blog" className="hover:text-dark-ink transition-colors">Blog</Link>
+            <Link href="/features" className="text-dark-ink font-medium">
+              Fonctionnalités
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
+            <Link href="/blog" className="hover:text-dark-ink transition-colors">
+              Blog
+            </Link>
           </nav>
 
           <Link href="/login">
@@ -149,8 +174,8 @@ export default function FeaturesPage() {
             </h1>
 
             <p className="text-lg text-dark-ink-secondary max-w-2xl mx-auto mb-10">
-              Des outils conçus pour vous donner un avantage compétitif sur YouTube.
-              Pas des fonctionnalités inutiles, que de la valeur réelle.
+              Des outils conçus pour vous donner un avantage compétitif sur YouTube. Pas des
+              fonctionnalités inutiles, que de la valeur réelle.
             </p>
 
             <div className="flex items-center justify-center gap-4">
@@ -173,9 +198,7 @@ export default function FeaturesPage() {
         <section className="py-20 px-4 bg-dark-surface/30 border-y border-hairline-dark">
           <div className="max-w-[1400px] mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Tout ce dont vous avez besoin
-              </h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Tout ce dont vous avez besoin</h2>
               <p className="text-dark-ink-secondary max-w-2xl mx-auto">
                 Chaque fonctionnalité a été pensée pour résoudre un problème réel des créateurs.
               </p>
@@ -187,15 +210,15 @@ export default function FeaturesPage() {
                   key={idx}
                   className="group p-8 bg-dark-canvas border border-hairline-dark hover:border-yt-red/50 transition-all hover:-translate-y-2"
                 >
-                  <div className={`w-14 h-14 ${feature.bgColor} flex items-center justify-center mb-6 border border-hairline-dark group-hover:border-yt-red/30 transition-colors`}>
+                  <div
+                    className={`w-14 h-14 ${feature.bgColor} flex items-center justify-center mb-6 border border-hairline-dark group-hover:border-yt-red/30 transition-colors`}
+                  >
                     <feature.icon className={`w-7 h-7 ${feature.color}`} />
                   </div>
 
                   <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
 
-                  <p className="text-dark-ink-secondary mb-6">
-                    {feature.description}
-                  </p>
+                  <p className="text-dark-ink-secondary mb-6">{feature.description}</p>
 
                   <ul className="space-y-2">
                     {feature.highlights.map((highlight, i) => (
@@ -215,9 +238,7 @@ export default function FeaturesPage() {
         <section className="py-20 px-4">
           <div className="max-w-[1400px] mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Comment on se compare
-              </h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Comment on se compare</h2>
               <p className="text-dark-ink-secondary max-w-2xl mx-auto">
                 Face aux autres outils du marché, TrendHunter offre plus pour moins.
               </p>
@@ -254,9 +275,7 @@ export default function FeaturesPage() {
                         {item.vidiq === true && (
                           <Check className="w-5 h-5 text-green-500 mx-auto" />
                         )}
-                        {item.vidiq === false && (
-                          <span className="text-dark-ink-tertiary">—</span>
-                        )}
+                        {item.vidiq === false && <span className="text-dark-ink-tertiary">—</span>}
                         {typeof item.vidiq === "string" && (
                           <span className="text-sm text-dark-ink-tertiary">{item.vidiq}</span>
                         )}
@@ -284,33 +303,31 @@ export default function FeaturesPage() {
         <section className="py-20 px-4 bg-dark-surface/30 border-y border-hairline-dark">
           <div className="max-w-[1400px] mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Ce que disent les créateurs
-              </h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Ce que disent les créateurs</h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
-                  quote: "TrendHunter m'a permis de repérer la tendance AI avant qu'elle n'explose. En 3 mois, j'ai gagné 50K abonnés.",
+                  quote:
+                    "TrendHunter m'a permis de repérer la tendance AI avant qu'elle n'explose. En 3 mois, j'ai gagné 50K abonnés.",
                   author: "Marc T.",
                   role: "Chaîne Tech, 120K abonnés",
                 },
                 {
-                  quote: "Les alertes en temps réel sont un game-changer. Je sais maintenant quand publier pour maximum d'impact.",
+                  quote:
+                    "Les alertes en temps réel sont un game-changer. Je sais maintenant quand publier pour maximum d'impact.",
                   author: "Sophie L.",
                   role: "Créatrice Fitness, 85K abonnés",
                 },
                 {
-                  quote: "L'extension Chrome est parfaite. Je reste sur YouTube mais j'ai toutes les données sous la main.",
+                  quote:
+                    "L'extension Chrome est parfaite. Je reste sur YouTube mais j'ai toutes les données sous la main.",
                   author: "Alex R.",
                   role: "YouTubeur Finance, 200K abonnés",
                 },
               ].map((testimonial, idx) => (
-                <div
-                  key={idx}
-                  className="p-6 bg-dark-canvas border border-hairline-dark"
-                >
+                <div key={idx} className="p-6 bg-dark-canvas border border-hairline-dark">
                   <p className="text-dark-ink-secondary mb-6 italic">
                     &ldquo;{testimonial.quote}&rdquo;
                   </p>
@@ -331,7 +348,8 @@ export default function FeaturesPage() {
               Prêt à prendre de l&apos;avance ?
             </h2>
             <p className="text-lg text-dark-ink-secondary mb-10">
-              Rejoignez les créateurs qui utilisent TrendHunter pour stay ahead de l&apos;algorithme.
+              Rejoignez les créateurs qui utilisent TrendHunter pour stay ahead de
+              l&apos;algorithme.
             </p>
             <Link href="/login">
               <Button variant="subscribe" size="lg" className="h-14 px-12 text-lg font-bold">
@@ -354,9 +372,15 @@ export default function FeaturesPage() {
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
+            <Link href="/pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
+            <Link href="/terms" className="hover:text-dark-ink">
+              CGU
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -365,5 +389,5 @@ export default function FeaturesPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

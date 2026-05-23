@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Plus, Check, Loader2 } from "lucide-react"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Plus, Check, Loader2 } from "lucide-react";
 
 interface NicheFollowButtonProps {
-  nicheId: string
-  isFollowing: boolean
-  plan: string
-  currentCount: number
-  maxCount: number
-  onFollowChange: (nicheId: string, isFollowing: boolean) => void
+  nicheId: string;
+  isFollowing: boolean;
+  plan: string;
+  currentCount: number;
+  maxCount: number;
+  onFollowChange: (nicheId: string, isFollowing: boolean) => void;
 }
 
 export function NicheFollowButton({
@@ -21,17 +21,17 @@ export function NicheFollowButton({
   maxCount,
   onFollowChange,
 }: NicheFollowButtonProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false);
 
-  const isFreeUserAtLimit = plan === "FREE" && currentCount >= maxCount && !isFollowing
+  const isFreeUserAtLimit = plan === "FREE" && currentCount >= maxCount && !isFollowing;
 
   const handleClick = async () => {
-    if (isFreeUserAtLimit) return
+    if (isFreeUserAtLimit) return;
 
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const method = isFollowing ? "DELETE" : "POST"
-      const url = isFollowing ? `/api/niches/${nicheId}` : "/api/niches"
+      const method = isFollowing ? "DELETE" : "POST";
+      const url = isFollowing ? `/api/niches/${nicheId}` : "/api/niches";
 
       const response = await fetch(url, {
         method,
@@ -39,25 +39,25 @@ export function NicheFollowButton({
           "Content-Type": "application/json",
         },
         body: isFollowing ? undefined : JSON.stringify({ nicheId }),
-      })
+      });
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Erreur lors de l'opération")
+        const error = await response.json();
+        throw new Error(error.error || "Erreur lors de l'opération");
       }
 
-      onFollowChange(nicheId, !isFollowing)
+      onFollowChange(nicheId, !isFollowing);
     } catch (error) {
-      console.error("Error:", error)
-      alert(error instanceof Error ? error.message : "Une erreur est survenue")
+      console.error("Error:", error);
+      alert(error instanceof Error ? error.message : "Une erreur est survenue");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const getButtonContent = () => {
     if (isLoading) {
-      return <Loader2 className="w-4 h-4 animate-spin" />
+      return <Loader2 className="w-4 h-4 animate-spin" />;
     }
     if (isFollowing) {
       return (
@@ -65,15 +65,15 @@ export function NicheFollowButton({
           <Check className="w-4 h-4 mr-1" />
           Suivi
         </>
-      )
+      );
     }
     return (
       <>
         <Plus className="w-4 h-4 mr-1" />
         Suivre
       </>
-    )
-  }
+    );
+  };
 
   return (
     <div className="flex items-center gap-2">
@@ -92,5 +92,5 @@ export function NicheFollowButton({
         </span>
       )}
     </div>
-  )
+  );
 }

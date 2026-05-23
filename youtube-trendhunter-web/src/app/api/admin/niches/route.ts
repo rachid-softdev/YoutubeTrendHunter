@@ -1,14 +1,14 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || []
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [];
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  
+  const session = await auth();
+
   if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const niches = await prisma.niche.findMany({
@@ -22,20 +22,20 @@ export async function GET(req: NextRequest) {
         },
       },
     },
-  })
+  });
 
-  return NextResponse.json({ niches })
+  return NextResponse.json({ niches });
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
-  
+  const session = await auth();
+
   if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json()
-  const { name, slug, description, keywords, language, isActive } = body
+  const body = await req.json();
+  const { name, slug, description, keywords, language, isActive } = body;
 
   const niche = await prisma.niche.create({
     data: {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       language: language || "fr",
       isActive: isActive ?? true,
     },
-  })
+  });
 
-  return NextResponse.json({ niche })
+  return NextResponse.json({ niche });
 }

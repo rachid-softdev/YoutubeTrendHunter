@@ -1,27 +1,27 @@
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getUserPlan } from "@/lib/plan-check"
-import { TrendCard } from "@/components/dashboard/trend-card"
-import { NicheSelector } from "@/components/dashboard/niche-selector"
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { Zap } from "lucide-react"
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getUserPlan } from "@/lib/plan-check";
+import { TrendCard } from "@/components/dashboard/trend-card";
+import { NicheSelector } from "@/components/dashboard/niche-selector";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Zap } from "lucide-react";
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ niche?: string }>
+  searchParams: Promise<{ niche?: string }>;
 }) {
-  const { niche: nicheQuery } = await searchParams
-  const session = await auth()
-  if (!session?.user?.id) return null
+  const { niche: nicheQuery } = await searchParams;
+  const session = await auth();
+  if (!session?.user?.id) return null;
 
-  const plan = await getUserPlan(session.user.id)
-  const nicheSlug = nicheQuery ?? "tech"
+  const plan = await getUserPlan(session.user.id);
+  const nicheSlug = nicheQuery ?? "tech";
 
   const niche = await prisma.niche.findUnique({
     where: { slug: nicheSlug },
-  })
+  });
 
   const trends = niche
     ? await prisma.trend.findMany({
@@ -29,12 +29,12 @@ export default async function DashboardPage({
         orderBy: { score: "desc" },
         take: plan === "FREE" ? 5 : 20,
       })
-    : []
+    : [];
 
   const niches = await prisma.niche.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
-  })
+  });
 
   return (
     <div>
@@ -62,5 +62,5 @@ export default async function DashboardPage({
         ))}
       </div>
     </div>
-  )
+  );
 }

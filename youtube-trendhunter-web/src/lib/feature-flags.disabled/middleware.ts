@@ -2,20 +2,20 @@
 // Middleware Factories - Framework Agnostic
 // ============================================
 
-import type { NextRequest } from "next/server"
-import { NextResponse } from "next/server"
-import { featureGateService } from "./service"
-import { FeatureNotAvailableError, LimitReachedError, SubscriptionExpiredError } from "./types"
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { featureGateService } from "./service";
+import { FeatureNotAvailableError, LimitReachedError, SubscriptionExpiredError } from "./types";
 
-export type { NextRequest, NextResponse }
+export type { NextRequest, NextResponse };
 
 // ============================================
 // Types for Middleware Context
 // ============================================
 
 export interface FeatureContext {
-  orgId: string
-  userId?: string
+  orgId: string;
+  userId?: string;
 }
 
 // ============================================
@@ -28,26 +28,26 @@ export interface FeatureContext {
  */
 export async function getOrgIdFromRequest(request: NextRequest): Promise<string | null> {
   // Try to get orgId from query params (for simple cases)
-  const orgIdFromQuery = request.nextUrl.searchParams.get("orgId")
-  if (orgIdFromQuery) return orgIdFromQuery
+  const orgIdFromQuery = request.nextUrl.searchParams.get("orgId");
+  if (orgIdFromQuery) return orgIdFromQuery;
 
   // In production: extract from session/JWT
   // const session = await getSession()
   // return session.orgId
 
-  return null
+  return null;
 }
 
 /**
  * Extract userId from request
  */
 export async function getUserIdFromRequest(request: NextRequest): Promise<string | null> {
-  const userIdFromQuery = request.nextUrl.searchParams.get("userId")
-  if (userIdFromQuery) return userIdFromQuery
+  const userIdFromQuery = request.nextUrl.searchParams.get("userId");
+  if (userIdFromQuery) return userIdFromQuery;
 
   // In production: extract from session/JWT
 
-  return null
+  return null;
 }
 
 // ============================================
@@ -61,25 +61,25 @@ export async function getUserIdFromRequest(request: NextRequest): Promise<string
 export function withFeature(featureKey: string) {
   return (handler: (req: NextRequest, context: FeatureContext) => Promise<NextResponse>) => {
     return async (req: NextRequest): Promise<NextResponse> => {
-      const orgId = await getOrgIdFromRequest(req)
+      const orgId = await getOrgIdFromRequest(req);
       if (!orgId) {
         return NextResponse.json(
           { error: "UNAUTHORIZED", message: "Organization not found" },
-          { status: 401 }
-        )
+          { status: 401 },
+        );
       }
 
       try {
-        await featureGateService.assertFeature(orgId, featureKey)
-        return handler(req, { orgId })
+        await featureGateService.assertFeature(orgId, featureKey);
+        return handler(req, { orgId });
       } catch (error) {
         if (error instanceof FeatureNotAvailableError) {
-          return NextResponse.json(error.toJSON(), { status: 403 })
+          return NextResponse.json(error.toJSON(), { status: 403 });
         }
-        throw error
+        throw error;
       }
-    }
-  }
+    };
+  };
 }
 
 /**
@@ -89,19 +89,19 @@ export function withFeature(featureKey: string) {
 export function withLimit(featureKey: string) {
   return (handler: (req: NextRequest, context: FeatureContext) => Promise<NextResponse>) => {
     return async (req: NextRequest): Promise<NextResponse> => {
-      const orgId = await getOrgIdFromRequest(req)
+      const orgId = await getOrgIdFromRequest(req);
       if (!orgId) {
         return NextResponse.json(
           { error: "UNAUTHORIZED", message: "Organization not found" },
-          { status: 401 }
-        )
+          { status: 401 },
+        );
       }
 
-      const limit = await featureGateService.getLimit(orgId, featureKey)
-      const usage = await featureGateService.getAllEntitlements(orgId)
+      const limit = await featureGateService.getLimit(orgId, featureKey);
+      const usage = await featureGateService.getAllEntitlements(orgId);
 
       if (limit !== null) {
-        const used = usage.usage[featureKey] ?? 0
+        const used = usage.usage[featureKey] ?? 0;
         if (used >= limit) {
           return NextResponse.json(
             {
@@ -110,16 +110,16 @@ export function withLimit(featureKey: string) {
               limit,
               used,
               reset_at: usage.resetAt[featureKey]?.toISOString() ?? null,
-              upgrade_url: "/billing/upgrade"
+              upgrade_url: "/billing/upgrade",
             },
-            { status: 402 }
-          )
+            { status: 402 },
+          );
         }
       }
 
-      return handler(req, { orgId })
-    }
-  }
+      return handler(req, { orgId });
+    };
+  };
 }
 
 /**
@@ -129,15 +129,15 @@ export function withLimit(featureKey: string) {
 export function consumeFeature(featureKey: string) {
   return (handler: (req: NextRequest, context: FeatureContext) => Promise<NextResponse>) => {
     return async (req: NextRequest): Promise<NextResponse> => {
-      const orgId = await getOrgIdFromRequest(req)
+      const orgId = await getOrgIdFromRequest(req);
       if (!orgId) {
         return NextResponse.json(
           { error: "UNAUTHORIZED", message: "Organization not found" },
-          { status: 401 }
-        )
+          { status: 401 },
+        );
       }
 
-      const result = await featureGateService.consume(orgId, featureKey)
+      const result = await featureGateService.consume(orgId, featureKey);
 
       if (!result.success) {
         return NextResponse.json(
@@ -147,19 +147,19 @@ export function consumeFeature(featureKey: string) {
             limit: result.limit,
             used: result.used,
             reset_at: result.resetAt?.toISOString() ?? null,
-            upgrade_url: "/billing/upgrade"
+            upgrade_url: "/billing/upgrade",
           },
-          { status: 402 }
-        )
+          { status: 402 },
+        );
       }
 
       // Attach consumption result to request for handler use
-      const reqHeaders = new Headers(req.headers)
-      reqHeaders.set("x-entitlement-consumed", JSON.stringify(result))
+      const reqHeaders = new Headers(req.headers);
+      reqHeaders.set("x-entitlement-consumed", JSON.stringify(result));
 
-      return handler(req, { orgId })
-    }
-  }
+      return handler(req, { orgId });
+    };
+  };
 }
 
 // ============================================
@@ -171,21 +171,21 @@ export function consumeFeature(featureKey: string) {
  */
 export function requireFeature(featureKey: string) {
   return async (req: any, res: any, next: any) => {
-    const orgId = req.orgId || req.params?.orgId
+    const orgId = req.orgId || req.params?.orgId;
     if (!orgId) {
-      return res.status(401).json({ error: "UNAUTHORIZED" })
+      return res.status(401).json({ error: "UNAUTHORIZED" });
     }
 
     try {
-      await featureGateService.assertFeature(orgId, featureKey)
-      next()
+      await featureGateService.assertFeature(orgId, featureKey);
+      next();
     } catch (error) {
       if (error instanceof FeatureNotAvailableError) {
-        return res.status(403).json(error.toJSON())
+        return res.status(403).json(error.toJSON());
       }
-      next(error)
+      next(error);
     }
-  }
+  };
 }
 
 /**
@@ -193,12 +193,12 @@ export function requireFeature(featureKey: string) {
  */
 export function consumeFeatureExpress(featureKey: string) {
   return async (req: any, res: any, next: any) => {
-    const orgId = req.orgId || req.params?.orgId
+    const orgId = req.orgId || req.params?.orgId;
     if (!orgId) {
-      return res.status(401).json({ error: "UNAUTHORIZED" })
+      return res.status(401).json({ error: "UNAUTHORIZED" });
     }
 
-    const result = await featureGateService.consume(orgId, featureKey)
+    const result = await featureGateService.consume(orgId, featureKey);
 
     if (!result.success) {
       return res.status(402).json({
@@ -206,14 +206,14 @@ export function consumeFeatureExpress(featureKey: string) {
         feature: result.feature,
         limit: result.limit,
         used: result.used,
-        reset_at: result.resetAt?.toISOString() ?? null
-      })
+        reset_at: result.resetAt?.toISOString() ?? null,
+      });
     }
 
     // Attach result to request for handlers
-    req.entitlementConsumption = result
-    next()
-  }
+    req.entitlementConsumption = result;
+    next();
+  };
 }
 
 // ============================================
@@ -225,15 +225,15 @@ export function consumeFeatureExpress(featureKey: string) {
  */
 export function handleEntitlementError(error: unknown): NextResponse {
   if (error instanceof FeatureNotAvailableError) {
-    return NextResponse.json(error.toJSON(), { status: 403 })
+    return NextResponse.json(error.toJSON(), { status: 403 });
   }
   if (error instanceof LimitReachedError) {
-    return NextResponse.json(error.toJSON(), { status: 402 })
+    return NextResponse.json(error.toJSON(), { status: 402 });
   }
   if (error instanceof SubscriptionExpiredError) {
-    return NextResponse.json(error.toJSON(), { status: 402 })
+    return NextResponse.json(error.toJSON(), { status: 402 });
   }
-  
+
   // Re-throw unknown errors
-  throw error
+  throw error;
 }

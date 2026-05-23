@@ -1,35 +1,36 @@
-import redis from "@/lib/redis"
-import { NextRequest, NextResponse } from "next/server"
+import redis from "@/lib/redis";
+import { NextRequest, NextResponse } from "next/server";
 
-type RateLimitType = "general" | "auth" | "extension"
+type RateLimitType = "general" | "auth" | "extension";
 
 const limits: Record<RateLimitType, { max: number; window: number }> = {
   general: { max: 10, window: 10 },
   auth: { max: 5, window: 60 },
   extension: { max: 30, window: 60 },
-}
+};
 
 export async function withRateLimit(
   req: NextRequest,
   type: RateLimitType = "general",
-  identifier?: string
+  identifier?: string,
 ): Promise<NextResponse | null> {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? req.headers.get("x-real-ip")
-    ?? "anonymous"
-  const key = `ratelimit:${identifier ?? ip}:${type}`
-  const { max, window } = limits[type]
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "anonymous";
+  const key = `ratelimit:${identifier ?? ip}:${type}`;
+  const { max, window } = limits[type];
 
   try {
-    const current = await redis.incr(key)
+    const current = await redis.incr(key);
     if (current === 1) {
-      await redis.expire(key, window)
+      await redis.expire(key, window);
     }
 
-    const remaining = Math.max(0, max - current)
+    const remaining = Math.max(0, max - current);
 
     if (current > max) {
-      const ttl = await redis.ttl(key)
+      const ttl = await redis.ttl(key);
       return NextResponse.json(
         { error: "Trop de requêtes. Réessayez plus tard." },
         {
@@ -39,27 +40,27 @@ export async function withRateLimit(
             "X-RateLimit-Remaining": "0",
             "X-RateLimit-Reset": String(Math.floor(Date.now() / 1000) + ttl),
           },
-        }
-      )
+        },
+      );
     }
 
-    return null
+    return null;
   } catch {
-    return null // Allow if Redis is down
+    return null; // Allow if Redis is down
   }
 }
 
 // Check rate limit without creating response — for use in other patterns
 export async function checkRateLimit(
   key: string,
-  type: RateLimitType = "general"
+  type: RateLimitType = "general",
 ): Promise<boolean> {
-  const limit = limits[type]
+  const limit = limits[type];
   try {
-    const current = await redis.incr(`ratelimit:${key}:${type}`)
-    if (current === 1) await redis.expire(`ratelimit:${key}:${type}`, limit.window)
-    return current <= limit.max
+    const current = await redis.incr(`ratelimit:${key}:${type}`);
+    if (current === 1) await redis.expire(`ratelimit:${key}:${type}`, limit.window);
+    return current <= limit.max;
   } catch {
-    return true
+    return true;
   }
 }

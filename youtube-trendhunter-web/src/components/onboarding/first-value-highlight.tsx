@@ -1,73 +1,73 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { X, ArrowRight, TrendingUp, Play } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { X, ArrowRight, TrendingUp, Play } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface FirstValueHighlightProps {
   trend: {
-    id: string
-    title: string
-    description?: string | null
-    score: number
-    velocity: number
-    status: string
-    contentAngles?: string[] | null
-  }
-  className?: string
+    id: string;
+    title: string;
+    description?: string | null;
+    score: number;
+    velocity: number;
+    status: string;
+    contentAngles?: string[] | null;
+  };
+  className?: string;
 }
 
 export function FirstValueHighlight({ trend, className }: FirstValueHighlightProps) {
-  const router = useRouter()
-  const [isVisible, setIsVisible] = useState(false)
-  const [isDismissed, setIsDismissed] = useState(false)
+  const router = useRouter();
+  const [isVisible, setIsVisible] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
     // Check if dismissed
-    const dismissed = localStorage.getItem("first-trend-dismissed")
+    const dismissed = localStorage.getItem("first-trend-dismissed");
     if (dismissed) {
-      setIsDismissed(true)
-      return
+      setIsDismissed(true);
+      return;
     }
 
     // Animate entrance
-    const timer = setTimeout(() => setIsVisible(true), 500)
-    return () => clearTimeout(timer)
-  }, [])
+    const timer = setTimeout(() => setIsVisible(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleDismiss = () => {
-    setIsDismissed(true)
-    localStorage.setItem("first-trend-dismissed", "true")
-    setIsVisible(false)
-  }
+    setIsDismissed(true);
+    localStorage.setItem("first-trend-dismissed", "true");
+    setIsVisible(false);
+  };
 
   // Don't show if dismissed
   if (isDismissed) {
-    return null
+    return null;
   }
 
   // Get score color
   const getScoreColor = (score: number) => {
-    if (score >= 75) return "bg-yt-red"
-    if (score >= 50) return "bg-amber-500"
-    return "bg-green-500"
-  }
+    if (score >= 75) return "bg-yt-red";
+    if (score >= 50) return "bg-amber-500";
+    return "bg-green-500";
+  };
 
   // Get status badge variant
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "PEAK":
-        return "live"
+        return "live";
       case "GROWING":
-        return "default"
+        return "default";
       case "FADING":
-        return "members"
+        return "members";
       default:
-        return "default"
+        return "default";
     }
-  }
+  };
 
   return (
     <div
@@ -86,8 +86,7 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
           {/* Label */}
           <div className="flex items-center justify-between mb-4">
             <span className="inline-flex items-center gap-2 px-3 py-1 bg-yt-red/10 text-yt-red text-sm font-bold rounded">
-              <Play className="w-4 h-4" fill="currentColor" />
-              À découvrir en priorité
+              <Play className="w-4 h-4" fill="currentColor" />À découvrir en priorité
             </span>
             <button
               onClick={handleDismiss}
@@ -102,7 +101,7 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
             {/* Score Badge */}
             <div
               className={`w-16 h-16 flex flex-col items-center justify-center font-black text-white flex-shrink-0 shadow-lg ${getScoreColor(
-                trend.score
+                trend.score,
               )}`}
             >
               <span className="text-2xl">{trend.score}</span>
@@ -111,9 +110,7 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
 
             <div className="flex-1 min-w-0">
               {/* Title */}
-              <h3 className="text-lg font-bold text-dark-ink line-clamp-2 mb-1">
-                {trend.title}
-              </h3>
+              <h3 className="text-lg font-bold text-dark-ink line-clamp-2 mb-1">{trend.title}</h3>
 
               {/* Description */}
               {trend.description && (
@@ -125,8 +122,7 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
               {/* Meta */}
               <div className="flex items-center gap-4 text-sm text-dark-ink-secondary">
                 <span className="flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4 text-yt-red" />
-                  +{trend.velocity.toFixed(1)}%
+                  <TrendingUp className="w-4 h-4 text-yt-red" />+{trend.velocity.toFixed(1)}%
                 </span>
                 <span className="px-2 py-0.5 bg-dark-overlay text-xs font-medium rounded">
                   {trend.status}
@@ -148,5 +144,5 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

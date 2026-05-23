@@ -15,7 +15,8 @@ export const metadata: Metadata = {
     default: "TrendHunter — Veille YouTube IA",
     template: "%s | TrendHunter",
   },
-  description: "Détectez les tendances YouTube émergentes avant vos concurrents. Analyse IA, alertes temps réel, extension Chrome.",
+  description:
+    "Détectez les tendances YouTube émergentes avant vos concurrents. Analyse IA, alertes temps réel, extension Chrome.",
   keywords: ["YouTube", "tendances", "trends", "créateurs", "YouTube analytics", "niches YouTube"],
   authors: [{ name: "TrendHunter" }],
   creator: "TrendHunter",
@@ -44,11 +45,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="fr"
-      className={`${roboto.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
+    <html lang="fr" className={`${roboto.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

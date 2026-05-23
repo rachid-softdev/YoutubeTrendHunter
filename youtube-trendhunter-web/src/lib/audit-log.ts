@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 type AuditAction =
   | "user_signup"
@@ -16,30 +16,32 @@ type AuditAction =
   | "data_export"
   | "account_delete"
   | "niche_select"
-  | "niche_deselect"
+  | "niche_deselect";
 
 interface AuditMeta {
-  ip?: string
-  userAgent?: string
-  plan?: string
-  from?: string
-  to?: string
-  tokenName?: string
-  alertType?: string
-  niche?: string
-  [key: string]: unknown
+  ip?: string;
+  userAgent?: string;
+  plan?: string;
+  from?: string;
+  to?: string;
+  tokenName?: string;
+  alertType?: string;
+  niche?: string;
+  [key: string]: unknown;
 }
 
 export async function auditLog(action: AuditAction, userId: string, meta: AuditMeta = {}) {
-  const timestamp = new Date()
+  const timestamp = new Date();
 
-  console.log(JSON.stringify({
-    type: "audit",
-    timestamp: timestamp.toISOString(),
-    action,
-    userId,
-    ...meta,
-  }))
+  console.log(
+    JSON.stringify({
+      type: "audit",
+      timestamp: timestamp.toISOString(),
+      action,
+      userId,
+      ...meta,
+    }),
+  );
 
   try {
     await prisma.auditLog.create({
@@ -51,9 +53,9 @@ export async function auditLog(action: AuditAction, userId: string, meta: AuditM
         metadata: meta as Prisma.InputJsonValue,
         createdAt: timestamp,
       },
-    })
+    });
   } catch (err) {
-    console.error("Audit log write failed:", err)
+    console.error("Audit log write failed:", err);
   }
 }
 
@@ -62,5 +64,5 @@ export async function getAuditLogs(userId: string, limit = 50) {
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: limit,
-  })
+  });
 }

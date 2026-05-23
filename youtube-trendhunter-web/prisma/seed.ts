@@ -1,6 +1,6 @@
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient();
 
 async function main() {
   const niches = [
@@ -34,23 +34,23 @@ async function main() {
       keywords: ["dropshipping", "freelance", "side hustle", "e-commerce", "revenus passifs"],
       language: "fr",
     },
-  ]
+  ];
 
   for (const niche of niches) {
     await prisma.niche.upsert({
       where: { slug: niche.slug },
       update: niche,
       create: niche,
-    })
+    });
   }
 
-  console.log("✅ Niches créées")
+  console.log("✅ Niches créées");
 
-  const nichesData = await prisma.niche.findMany()
+  const nichesData = await prisma.niche.findMany();
 
   const testTrends = [
     {
-      nicheId: nichesData.find(n => n.slug === "finance-personnelle")?.id,
+      nicheId: nichesData.find((n) => n.slug === "finance-personnelle")?.id,
       title: "Investir dans l'or en 2024",
       description: "Guide complet pour investir dans l'or",
       score: 85,
@@ -64,7 +64,7 @@ async function main() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
-      nicheId: nichesData.find(n => n.slug === "finance-personnelle")?.id,
+      nicheId: nichesData.find((n) => n.slug === "finance-personnelle")?.id,
       title: "Cryptomonnaies pour débutants",
       description: "Tout savoir sur le Bitcoin et les cryptos",
       score: 72,
@@ -78,7 +78,7 @@ async function main() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
-      nicheId: nichesData.find(n => n.slug === "tech-ia")?.id,
+      nicheId: nichesData.find((n) => n.slug === "tech-ia")?.id,
       title: "ChatGPT prompts avancés",
       description: "Maîtrisez l'IA pour gagner du temps",
       score: 92,
@@ -92,7 +92,7 @@ async function main() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
-      nicheId: nichesData.find(n => n.slug === "tech-ia")?.id,
+      nicheId: nichesData.find((n) => n.slug === "tech-ia")?.id,
       title: "No-code tools 2024",
       description: "Créez sans programmer",
       score: 68,
@@ -106,7 +106,7 @@ async function main() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
-      nicheId: nichesData.find(n => n.slug === "fitness")?.id,
+      nicheId: nichesData.find((n) => n.slug === "fitness")?.id,
       title: "Programme musculation à la maison",
       description: "Sans équipement, des résultats",
       score: 78,
@@ -120,7 +120,7 @@ async function main() {
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
     {
-      nicheId: nichesData.find(n => n.slug === "cuisine")?.id,
+      nicheId: nichesData.find((n) => n.slug === "cuisine")?.id,
       title: "Batch cooking hebdomadaire",
       description: "Gagnez du temps en cuisine",
       score: 65,
@@ -133,25 +133,27 @@ async function main() {
       detectedAt: new Date(),
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
-  ]
+  ];
 
   for (const trend of testTrends) {
     if (trend.nicheId) {
-      const { nicheId, ...trendData } = trend
-      await prisma.trend.create({
-        data: {
-          ...trendData,
-          niche: { connect: { id: nicheId } },
-        } as any,
-      }).catch(() => {
-        // Ignore if already exists
-      })
+      const { nicheId, ...trendData } = trend;
+      await prisma.trend
+        .create({
+          data: {
+            ...trendData,
+            niche: { connect: { id: nicheId } },
+          } as any,
+        })
+        .catch(() => {
+          // Ignore if already exists
+        });
     }
   }
 
-  console.log("✅ Tendances de test créées")
+  console.log("✅ Tendances de test créées");
 }
 
 main()
   .catch(console.error)
-  .finally(() => prisma.$disconnect())
+  .finally(() => prisma.$disconnect());

@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useCallback } from "react"
-import Link from "next/link"
-import { analytics } from "@/lib/analytics"
+import { useCallback } from "react";
+import Link from "next/link";
+import { analytics } from "@/lib/analytics";
 
 interface AnalyticsButtonProps {
-  ctaName: string
-  destination: string
-  children: React.ReactNode
-  className?: string
-  onClick?: () => void
+  ctaName: string;
+  destination: string;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
 }
 
 export function AnalyticsButton({
@@ -20,23 +20,23 @@ export function AnalyticsButton({
   onClick,
 }: AnalyticsButtonProps) {
   const handleClick = useCallback(() => {
-    analytics.ctaClicked(ctaName, destination)
-    onClick?.()
-  }, [ctaName, destination, onClick])
+    analytics.ctaClicked(ctaName, destination);
+    onClick?.();
+  }, [ctaName, destination, onClick]);
 
   return (
     <div onClick={handleClick} className={className} style={{ cursor: "pointer" }}>
       {children}
     </div>
-  )
+  );
 }
 
 interface AnalyticsLinkProps {
-  ctaName: string
-  destination: string
-  href: string
-  children: React.ReactNode
-  className?: string
+  ctaName: string;
+  destination: string;
+  href: string;
+  children: React.ReactNode;
+  className?: string;
 }
 
 export function AnalyticsLink({
@@ -47,12 +47,12 @@ export function AnalyticsLink({
   className,
 }: AnalyticsLinkProps) {
   const handleClick = useCallback(() => {
-    analytics.ctaClicked(ctaName, destination)
-  }, [ctaName, destination])
+    analytics.ctaClicked(ctaName, destination);
+  }, [ctaName, destination]);
 
   return (
     <Link href={href} onClick={handleClick} className={className}>
       {children}
     </Link>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import Link from "next/link"
-import { Play } from "lucide-react"
+import Link from "next/link";
+import { Play } from "lucide-react";
 
 export default function PrivacyPage() {
   return (
@@ -15,15 +15,28 @@ export default function PrivacyPage() {
         <div className="prose prose-invert max-w-none space-y-4 text-dark-ink-secondary">
           <p>Dernière mise à jour : {new Date().getFullYear()}</p>
           <h2 className="text-dark-ink text-xl font-bold">Collecte de données</h2>
-          <p>Nous collectons uniquement les données nécessaires au fonctionnement du service : email, nom, préférences de niches, et données d&apos;utilisation de la plateforme.</p>
+          <p>
+            Nous collectons uniquement les données nécessaires au fonctionnement du service : email,
+            nom, préférences de niches, et données d&apos;utilisation de la plateforme.
+          </p>
           <h2 className="text-dark-ink text-xl font-bold">Utilisation des données</h2>
-          <p>Vos données sont utilisées exclusivement pour vous fournir le service TrendHunter : détection de tendances, alertes personnalisées, et amélioration du service.</p>
+          <p>
+            Vos données sont utilisées exclusivement pour vous fournir le service TrendHunter :
+            détection de tendances, alertes personnalisées, et amélioration du service.
+          </p>
           <h2 className="text-dark-ink text-xl font-bold">Partage des données</h2>
-          <p>Vos données ne sont jamais vendues à des tiers. Nous partageons uniquement les informations nécessaires avec nos sous-traitants (Stripe pour les paiements, Resend pour les emails).</p>
+          <p>
+            Vos données ne sont jamais vendues à des tiers. Nous partageons uniquement les
+            informations nécessaires avec nos sous-traitants (Stripe pour les paiements, Resend pour
+            les emails).
+          </p>
           <h2 className="text-dark-ink text-xl font-bold">Vos droits</h2>
-          <p>Vous pouvez à tout moment accéder, modifier ou supprimer vos données depuis votre espace personnel. Pour toute question : contact@trendhunter.app</p>
+          <p>
+            Vous pouvez à tout moment accéder, modifier ou supprimer vos données depuis votre espace
+            personnel. Pour toute question : contact@trendhunter.app
+          </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

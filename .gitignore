@@ -49,3 +49,7 @@ yarn-error.log*
 /prisma/*.db
 /prisma/*.db-journal
 /youtube-trendhunter-web/src/generated/prisma
+
+# DX tooling
+.biome/
+.husky/

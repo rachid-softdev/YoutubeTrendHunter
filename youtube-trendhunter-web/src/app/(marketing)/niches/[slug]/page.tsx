@@ -1,80 +1,119 @@
-import { Metadata } from "next"
-import Link from "next/link"
-import { notFound } from "next/navigation"
-import { prisma } from "@/lib/prisma"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { TrendingUp, ArrowLeft, Play, BarChart3, Clock } from "lucide-react"
+import { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { TrendingUp, ArrowLeft, Play, BarChart3, Clock } from "lucide-react";
 
 // Niche metadata for SEO
 const nicheMetadata: Record<string, { title: string; description: string; keywords: string[] }> = {
   tech: {
     title: "Tendances Tech YouTube 2026 - Niche High-Tech en pleine croissance",
-    description: "Découvrez les tendances tech YouTube les plus en hausse. Analyse en temps réel des niches high-tech, IA, programmation et gadgets. TrendingHunter vous aide à anticiper les vidéos à succès.",
-    keywords: ["tendance youtube tech", "tendance high-tech youtube", "niche tech youtube 2026", "viral tech youtube", "ia youtube tendances", "programmation youtube trends"],
+    description:
+      "Découvrez les tendances tech YouTube les plus en hausse. Analyse en temps réel des niches high-tech, IA, programmation et gadgets. TrendingHunter vous aide à anticiper les vidéos à succès.",
+    keywords: [
+      "tendance youtube tech",
+      "tendance high-tech youtube",
+      "niche tech youtube 2026",
+      "viral tech youtube",
+      "ia youtube tendances",
+      "programmation youtube trends",
+    ],
   },
   finance: {
     title: "Tendances Finance YouTube 2026 - Crypto, investissement et trading",
-    description: "Suivez les tendances finance YouTube en temps réel. Crypto, investissement, trading, cryptomonnaie. Identifiez les niches financières à fort potentiel de croissance.",
-    keywords: ["tendance youtube finance", "crypto youtube trends", "investissement youtube 2026", "trading youtube tendances", "cryptomonnaie youtube viral"],
+    description:
+      "Suivez les tendances finance YouTube en temps réel. Crypto, investissement, trading, cryptomonnaie. Identifiez les niches financières à fort potentiel de croissance.",
+    keywords: [
+      "tendance youtube finance",
+      "crypto youtube trends",
+      "investissement youtube 2026",
+      "trading youtube tendances",
+      "cryptomonnaie youtube viral",
+    ],
   },
   fitness: {
     title: "Tendances Fitness YouTube 2026 - Sports, musculation et bien-être",
-    description: "Découvrez les tendances fitness et bien-être YouTube les plus populaires. Sport, musculation, yoga, perte de poids. Trouvez les angles de contenu à succès.",
-    keywords: ["tendance youtube fitness", "musculation youtube trends", "bien-être youtube 2026", "sport youtube viral", "yoga youtube tendances"],
+    description:
+      "Découvrez les tendances fitness et bien-être YouTube les plus populaires. Sport, musculation, yoga, perte de poids. Trouvez les angles de contenu à succès.",
+    keywords: [
+      "tendance youtube fitness",
+      "musculation youtube trends",
+      "bien-être youtube 2026",
+      "sport youtube viral",
+      "yoga youtube tendances",
+    ],
   },
   cuisine: {
     title: "Tendances Cuisine YouTube 2026 - Recettes, food et gastronomie",
-    description: "Explorez les tendances cuisine YouTube. Recettes, food, gastronomie, cuisine du monde. Identifiez les thématiques culinaires en pleine expansion.",
-    keywords: ["tendance youtube cuisine", "recettes youtube 2026", "food youtube trends", "gastronomie youtube viral", "cuisine youtube tendances"],
+    description:
+      "Explorez les tendances cuisine YouTube. Recettes, food, gastronomie, cuisine du monde. Identifiez les thématiques culinaires en pleine expansion.",
+    keywords: [
+      "tendance youtube cuisine",
+      "recettes youtube 2026",
+      "food youtube trends",
+      "gastronomie youtube viral",
+      "cuisine youtube tendances",
+    ],
   },
   business: {
     title: "Tendances Business YouTube 2026 - Entrepreneuriat et développement personnel",
-    description: "Suivez les tendances business et entrepreneuriat YouTube. Marketing, développement personnel, start-up, productivité. Trouvez votre prochaine niche à succès.",
-    keywords: ["tendance youtube business", "entrepreneuriat youtube 2026", "marketing youtube trends", "développement personnel youtube", "startup youtube viral"],
+    description:
+      "Suivez les tendances business et entrepreneuriat YouTube. Marketing, développement personnel, start-up, productivité. Trouvez votre prochaine niche à succès.",
+    keywords: [
+      "tendance youtube business",
+      "entrepreneuriat youtube 2026",
+      "marketing youtube trends",
+      "développement personnel youtube",
+      "startup youtube viral",
+    ],
   },
-}
+};
 
 // FAQ Schema for JSON-LD
 const faqSchema = [
   {
     question: "Comment TrendHunter détecte-t-il les tendances YouTube ?",
-    answer: "TrendHunter utilise un algorithme d'IA avancé qui analyse des millions de vidéos YouTube en temps réel. Il identifie les signaux de croissance précoces comme l'augmentation des vues, les nouveaux concurrents, et les topics émergents dans chaque niche.",
+    answer:
+      "TrendHunter utilise un algorithme d'IA avancé qui analyse des millions de vidéos YouTube en temps réel. Il identifie les signaux de croissance précoces comme l'augmentation des vues, les nouveaux concurrents, et les topics émergents dans chaque niche.",
   },
   {
     question: "Quelles niches sont disponibles sur TrendHunter ?",
-    answer: "TrendHunter couvre 5 principales niches : Tech, Finance, Fitness, Cuisine et Business. Chaque niche est suivie en temps réel avec des mises à jour quotidiennes des tendances.",
+    answer:
+      "TrendHunter couvre 5 principales niches : Tech, Finance, Fitness, Cuisine et Business. Chaque niche est suivie en temps réel avec des mises à jour quotidiennes des tendances.",
   },
   {
     question: "Comment utiliser les tendances pour mon contenu YouTube ?",
-    answer: "Chaque tendance sur TrendHunter inclut des angles de contenu suggérés, un score de潜力, et des données sur les concurrents. Vous pouvez identifier les opportunités avant qu'elles ne saturent le marché.",
+    answer:
+      "Chaque tendance sur TrendHunter inclut des angles de contenu suggérés, un score de潜力, et des données sur les concurrents. Vous pouvez identifier les opportunités avant qu'elles ne saturent le marché.",
   },
-]
+];
 
 interface Props {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string }>;
 }
 
 export async function generateStaticParams() {
   const niches = await prisma.niche.findMany({
     where: { isActive: true },
     select: { slug: true },
-  })
+  });
 
   return niches.map((niche) => ({
     slug: niche.slug,
-  }))
+  }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params
-  const metadata = nicheMetadata[slug]
+  const { slug } = await params;
+  const metadata = nicheMetadata[slug];
 
   if (!metadata) {
     return {
       title: "Niche non trouvée - TrendHunter",
-    }
+    };
   }
 
   return {
@@ -92,11 +131,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       canonical: `https://trendhunter.app/niches/${slug}`,
     },
-  }
+  };
 }
 
 export default async function NichePage({ params }: Props) {
-  const { slug } = await params
+  const { slug } = await params;
 
   // Fetch niche and its trends with count in a single query
   const niche = await prisma.niche.findUnique({
@@ -113,19 +152,19 @@ export default async function NichePage({ params }: Props) {
       _count: {
         select: {
           trends: {
-            where: { expiresAt: { gt: new Date() } }
-          }
-        }
+            where: { expiresAt: { gt: new Date() } },
+          },
+        },
       },
     },
-  })
+  });
 
   if (!niche) {
-    notFound()
+    notFound();
   }
 
   // Access count directly from the _count field - no separate query needed!
-  const trendCount = niche._count.trends
+  const trendCount = niche._count.trends;
 
   // JSON-LD schemas
   const jsonLd = {
@@ -175,7 +214,7 @@ export default async function NichePage({ params }: Props) {
         })),
       },
     ],
-  }
+  };
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
@@ -196,8 +235,12 @@ export default async function NichePage({ params }: Props) {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="/niches" className="hover:text-dark-ink transition-colors">Niches</Link>
-            <Link href="#pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
+            <Link href="/niches" className="hover:text-dark-ink transition-colors">
+              Niches
+            </Link>
+            <Link href="#pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
           </nav>
 
           <Link href="/login">
@@ -212,9 +255,13 @@ export default async function NichePage({ params }: Props) {
         {/* Breadcrumb */}
         <nav className="mb-8">
           <div className="flex items-center gap-2 text-sm text-dark-ink-secondary">
-            <Link href="/" className="hover:text-dark-ink transition-colors">Accueil</Link>
+            <Link href="/" className="hover:text-dark-ink transition-colors">
+              Accueil
+            </Link>
             <span>/</span>
-            <Link href="/niches" className="hover:text-dark-ink transition-colors">Niches</Link>
+            <Link href="/niches" className="hover:text-dark-ink transition-colors">
+              Niches
+            </Link>
             <span>/</span>
             <span className="text-dark-ink font-medium">{niche.name}</span>
           </div>
@@ -229,7 +276,8 @@ export default async function NichePage({ params }: Props) {
             <div>
               <h1 className="text-4xl md:text-5xl font-black mb-2">{niche.name}</h1>
               <p className="text-dark-ink-secondary text-lg max-w-2xl">
-                {niche.description || `Découvrez les tendances ${niche.name.toLowerCase()} YouTube les plus prometteuses.`}
+                {niche.description ||
+                  `Découvrez les tendances ${niche.name.toLowerCase()} YouTube les plus prometteuses.`}
               </p>
             </div>
           </div>
@@ -252,7 +300,10 @@ export default async function NichePage({ params }: Props) {
         <section className="mb-16">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl md:text-3xl font-bold">Top 10 Tendances</h2>
-            <Link href="/login" className="text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors">
+            <Link
+              href="/login"
+              className="text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors"
+            >
               Voir tout →
             </Link>
           </div>
@@ -347,7 +398,8 @@ export default async function NichePage({ params }: Props) {
             Prêt à détecter les tendances avant qu'elles n'explosent ?
           </h2>
           <p className="text-dark-ink-secondary mb-6 max-w-xl mx-auto">
-            Rejoignez +1200 créateurs qui font confiance à TrendHunter pour anticiper les tendances YouTube.
+            Rejoignez +1200 créateurs qui font confiance à TrendHunter pour anticiper les tendances
+            YouTube.
           </p>
           <Link href="/login">
             <Button variant="subscribe" size="lg" className="h-12 px-10 font-bold">
@@ -358,7 +410,10 @@ export default async function NichePage({ params }: Props) {
 
         {/* Back to Niches */}
         <div className="mt-12 text-center">
-          <Link href="/niches" className="inline-flex items-center gap-2 text-dark-ink-secondary hover:text-dark-ink transition-colors">
+          <Link
+            href="/niches"
+            className="inline-flex items-center gap-2 text-dark-ink-secondary hover:text-dark-ink transition-colors"
+          >
             <ArrowLeft className="w-4 h-4" />
             Voir toutes les niches
           </Link>
@@ -376,9 +431,15 @@ export default async function NichePage({ params }: Props) {
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/niches" className="hover:text-dark-ink">Niches</Link>
-            <Link href="/pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
+            <Link href="/niches" className="hover:text-dark-ink">
+              Niches
+            </Link>
+            <Link href="/pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -387,5 +448,5 @@ export default async function NichePage({ params }: Props) {
         </div>
       </footer>
     </div>
-  )
+  );
 }

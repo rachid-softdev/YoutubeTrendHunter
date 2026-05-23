@@ -1,40 +1,42 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
-import { User, ShieldAlert, Trash2, LogOut } from "lucide-react"
-import { signOut } from "next-auth/react"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import { User, ShieldAlert, Trash2, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 export function SettingsContent({ user }: { user: any }) {
-  const [activeTab, setActiveTab] = useState<"infos" | "data">("infos")
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [activeTab, setActiveTab] = useState<"infos" | "data">("infos");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
-    const confirmed = window.confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")
-    if (!confirmed) return
+    const confirmed = window.confirm(
+      "Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.",
+    );
+    if (!confirmed) return;
 
-    setIsDeleting(true)
+    setIsDeleting(true);
     try {
       const response = await fetch("/api/user", {
         method: "DELETE",
         body: JSON.stringify({ confirm: true }),
-      })
+      });
 
       if (response.ok) {
-        signOut({ callbackUrl: "/" })
+        signOut({ callbackUrl: "/" });
       } else {
-        alert("Une erreur est survenue lors de la suppression du compte.")
+        alert("Une erreur est survenue lors de la suppression du compte.");
       }
     } catch (error) {
-      console.error("Error deleting account:", error)
-      alert("Une erreur est survenue lors de la suppression du compte.")
+      console.error("Error deleting account:", error);
+      alert("Une erreur est survenue lors de la suppression du compte.");
     } finally {
-      setIsDeleting(false)
+      setIsDeleting(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
@@ -72,24 +74,36 @@ export function SettingsContent({ user }: { user: any }) {
               <User className="w-5 h-5 text-dark-ink-tertiary" />
               <CardTitle className="text-dark-ink">Profil</CardTitle>
             </div>
-            <CardDescription className="text-dark-ink-secondary">Vos informations personnelles</CardDescription>
+            <CardDescription className="text-dark-ink-secondary">
+              Vos informations personnelles
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-dark-ink-secondary">Nom</label>
-              <Input value={user.name || ""} disabled className="rounded-none bg-dark-overlay border-hairline-dark" />
+              <Input
+                value={user.name || ""}
+                disabled
+                className="rounded-none bg-dark-overlay border-hairline-dark"
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-dark-ink-secondary">Email</label>
-              <Input value={user.email || ""} disabled className="rounded-none bg-dark-overlay border-hairline-dark" />
-              <p className="text-[10px] text-dark-ink-tertiary italic">L'email est géré par votre compte Google.</p>
+              <Input
+                value={user.email || ""}
+                disabled
+                className="rounded-none bg-dark-overlay border-hairline-dark"
+              />
+              <p className="text-[10px] text-dark-ink-tertiary italic">
+                L'email est géré par votre compte Google.
+              </p>
             </div>
 
             <Separator className="my-6 opacity-20" />
 
             <div className="pt-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full justify-start text-dark-ink-secondary hover:text-yt-red hover:bg-yt-red/5 border-hairline-dark"
                 onClick={() => signOut({ callbackUrl: "/" })}
               >
@@ -108,7 +122,9 @@ export function SettingsContent({ user }: { user: any }) {
               <ShieldAlert className="w-5 h-5 text-yt-red" />
               <CardTitle className="text-dark-ink">Zone de danger</CardTitle>
             </div>
-            <CardDescription className="text-dark-ink-secondary">Actions irréversibles sur votre compte</CardDescription>
+            <CardDescription className="text-dark-ink-secondary">
+              Actions irréversibles sur votre compte
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between gap-4 p-4 bg-yt-red/5 border border-yt-red/10">
@@ -118,9 +134,9 @@ export function SettingsContent({ user }: { user: any }) {
                   Cette action supprimera définitivement vos données, niches suivies et alertes.
                 </p>
               </div>
-              <Button 
-                variant="destructive" 
-                size="sm" 
+              <Button
+                variant="destructive"
+                size="sm"
                 className="shrink-0"
                 onClick={handleDeleteAccount}
                 disabled={isDeleting}
@@ -133,6 +149,5 @@ export function SettingsContent({ user }: { user: any }) {
         </Card>
       )}
     </div>
-
-  )
+  );
 }

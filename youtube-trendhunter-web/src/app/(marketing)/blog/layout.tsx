@@ -1,26 +1,28 @@
-import Link from "next/link"
-import { Metadata } from "next"
-import { Play, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { ThemeToggle } from "@/components/theme-toggle"
+import Link from "next/link";
+import { Metadata } from "next";
+import { Play, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
   title: "Blog — Tendances YouTube & Conseils Créateurs | TrendHunter",
-  description: "Découvrez les analyses de tendances YouTube, guides pratiques et conseils pour créateurs. Rédigé par l'IA TrendHunter. Updates hebdomadaires.",
-  keywords: ["blog youtube tendances", "conseils créateurs youtube", "analyse youtube", "tendances youtube 2026"],
+  description:
+    "Découvrez les analyses de tendances YouTube, guides pratiques et conseils pour créateurs. Rédigé par l'IA TrendHunter. Updates hebdomadaires.",
+  keywords: [
+    "blog youtube tendances",
+    "conseils créateurs youtube",
+    "analyse youtube",
+    "tendances youtube 2026",
+  ],
   openGraph: {
     title: "Blog TrendHunter — Tendances YouTube",
     description: "Actualités, guides et analyses pour les créateurs YouTube.",
     type: "website",
     locale: "fr_FR",
   },
-}
+};
 
-export default function BlogLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function BlogLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink selection:bg-yt-red/30">
       {/* --- Header --- */}
@@ -34,9 +36,15 @@ export default function BlogLayout({
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-dark-ink-secondary">
-            <Link href="#features" className="hover:text-dark-ink transition-colors">Fonctionnalités</Link>
-            <Link href="#pricing" className="hover:text-dark-ink transition-colors">Tarifs</Link>
-            <Link href="/blog" className="text-yt-red">Blog</Link>
+            <Link href="#features" className="hover:text-dark-ink transition-colors">
+              Fonctionnalités
+            </Link>
+            <Link href="#pricing" className="hover:text-dark-ink transition-colors">
+              Tarifs
+            </Link>
+            <Link href="/blog" className="text-yt-red">
+              Blog
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -54,11 +62,17 @@ export default function BlogLayout({
       <div className="border-b border-hairline-dark bg-dark-surface/30">
         <div className="max-w-[1400px] mx-auto px-4 py-3">
           <nav className="flex items-center gap-2 text-sm">
-            <Link href="/" className="text-dark-ink-secondary hover:text-dark-ink transition-colors">
+            <Link
+              href="/"
+              className="text-dark-ink-secondary hover:text-dark-ink transition-colors"
+            >
               Accueil
             </Link>
             <span className="text-dark-ink-tertiary">/</span>
-            <Link href="/blog" className="text-dark-ink-secondary hover:text-dark-ink transition-colors">
+            <Link
+              href="/blog"
+              className="text-dark-ink-secondary hover:text-dark-ink transition-colors"
+            >
               Blog
             </Link>
             <span className="text-dark-ink-tertiary">/</span>
@@ -80,10 +94,18 @@ export default function BlogLayout({
           </div>
 
           <div className="flex gap-8 text-sm text-dark-ink-secondary font-medium">
-            <Link href="/blog" className="hover:text-dark-ink">Blog</Link>
-            <Link href="#pricing" className="hover:text-dark-ink">Tarifs</Link>
-            <Link href="/privacy" className="hover:text-dark-ink">Confidentialité</Link>
-            <Link href="/terms" className="hover:text-dark-ink">CGU</Link>
+            <Link href="/blog" className="hover:text-dark-ink">
+              Blog
+            </Link>
+            <Link href="#pricing" className="hover:text-dark-ink">
+              Tarifs
+            </Link>
+            <Link href="/privacy" className="hover:text-dark-ink">
+              Confidentialité
+            </Link>
+            <Link href="/terms" className="hover:text-dark-ink">
+              CGU
+            </Link>
           </div>
 
           <div className="text-dark-ink-tertiary text-xs">
@@ -92,5 +114,5 @@ export default function BlogLayout({
         </div>
       </footer>
     </div>
-  )
+  );
 }

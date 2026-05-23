@@ -2,18 +2,18 @@
 // Frontend Hooks for Entitlements
 // ============================================
 
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, createContext, useContext } from "react"
+import { useState, useEffect, useCallback, createContext, useContext } from "react";
 
 export interface EntitlementData {
-  plan: string
-  planKey: string
-  features: Record<string, boolean>
-  limits: Record<string, number | null>
-  usage: Record<string, number>
-  resetAt: Record<string, string | null>
-  experimentBuckets: Record<string, boolean>
+  plan: string;
+  planKey: string;
+  features: Record<string, boolean>;
+  limits: Record<string, number | null>;
+  usage: Record<string, number>;
+  resetAt: Record<string, string | null>;
+  experimentBuckets: Record<string, boolean>;
 }
 
 // ============================================
@@ -21,50 +21,52 @@ export interface EntitlementData {
 // ============================================
 
 const EntitlementsContext = createContext<{
-  entitlements: EntitlementData | null
-  isLoading: boolean
-  error: Error | null
-  refetch: () => Promise<void>
-} | null>(null)
+  entitlements: EntitlementData | null;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+} | null>(null);
 
 export function EntitlementsProvider({ children }: { children: React.ReactNode }) {
-  const [entitlements, setEntitlements] = useState<EntitlementData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
+  const [entitlements, setEntitlements] = useState<EntitlementData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   const fetchEntitlements = useCallback(async () => {
     try {
-      setIsLoading(true)
-      const res = await fetch("/api/entitlements")
-      if (!res.ok) throw new Error("Failed to fetch entitlements")
-      const data = await res.json()
-      setEntitlements(data)
-      setError(null)
+      setIsLoading(true);
+      const res = await fetch("/api/entitlements");
+      if (!res.ok) throw new Error("Failed to fetch entitlements");
+      const data = await res.json();
+      setEntitlements(data);
+      setError(null);
     } catch (e) {
-      setError(e as Error)
+      setError(e as Error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchEntitlements()
-    
+    fetchEntitlements();
+
     // Refresh every 60 seconds
-    const interval = setInterval(fetchEntitlements, 60000)
-    return () => clearInterval(interval)
-  }, [fetchEntitlements])
+    const interval = setInterval(fetchEntitlements, 60000);
+    return () => clearInterval(interval);
+  }, [fetchEntitlements]);
 
   return (
-    <EntitlementsContext.Provider value={{ 
-      entitlements, 
-      isLoading, 
-      error, 
-      refetch: fetchEntitlements 
-    }}>
+    <EntitlementsContext.Provider
+      value={{
+        entitlements,
+        isLoading,
+        error,
+        refetch: fetchEntitlements,
+      }}
+    >
       {children}
     </EntitlementsContext.Provider>
-  )
+  );
 }
 
 // ============================================
@@ -72,11 +74,11 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
 // ============================================
 
 export function useEntitlements() {
-  const context = useContext(EntitlementsContext)
+  const context = useContext(EntitlementsContext);
   if (!context) {
-    throw new Error("useEntitlements must be used within EntitlementsProvider")
+    throw new Error("useEntitlements must be used within EntitlementsProvider");
   }
-  return context
+  return context;
 }
 
 // ============================================
@@ -84,10 +86,10 @@ export function useEntitlements() {
 // ============================================
 
 export function useFeature(featureKey: string): boolean {
-  const { entitlements, isLoading } = useEntitlements()
-  
-  if (isLoading) return false
-  return entitlements?.features[featureKey] ?? false
+  const { entitlements, isLoading } = useEntitlements();
+
+  if (isLoading) return false;
+  return entitlements?.features[featureKey] ?? false;
 }
 
 // ============================================
@@ -95,27 +97,27 @@ export function useFeature(featureKey: string): boolean {
 // ============================================
 
 export interface LimitInfo {
-  limit: number | null
-  used: number
-  resetAt: string | null
-  remaining: number | null
+  limit: number | null;
+  used: number;
+  resetAt: string | null;
+  remaining: number | null;
 }
 
 export function useLimit(limitKey: string): LimitInfo | null {
-  const { entitlements, isLoading } = useEntitlements()
-  
-  if (isLoading) return null
-  
-  const limit = entitlements?.limits[limitKey] ?? null
-  const used = entitlements?.usage[limitKey] ?? 0
-  const resetAt = entitlements?.resetAt[limitKey] ?? null
-  
+  const { entitlements, isLoading } = useEntitlements();
+
+  if (isLoading) return null;
+
+  const limit = entitlements?.limits[limitKey] ?? null;
+  const used = entitlements?.usage[limitKey] ?? 0;
+  const resetAt = entitlements?.resetAt[limitKey] ?? null;
+
   return {
     limit,
     used,
     resetAt,
-    remaining: limit !== null ? limit - used : null
-  }
+    remaining: limit !== null ? limit - used : null,
+  };
 }
 
 // ============================================
@@ -123,12 +125,12 @@ export function useLimit(limitKey: string): LimitInfo | null {
 // ============================================
 
 export function useCanConsume(limitKey: string, amount: number = 1): boolean {
-  const limitInfo = useLimit(limitKey)
-  
-  if (!limitInfo) return false
-  if (limitInfo.limit === null) return true // unlimited
-  
-  return (limitInfo.used + amount) <= limitInfo.limit
+  const limitInfo = useLimit(limitKey);
+
+  if (!limitInfo) return false;
+  if (limitInfo.limit === null) return true; // unlimited
+
+  return limitInfo.used + amount <= limitInfo.limit;
 }
 
 // ============================================
@@ -136,8 +138,8 @@ export function useCanConsume(limitKey: string, amount: number = 1): boolean {
 // ============================================
 
 export function useInExperiment(experimentKey: string): boolean {
-  const { entitlements } = useEntitlements()
-  return entitlements?.experimentBuckets[experimentKey] ?? false
+  const { entitlements } = useEntitlements();
+  return entitlements?.experimentBuckets[experimentKey] ?? false;
 }
 
 // ============================================
@@ -145,17 +147,17 @@ export function useInExperiment(experimentKey: string): boolean {
 // ============================================
 
 export function useHasPlan(minPlan: "free" | "pro" | "team" | "enterprise"): boolean {
-  const { entitlements } = useEntitlements()
-  
+  const { entitlements } = useEntitlements();
+
   const planLevels: Record<string, number> = {
     free: 0,
     pro: 1,
     team: 2,
-    enterprise: 3
-  }
-  
-  const currentLevel = planLevels[entitlements?.planKey ?? "free"]
-  const requiredLevel = planLevels[minPlan]
-  
-  return currentLevel >= requiredLevel
+    enterprise: 3,
+  };
+
+  const currentLevel = planLevels[entitlements?.planKey ?? "free"];
+  const requiredLevel = planLevels[minPlan];
+
+  return currentLevel >= requiredLevel;
 }

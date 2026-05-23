@@ -6,53 +6,53 @@
 
 @theme {
   /* ═══ Brand & Accent ═══ */
-  --color-yt-red: #FF0000;
-  --color-yt-red-deep: #CC0000;
-  --color-yt-red-soft: #FF4E45;
-  --color-yt-link: #065FD4;
-  --color-yt-link-visited: #6A0DAD;
+  --color-yt-red: #ff0000;
+  --color-yt-red-deep: #cc0000;
+  --color-yt-red-soft: #ff4e45;
+  --color-yt-link: #065fd4;
+  --color-yt-link-visited: #6a0dad;
 
   /* ═══ Dark Mode Surfaces ═══ */
-  --color-dark-canvas: #0F0F0F;
+  --color-dark-canvas: #0f0f0f;
   --color-dark-surface: #212121;
   --color-dark-overlay: #272727;
   --color-dark-chip: #272727;
-  --color-dark-chip-selected: #FFFFFF;
+  --color-dark-chip-selected: #ffffff;
 
   /* ═══ Light Mode Surfaces ═══ */
-  --color-canvas: #FFFFFF;
-  --color-surface-elevated: #F9F9F9;
-  --color-surface-overlay: #F2F2F2;
-  --color-surface-chip: #F2F2F2;
-  --color-surface-chip-selected: #0F0F0F;
+  --color-canvas: #ffffff;
+  --color-surface-elevated: #f9f9f9;
+  --color-surface-overlay: #f2f2f2;
+  --color-surface-chip: #f2f2f2;
+  --color-surface-chip-selected: #0f0f0f;
 
   /* ═══ Ink / Text ═══ */
-  --color-ink: #0F0F0F;
+  --color-ink: #0f0f0f;
   --color-ink-secondary: #606060;
   --color-ink-tertiary: #909090;
-  --color-ink-disabled: #AAAAAA;
-  --color-dark-ink: #F1F1F1;
-  --color-dark-ink-secondary: #AAAAAA;
+  --color-ink-disabled: #aaaaaa;
+  --color-dark-ink: #f1f1f1;
+  --color-dark-ink-secondary: #aaaaaa;
   --color-dark-ink-tertiary: #717171;
 
   /* ═══ Semantic ═══ */
-  --color-live-badge: #FF0000;
-  --color-members-only: #2BA640;
-  --color-premium-gold: #FFD600;
-  --color-error: #D93025;
-  --color-progress-red: #FF0000;
+  --color-live-badge: #ff0000;
+  --color-members-only: #2ba640;
+  --color-premium-gold: #ffd600;
+  --color-error: #d93025;
+  --color-progress-red: #ff0000;
   --color-buffered-gray: #909090;
 
   /* ═══ Hairlines ═══ */
-  --color-hairline: #E5E5E5;
-  --color-hairline-dark: #3D3D3D;
+  --color-hairline: #e5e5e5;
+  --color-hairline-dark: #3d3d3d;
 
   /* ═══ Brand Primary for TrendHunter ═══ */
-  --color-brand: #FF0000;
-  --color-brand-soft: #FF4E45;
+  --color-brand: #ff0000;
+  --color-brand-soft: #ff4e45;
 
   /* ═══ Typography - Roboto ═══ */
-  --font-roboto: 'Roboto', Arial, sans-serif;
+  --font-roboto: "Roboto", Arial, sans-serif;
 
   /* ═══ Spacing ═══ */
   --spacing-xxs: 2px;
@@ -80,16 +80,31 @@
   --animate-pulse-border: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 
   @keyframes pulse-glow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
   }
   @keyframes pulse-border {
-    0%, 100% { border-color: rgba(255, 0, 0, 0.2); }
-    50% { border-color: rgba(255, 0, 0, 0.6); }
+    0%,
+    100% {
+      border-color: rgba(255, 0, 0, 0.2);
+    }
+    50% {
+      border-color: rgba(255, 0, 0, 0.6);
+    }
   }
 }
 
@@ -99,37 +114,37 @@
 
 :root {
   /* Default to dark mode as primary */
-  --background: #0F0F0F;
-  --foreground: #F1F1F1;
+  --background: #0f0f0f;
+  --foreground: #f1f1f1;
   --surface: #212121;
   --surface-overlay: #272727;
-  --border: #3D3D3D;
+  --border: #3d3d3d;
   --muted: #717171;
 }
 
 /* Light mode — when .dark class is absent */
 html:not(.dark) {
-  --background: #FFFFFF;
-  --foreground: #0F0F0F;
-  --surface: #F9F9F9;
-  --surface-overlay: #F2F2F2;
-  --border: #E5E5E5;
+  --background: #ffffff;
+  --foreground: #0f0f0f;
+  --surface: #f9f9f9;
+  --surface-overlay: #f2f2f2;
+  --border: #e5e5e5;
   --muted: #606060;
 }
-
-
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-button, [role="button"], a {
+button,
+[role="button"],
+a {
   cursor: pointer;
 }
 
@@ -137,12 +152,12 @@ button, [role="button"], a {
 
 /* Text Styles */
 .font-roboto {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
 }
 
 /* Video Title - 2 line clamp */
 .text-video-title {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -154,7 +169,7 @@ button, [role="button"], a {
 
 /* Video Metadata */
 .text-video-meta {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.33;
@@ -163,7 +178,7 @@ button, [role="button"], a {
 
 /* Button text */
 .text-button {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -172,7 +187,7 @@ button, [role="button"], a {
 
 /* Label */
 .text-label {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.33;
@@ -181,7 +196,7 @@ button, [role="button"], a {
 
 /* Caption */
 .text-caption {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.27;
@@ -193,9 +208,9 @@ button, [role="button"], a {
 
 /* Subscribe Button - YouTube Red Pill */
 .btn-subscribe {
-  background-color: #FF0000;
-  color: #FFFFFF;
-  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #ff0000;
+  color: #ffffff;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -209,14 +224,14 @@ button, [role="button"], a {
 }
 
 .btn-subscribe:hover {
-  background-color: #CC0000;
+  background-color: #cc0000;
 }
 
 /* Subscribed State */
 .btn-subscribed {
   background-color: #272727;
-  color: #F1F1F1;
-  font-family: 'Roboto', Arial, sans-serif;
+  color: #f1f1f1;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   padding: 10px 16px;
@@ -228,9 +243,9 @@ button, [role="button"], a {
 
 /* Primary Button - Ink (near-black) */
 .btn-primary {
-  background-color: #0F0F0F;
-  color: #FFFFFF;
-  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #0f0f0f;
+  color: #ffffff;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -249,9 +264,9 @@ button, [role="button"], a {
 
 /* Secondary Button - Chip style */
 .btn-secondary {
-  background-color: #F2F2F2;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #f2f2f2;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -265,14 +280,14 @@ button, [role="button"], a {
 }
 
 .btn-secondary:hover {
-  background-color: #E5E5E5;
+  background-color: #e5e5e5;
 }
 
 /* Ghost Button */
 .btn-ghost {
   background-color: transparent;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -286,7 +301,7 @@ button, [role="button"], a {
 }
 
 .btn-ghost:hover {
-  background-color: #F2F2F2;
+  background-color: #f2f2f2;
 }
 
 /* Icon Button - Circular */
@@ -304,7 +319,7 @@ button, [role="button"], a {
 }
 
 .btn-icon:hover {
-  background-color: #F2F2F2;
+  background-color: #f2f2f2;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -312,9 +327,9 @@ button, [role="button"], a {
    ───────────────────────────────────────────────────────── */
 
 .chip {
-  background-color: #F2F2F2;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #f2f2f2;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.43;
@@ -327,12 +342,12 @@ button, [role="button"], a {
 }
 
 .chip:hover {
-  background-color: #E5E5E5;
+  background-color: #e5e5e5;
 }
 
 .chip-active {
-  background-color: #0F0F0F;
-  color: #FFFFFF;
+  background-color: #0f0f0f;
+  color: #ffffff;
 }
 
 .chip-active:hover {
@@ -342,16 +357,16 @@ button, [role="button"], a {
 /* Dark mode chip */
 .dark .chip {
   background-color: #272727;
-  color: #F1F1F1;
+  color: #f1f1f1;
 }
 
 .dark .chip:hover {
-  background-color: #3D3D3D;
+  background-color: #3d3d3d;
 }
 
 .dark .chip-active {
-  background-color: #FFFFFF;
-  color: #0F0F0F;
+  background-color: #ffffff;
+  color: #0f0f0f;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -375,39 +390,41 @@ button, [role="button"], a {
    ───────────────────────────────────────────────────────── */
 
 .input-search {
-  background-color: #FFFFFF;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  background-color: #ffffff;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.5;
-  border: 1px solid #E5E5E5;
+  border: 1px solid #e5e5e5;
   border-radius: 500px;
   height: 40px;
   padding: 0 16px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .input-search:focus {
-  border-color: #065FD4;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  border-color: #065fd4;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .input-default {
   background-color: transparent;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 14px;
   border: none;
-  border-bottom: 1px solid #E5E5E5;
+  border-bottom: 1px solid #e5e5e5;
   padding: 4px 0;
   outline: none;
   transition: border-color 0.2s;
 }
 
 .input-default:focus {
-  border-bottom-color: #065FD4;
+  border-bottom-color: #065fd4;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -415,7 +432,7 @@ button, [role="button"], a {
    ───────────────────────────────────────────────────────── */
 
 .badge {
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.33;
@@ -425,22 +442,22 @@ button, [role="button"], a {
 
 .badge-duration {
   background-color: rgba(0, 0, 0, 0.8);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .badge-live {
-  background-color: #FF0000;
-  color: #FFFFFF;
+  background-color: #ff0000;
+  color: #ffffff;
 }
 
 .badge-new {
-  background-color: #FF0000;
-  color: #FFFFFF;
+  background-color: #ff0000;
+  color: #ffffff;
 }
 
 .badge-members {
-  background-color: #2BA640;
-  color: #FFFFFF;
+  background-color: #2ba640;
+  color: #ffffff;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -449,12 +466,12 @@ button, [role="button"], a {
 
 .progress-bar {
   height: 3px;
-  background-color: rgba(255,255,255,0.3);
+  background-color: rgba(255, 255, 255, 0.3);
   border-radius: 0;
 }
 
 .progress-bar-fill {
-  background-color: #FF0000;
+  background-color: #ff0000;
   height: 100%;
   border-radius: 0;
 }
@@ -502,8 +519,8 @@ button, [role="button"], a {
 
 .tooltip {
   background-color: #606060;
-  color: #FFFFFF;
-  font-family: 'Roboto', Arial, sans-serif;
+  color: #ffffff;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.27;
@@ -512,10 +529,12 @@ button, [role="button"], a {
 }
 
 .context-menu {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   border-radius: 12px;
   padding: 4px 0;
-  box-shadow: 0 4px 6px 0 rgba(0,0,0,0.2), 0 4px 10px 4px rgba(0,0,0,0.1);
+  box-shadow:
+    0 4px 6px 0 rgba(0, 0, 0, 0.2),
+    0 4px 10px 4px rgba(0, 0, 0, 0.1);
   min-width: 200px;
 }
 
@@ -525,8 +544,8 @@ button, [role="button"], a {
 
 .nav-item {
   background-color: transparent;
-  color: #0F0F0F;
-  font-family: 'Roboto', Arial, sans-serif;
+  color: #0f0f0f;
+  font-family: "Roboto", Arial, sans-serif;
   font-size: 13px;
   font-weight: 400;
   line-height: 1.46;
@@ -541,16 +560,16 @@ button, [role="button"], a {
 }
 
 .nav-item:hover {
-  background-color: #F2F2F2;
+  background-color: #f2f2f2;
 }
 
 .nav-item-active {
-  background-color: #F2F2F2;
+  background-color: #f2f2f2;
   font-weight: 700;
 }
 
 .dark .nav-item {
-  color: #F1F1F1;
+  color: #f1f1f1;
 }
 
 .dark .nav-item:hover {
@@ -566,20 +585,20 @@ button, [role="button"], a {
    ───────────────────────────────────────────────────────── */
 
 .trend-hot {
-  border: 1px solid #FCA5A5;
-  background-color: #FEF2F2;
+  border: 1px solid #fca5a5;
+  background-color: #fef2f2;
 }
 
 .score-hot {
-  background-color: #FF0000;
+  background-color: #ff0000;
 }
 
 .score-mid {
-  background-color: #F59E0B;
+  background-color: #f59e0b;
 }
 
 .score-low {
-  background-color: #22C55E;
+  background-color: #22c55e;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -606,11 +625,11 @@ button, [role="button"], a {
 
 /* Light mode scrollbar */
 .light ::-webkit-scrollbar-thumb {
-  background: #CCCCCC;
+  background: #cccccc;
 }
 
 .light ::-webkit-scrollbar-thumb:hover {
-  background: #AAAAAA;
+  background: #aaaaaa;
 }
 
 /* ─────────────────────────────────────────────────────────
@@ -632,7 +651,7 @@ button, [role="button"], a {
    ───────────────────────────────────────────────────────── */
 
 *:focus-visible {
-  outline: 2px solid #065FD4;
+  outline: 2px solid #065fd4;
   outline-offset: 2px;
 }
 
@@ -640,7 +659,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #065FD4;
+  outline: 2px solid #065fd4;
   outline-offset: 2px;
 }
 

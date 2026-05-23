@@ -1,33 +1,53 @@
-import type { Metadata } from "next"
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
-import { prisma } from "@/lib/prisma"
-import { Play, Users, CreditCard, TrendingUp, Bell, BarChart3, Settings, Shield, Search, Download, Trash2, Ban, CheckCircle, XCircle, RefreshCw, AlertTriangle, Activity, Database, Zap } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import type { Metadata } from "next";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import {
+  Play,
+  Users,
+  CreditCard,
+  TrendingUp,
+  Bell,
+  BarChart3,
+  Settings,
+  Shield,
+  Search,
+  Download,
+  Trash2,
+  Ban,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  AlertTriangle,
+  Activity,
+  Database,
+  Zap,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export const metadata: Metadata = {
   title: "Administration - TrendHunter",
-}
+};
 
-const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || []
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [];
 
-type TabType = "overview" | "users" | "revenue" | "logs" | "niches" | "monitoring"
+type TabType = "overview" | "users" | "revenue" | "logs" | "niches" | "monitoring";
 
 interface TabProps {
-  params: Promise<{ tab?: string }>
+  params: Promise<{ tab?: string }>;
 }
 
 export default async function AdminPage({ params }: TabProps) {
-  const { tab } = await params
-  const currentTab = tab || "overview"
+  const { tab } = await params;
+  const currentTab = tab || "overview";
 
-  const session = await auth()
+  const session = await auth();
 
   if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
-    redirect("/dashboard")
+    redirect("/dashboard");
   }
 
   // Stats principales
@@ -47,9 +67,9 @@ export default async function AdminPage({ params }: TabProps) {
     prisma.trend.count({ where: { expiresAt: { gt: new Date() } } }),
     prisma.alert.count({ where: { isActive: true } }),
     prisma.niche.count(),
-  ])
+  ]);
 
-  const mrrEstimate = (proCount * 15) + (teamCount * 39)
+  const mrrEstimate = proCount * 15 + teamCount * 39;
 
   return (
     <div className="min-h-screen bg-dark-canvas text-dark-ink p-4 md:p-8">
@@ -67,17 +87,42 @@ export default async function AdminPage({ params }: TabProps) {
 
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 mb-8 border-b border-hairline-dark pb-4">
-          <NavTab href="/admin" active={currentTab === "overview"} icon={BarChart3} label="Overview" />
-          <NavTab href="/admin/users" active={currentTab === "users"} icon={Users} label="Utilisateurs" />
-          <NavTab href="/admin/revenue" active={currentTab === "revenue"} icon={CreditCard} label="Revenus" />
+          <NavTab
+            href="/admin"
+            active={currentTab === "overview"}
+            icon={BarChart3}
+            label="Overview"
+          />
+          <NavTab
+            href="/admin/users"
+            active={currentTab === "users"}
+            icon={Users}
+            label="Utilisateurs"
+          />
+          <NavTab
+            href="/admin/revenue"
+            active={currentTab === "revenue"}
+            icon={CreditCard}
+            label="Revenus"
+          />
           <NavTab href="/admin/logs" active={currentTab === "logs"} icon={Activity} label="Logs" />
-          <NavTab href="/admin/niches" active={currentTab === "niches"} icon={Database} label="Niches" />
-          <NavTab href="/admin/monitoring" active={currentTab === "monitoring"} icon={Zap} label="Monitoring" />
+          <NavTab
+            href="/admin/niches"
+            active={currentTab === "niches"}
+            icon={Database}
+            label="Niches"
+          />
+          <NavTab
+            href="/admin/monitoring"
+            active={currentTab === "monitoring"}
+            icon={Zap}
+            label="Monitoring"
+          />
         </div>
 
         {/* Contenu par onglet */}
         {currentTab === "overview" && (
-          <OverviewTab 
+          <OverviewTab
             stats={{
               totalUsers,
               totalSubscriptions,
@@ -86,56 +131,87 @@ export default async function AdminPage({ params }: TabProps) {
               totalTrends,
               activeAlerts,
               totalNiches,
-              mrrEstimate
+              mrrEstimate,
             }}
           />
         )}
         {currentTab === "users" && <UsersTab />}
-        {currentTab === "revenue" && <RevenueTab proCount={proCount} teamCount={teamCount} mrr={mrrEstimate} />}
+        {currentTab === "revenue" && (
+          <RevenueTab proCount={proCount} teamCount={teamCount} mrr={mrrEstimate} />
+        )}
         {currentTab === "logs" && <LogsTab />}
         {currentTab === "niches" && <NichesTab />}
         {currentTab === "monitoring" && <MonitoringTab />}
       </div>
     </div>
-  )
+  );
 }
 
 // Composant onglet de navigation
-function NavTab({ href, active, icon: Icon, label }: { href: string; active: boolean; icon: any; label: string }) {
+function NavTab({
+  href,
+  active,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  active: boolean;
+  icon: any;
+  label: string;
+}) {
   return (
     <a
       href={href}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-        active 
-          ? "bg-yt-red text-white" 
+        active
+          ? "bg-yt-red text-white"
           : "bg-dark-surface border border-hairline-dark hover:border-yt-red/50"
       }`}
     >
       <Icon className="w-4 h-4" />
       {label}
     </a>
-  )
+  );
 }
 
 // ============ OVERVIEW TAB ============
-function OverviewTab({ stats }: { stats: {
-  totalUsers: number
-  totalSubscriptions: number
-  proCount: number
-  teamCount: number
-  totalTrends: number
-  activeAlerts: number
-  totalNiches: number
-  mrrEstimate: number
-}}) {
+function OverviewTab({
+  stats,
+}: {
+  stats: {
+    totalUsers: number;
+    totalSubscriptions: number;
+    proCount: number;
+    teamCount: number;
+    totalTrends: number;
+    activeAlerts: number;
+    totalNiches: number;
+    mrrEstimate: number;
+  };
+}) {
   const statCards = [
     { title: "Total Utilisateurs", value: stats.totalUsers, icon: Users, color: "text-blue-400" },
-    { title: "Abonnés Actifs", value: stats.totalSubscriptions, icon: CreditCard, color: "text-green-400" },
-    { title: "MRR Estimé", value: `${stats.mrrEstimate}€`, icon: BarChart3, color: "text-yellow-400" },
-    { title: "Tendances Actives", value: stats.totalTrends, icon: TrendingUp, color: "text-purple-400" },
+    {
+      title: "Abonnés Actifs",
+      value: stats.totalSubscriptions,
+      icon: CreditCard,
+      color: "text-green-400",
+    },
+    {
+      title: "MRR Estimé",
+      value: `${stats.mrrEstimate}€`,
+      icon: BarChart3,
+      color: "text-yellow-400",
+    },
+    {
+      title: "Tendances Actives",
+      value: stats.totalTrends,
+      icon: TrendingUp,
+      color: "text-purple-400",
+    },
     { title: "Alertes Actives", value: stats.activeAlerts, icon: Bell, color: "text-red-400" },
     { title: "Niches", value: stats.totalNiches, icon: Database, color: "text-cyan-400" },
-  ]
+  ];
 
   return (
     <>
@@ -159,7 +235,9 @@ function OverviewTab({ stats }: { stats: {
             <CardTitle>Plan Free</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-black">{stats.totalSubscriptions - stats.proCount - stats.teamCount}</p>
+            <p className="text-3xl font-black">
+              {stats.totalSubscriptions - stats.proCount - stats.teamCount}
+            </p>
             <p className="text-dark-ink-secondary text-sm">Utilisateurs sans abonnement</p>
           </CardContent>
         </Card>
@@ -183,7 +261,7 @@ function OverviewTab({ stats }: { stats: {
         </Card>
       </div>
     </>
-  )
+  );
 }
 
 // ============ USERS TAB ============
@@ -195,7 +273,7 @@ async function UsersTab() {
       subscription: true,
       _count: { select: { alerts: true, apiTokens: true } },
     },
-  })
+  });
 
   return (
     <div className="space-y-6">
@@ -203,8 +281,8 @@ async function UsersTab() {
         <div className="flex gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-ink-tertiary" />
-            <Input 
-              placeholder="Rechercher par email..." 
+            <Input
+              placeholder="Rechercher par email..."
               className="pl-10 w-64 bg-dark-surface border-hairline-dark"
             />
           </div>
@@ -230,19 +308,34 @@ async function UsersTab() {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-b border-hairline-dark/50 hover:bg-dark-surface/50">
+              <tr
+                key={user.id}
+                className="border-b border-hairline-dark/50 hover:bg-dark-surface/50"
+              >
                 <td className="p-3 font-mono text-xs">{user.email}</td>
                 <td className="p-3">{user.name || "-"}</td>
                 <td className="p-3">
-                  <Badge variant={user.subscription?.plan === "FREE" ? "outline" : user.subscription?.plan === "PRO" ? "default" : "destructive"}>
+                  <Badge
+                    variant={
+                      user.subscription?.plan === "FREE"
+                        ? "outline"
+                        : user.subscription?.plan === "PRO"
+                          ? "default"
+                          : "destructive"
+                    }
+                  >
                     {user.subscription?.plan || "FREE"}
                   </Badge>
                 </td>
                 <td className="p-3">
                   {user.subscription?.status === "ACTIVE" ? (
-                    <span className="text-green-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Actif</span>
+                    <span className="text-green-400 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> Actif
+                    </span>
                   ) : (
-                    <span className="text-dark-ink-tertiary flex items-center gap-1"><XCircle className="w-3 h-3" /> {user.subscription?.status || "Aucun"}</span>
+                    <span className="text-dark-ink-tertiary flex items-center gap-1">
+                      <XCircle className="w-3 h-3" /> {user.subscription?.status || "Aucun"}
+                    </span>
                   )}
                 </td>
                 <td className="p-3">{user._count.alerts}</td>
@@ -262,19 +355,27 @@ async function UsersTab() {
         </table>
       </div>
     </div>
-  )
+  );
 }
 
 // ============ REVENUE TAB ============
-function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount: number; mrr: number }) {
+function RevenueTab({
+  proCount,
+  teamCount,
+  mrr,
+}: {
+  proCount: number;
+  teamCount: number;
+  mrr: number;
+}) {
   // Simulation de données pour les graphiques
-  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"]
-  const revenueData = [1200, 1800, 2400, 2800, 3200, mrr]
-  const maxRevenue = Math.max(...revenueData)
+  const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"];
+  const revenueData = [1200, 1800, 2400, 2800, 3200, mrr];
+  const maxRevenue = Math.max(...revenueData);
 
   // Revenue mensuel simulé
-  const monthlyRevenue = [450, 600, 750, 900, 1050, 1200]
-  const maxMonthly = Math.max(...monthlyRevenue)
+  const monthlyRevenue = [450, 600, 750, 900, 1050, 1200];
+  const maxMonthly = Math.max(...monthlyRevenue);
 
   return (
     <div className="space-y-6">
@@ -295,7 +396,9 @@ function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount:
           </CardHeader>
           <CardContent>
             <p className="text-4xl font-black">{proCount + teamCount}</p>
-            <p className="text-dark-ink-secondary text-sm">{proCount} Pro + {teamCount} Team</p>
+            <p className="text-dark-ink-secondary text-sm">
+              {proCount} Pro + {teamCount} Team
+            </p>
           </CardContent>
         </Card>
         <Card className="bg-dark-surface border-hairline-dark">
@@ -317,17 +420,17 @@ function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount:
         <CardContent>
           <div className="flex items-end justify-between h-48 gap-2">
             {months.map((month, idx) => {
-              const height = (revenueData[idx] / maxRevenue) * 100
+              const height = (revenueData[idx] / maxRevenue) * 100;
               return (
                 <div key={month} className="flex flex-col items-center flex-1">
-                  <div 
+                  <div
                     className="w-full bg-yt-red/80 hover:bg-yt-red transition-colors rounded-t"
-                    style={{ height: `${height}%`, minHeight: revenueData[idx] > 0 ? '20px' : '0' }}
+                    style={{ height: `${height}%`, minHeight: revenueData[idx] > 0 ? "20px" : "0" }}
                   />
                   <span className="text-xs text-dark-ink-tertiary mt-2">{month}</span>
                   <span className="text-xs font-bold">{revenueData[idx]}€</span>
                 </div>
-              )
+              );
             })}
           </div>
         </CardContent>
@@ -347,7 +450,10 @@ function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount:
                   <span className="font-bold">{proCount * 15}€</span>
                 </div>
                 <div className="h-2 bg-dark-canvas rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500" style={{ width: `${(proCount * 15 / mrr) * 100}%` }} />
+                  <div
+                    className="h-full bg-green-500"
+                    style={{ width: `${((proCount * 15) / mrr) * 100}%` }}
+                  />
                 </div>
               </div>
               <div>
@@ -356,7 +462,10 @@ function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount:
                   <span className="font-bold">{teamCount * 39}€</span>
                 </div>
                 <div className="h-2 bg-dark-canvas rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500" style={{ width: `${(teamCount * 39 / mrr) * 100}%` }} />
+                  <div
+                    className="h-full bg-purple-500"
+                    style={{ width: `${((teamCount * 39) / mrr) * 100}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -380,7 +489,7 @@ function RevenueTab({ proCount, teamCount, mrr }: { proCount: number; teamCount:
         </Card>
       </div>
     </div>
-  )
+  );
 }
 
 // ============ LOGS TAB ============
@@ -389,7 +498,7 @@ async function LogsTab() {
     take: 100,
     orderBy: { createdAt: "desc" },
     include: { user: { select: { email: true, name: true } } },
-  })
+  });
 
   return (
     <div className="space-y-6">
@@ -424,7 +533,10 @@ async function LogsTab() {
           </thead>
           <tbody>
             {logs.map((log) => (
-              <tr key={log.id} className="border-b border-hairline-dark/50 hover:bg-dark-surface/50">
+              <tr
+                key={log.id}
+                className="border-b border-hairline-dark/50 hover:bg-dark-surface/50"
+              >
                 <td className="p-3 text-dark-ink-tertiary text-xs">
                   {log.createdAt.toLocaleString("fr-FR")}
                 </td>
@@ -452,7 +564,7 @@ async function LogsTab() {
         </table>
       </div>
     </div>
-  )
+  );
 }
 
 // ============ NICHES TAB ============
@@ -462,20 +574,21 @@ async function NichesTab() {
     include: {
       _count: { select: { trends: true, alerts: true } },
     },
-  })
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold">Gestion des Niches</h2>
-        <Button className="bg-yt-red text-white hover:bg-yt-red-deep">
-          + Ajouter une niche
-        </Button>
+        <Button className="bg-yt-red text-white hover:bg-yt-red-deep">+ Ajouter une niche</Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {niches.map((niche) => (
-          <Card key={niche.id} className={`bg-dark-surface border-hairline-dark ${!niche.isActive ? "opacity-60" : ""}`}>
+          <Card
+            key={niche.id}
+            className={`bg-dark-surface border-hairline-dark ${!niche.isActive ? "opacity-60" : ""}`}
+          >
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-lg">{niche.name}</CardTitle>
@@ -485,7 +598,9 @@ async function NichesTab() {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-dark-ink-secondary mb-3">{niche.description || "Pas de description"}</p>
+              <p className="text-sm text-dark-ink-secondary mb-3">
+                {niche.description || "Pas de description"}
+              </p>
               <div className="flex gap-4 text-xs text-dark-ink-tertiary mb-3">
                 <span>Tendances: {niche._count.trends}</span>
                 <span>Alertes: {niche._count.alerts}</span>
@@ -499,7 +614,11 @@ async function NichesTab() {
                   Éditer
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1">
-                  {niche.isActive ? <Ban className="w-3 h-3 mr-1" /> : <CheckCircle className="w-3 h-3 mr-1" />}
+                  {niche.isActive ? (
+                    <Ban className="w-3 h-3 mr-1" />
+                  ) : (
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                  )}
                   {niche.isActive ? "Désactiver" : "Activer"}
                 </Button>
               </div>
@@ -508,7 +627,7 @@ async function NichesTab() {
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 // ============ MONITORING TAB ============
@@ -637,5 +756,5 @@ function MonitoringTab() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

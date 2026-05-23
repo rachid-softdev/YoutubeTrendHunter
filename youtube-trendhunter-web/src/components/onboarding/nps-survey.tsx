@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { X, Send, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { useState, useEffect } from "react";
+import { X, Send, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 interface NpsSurveyProps {
-  className?: string
+  className?: string;
 }
 
 // Track NPS locally
@@ -14,7 +14,7 @@ const trackNPS = async (score: number, comment?: string) => {
   // In a real app, this would call an analytics API
   // For now, store locally
   if (typeof window !== "undefined") {
-    console.log("NPS Score:", score, "Comment:", comment)
+    console.log("NPS Score:", score, "Comment:", comment);
     // Store submission
     localStorage.setItem(
       "nps-submission",
@@ -22,95 +22,93 @@ const trackNPS = async (score: number, comment?: string) => {
         score,
         comment,
         date: new Date().toISOString(),
-      })
-    )
+      }),
+    );
   }
-}
+};
 
 export function NpsSurvey({ className }: NpsSurveyProps) {
-  const [isVisible, setIsVisible] = useState(false)
-  const [isDismissed, setIsDismissed] = useState(false)
-  const [selectedScore, setSelectedScore] = useState<number | null>(null)
-  const [comment, setComment] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isVisible, setIsVisible] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [selectedScore, setSelectedScore] = useState<number | null>(null);
+  const [comment, setComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   useEffect(() => {
     // Check if already submitted
-    const submitted = localStorage.getItem("nps-submission")
+    const submitted = localStorage.getItem("nps-submission");
     if (submitted) {
-      setIsDismissed(true)
-      return
+      setIsDismissed(true);
+      return;
     }
 
     // Check signup date (14 days after signup)
-    const signupDate = localStorage.getItem("signup-date")
+    const signupDate = localStorage.getItem("signup-date");
     if (!signupDate) {
       // First visit - store signup date
-      localStorage.setItem("signup-date", new Date().toISOString())
-      setIsDismissed(true)
-      return
+      localStorage.setItem("signup-date", new Date().toISOString());
+      setIsDismissed(true);
+      return;
     }
 
-    const signup = new Date(signupDate)
-    const now = new Date()
-    const daysSinceSignup = Math.floor(
-      (now.getTime() - signup.getTime()) / (1000 * 60 * 60 * 24)
-    )
+    const signup = new Date(signupDate);
+    const now = new Date();
+    const daysSinceSignup = Math.floor((now.getTime() - signup.getTime()) / (1000 * 60 * 60 * 24));
 
     // Show after 14 days
     if (daysSinceSignup >= 14) {
-      const timer = setTimeout(() => setIsVisible(true), 3000)
-      return () => clearTimeout(timer)
+      const timer = setTimeout(() => setIsVisible(true), 3000);
+      return () => clearTimeout(timer);
     } else {
-      setIsDismissed(true)
+      setIsDismissed(true);
     }
-  }, [])
+  }, []);
 
   const handleDismiss = () => {
-    setIsVisible(false)
-    setIsDismissed(true)
+    setIsVisible(false);
+    setIsDismissed(true);
     // Remember dismissed for this session
-    localStorage.setItem("nps-dismissed", "true")
-  }
+    localStorage.setItem("nps-dismissed", "true");
+  };
 
   const handleSubmit = async () => {
-    if (selectedScore === null) return
+    if (selectedScore === null) return;
 
-    setIsSubmitting(true)
+    setIsSubmitting(true);
 
     try {
-      await trackNPS(selectedScore, comment || undefined)
-      setIsSubmitted(true)
+      await trackNPS(selectedScore, comment || undefined);
+      setIsSubmitted(true);
 
       // Auto close after success
       setTimeout(() => {
-        setIsVisible(false)
-        setIsDismissed(true)
-      }, 2000)
+        setIsVisible(false);
+        setIsDismissed(true);
+      }, 2000);
     } catch (err) {
-      console.error("NPS submission failed:", err)
+      console.error("NPS submission failed:", err);
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   // Don't show if dismissed or submitted
   if (isDismissed && !isVisible) {
-    return null
+    return null;
   }
 
   const getScoreLabel = (score: number) => {
-    if (score <= 6) return "Detracteur"
-    if (score <= 8) return "Passif"
-    return "Promoteur"
-  }
+    if (score <= 6) return "Detracteur";
+    if (score <= 8) return "Passif";
+    return "Promoteur";
+  };
 
   const getScoreColor = (score: number) => {
-    if (score <= 6) return "text-yt-red"
-    if (score <= 8) return "text-amber-500"
-    return "text-green-500"
-  }
+    if (score <= 6) return "text-yt-red";
+    if (score <= 8) return "text-amber-500";
+    return "text-green-500";
+  };
 
   return (
     <div
@@ -133,12 +131,8 @@ export function NpsSurvey({ className }: NpsSurveyProps) {
             <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
               <Send className="w-8 h-8 text-green-500" />
             </div>
-            <h3 className="text-xl font-bold text-dark-ink mb-2">
-              Merci pour votre retour !
-            </h3>
-            <p className="text-dark-ink-secondary">
-              Votre avis nous aide à améliorer TrendHunter.
-            </p>
+            <h3 className="text-xl font-bold text-dark-ink mb-2">Merci pour votre retour !</h3>
+            <p className="text-dark-ink-secondary">Votre avis nous aide à améliorer TrendHunter.</p>
           </div>
         ) : (
           // Survey Form
@@ -215,5 +209,5 @@ export function NpsSurvey({ className }: NpsSurveyProps) {
         )}
       </div>
     </div>
-  )
+  );
 }

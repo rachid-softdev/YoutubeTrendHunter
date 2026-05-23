@@ -1,20 +1,20 @@
-import { NextRequest, NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check"
-import { alertCreateSchema } from "@/lib/schemas"
-import { createAlert } from "@/lib/alerts"
-import { auditLog } from "@/lib/audit-log"
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check";
+import { alertCreateSchema } from "@/lib/schemas";
+import { createAlert } from "@/lib/alerts";
+import { auditLog } from "@/lib/audit-log";
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
+  const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
 
   try {
-    const plan = await getUserPlan(session.user.id)
-    const limits = PLAN_LIMITS[plan]
+    const plan = await getUserPlan(session.user.id);
+    const limits = PLAN_LIMITS[plan];
 
     // Execute all queries in parallel for better performance
     const [alerts, userNiches] = await Promise.all([
@@ -38,57 +38,57 @@ export async function GET(req: NextRequest) {
           },
         },
       }),
-    ])
+    ]);
 
     return NextResponse.json({
       alerts,
       userNiches,
       plan,
       canCreate: limits.alerts,
-    })
+    });
   } catch (error) {
-    console.error("Error fetching alerts:", error)
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 })
+    console.error("Error fetching alerts:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth()
+  const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
 
   try {
     // Check plan - FREE users cannot create alerts
-    const plan = await getUserPlan(session.user.id)
-    const limits = PLAN_LIMITS[plan]
+    const plan = await getUserPlan(session.user.id);
+    const limits = PLAN_LIMITS[plan];
 
     if (!limits.alerts) {
       return NextResponse.json(
-        { error: "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes." },
-        { status: 403 }
-      )
+        {
+          error:
+            "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes.",
+        },
+        { status: 403 },
+      );
     }
 
     // Validate body
-    const body = await req.json()
-    const parsed = alertCreateSchema.safeParse(body)
+    const body = await req.json();
+    const parsed = alertCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0].message },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const { nicheId, type, threshold, channel } = parsed.data
+    const { nicheId, type, threshold, channel } = parsed.data;
 
     // Verify niche if provided
     if (nicheId) {
       const niche = await prisma.niche.findUnique({
         where: { id: nicheId },
-      })
+      });
       if (!niche) {
-        return NextResponse.json({ error: "Niche introuvable" }, { status: 404 })
+        return NextResponse.json({ error: "Niche introuvable" }, { status: 404 });
       }
     }
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       type,
       threshold,
       channel,
-    })
+    });
 
     // Audit log
     await auditLog("alert_create", session.user.id, {
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       channel,
       niche: nicheId || "all",
       plan,
-    })
+    });
 
     // Fetch the alert with niche for response
     const fullAlert = await prisma.alert.findUnique({
@@ -117,11 +117,11 @@ export async function POST(req: NextRequest) {
           select: { id: true, name: true, slug: true },
         },
       },
-    })
+    });
 
-    return NextResponse.json({ alert: fullAlert }, { status: 201 })
+    return NextResponse.json({ alert: fullAlert }, { status: 201 });
   } catch (error) {
-    console.error("Error creating alert:", error)
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 })
+    console.error("Error creating alert:", error);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

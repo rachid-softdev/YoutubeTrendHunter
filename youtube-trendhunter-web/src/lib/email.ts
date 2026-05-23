@@ -1,7 +1,7 @@
-import { Resend } from "resend"
+import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM = process.env.EMAIL_FROM ?? "TrendHunter <alerts@trendhunter.app>"
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM = process.env.EMAIL_FROM ?? "TrendHunter <alerts@trendhunter.app>";
 
 export async function sendWelcomeEmail(to: string, userName: string): Promise<void> {
   try {
@@ -27,20 +27,23 @@ export async function sendWelcomeEmail(to: string, userName: string): Promise<vo
           </p>
         </div>
       `,
-    })
+    });
   } catch (err) {
-    console.error("Failed to send welcome email:", err)
+    console.error("Failed to send welcome email:", err);
   }
 }
 
 export async function sendAlertEmail(
   to: string,
   nicheName: string,
-  trends: { title: string; score: number }[]
+  trends: { title: string; score: number }[],
 ): Promise<void> {
   const trendsHtml = trends
-    .map(t => `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — Score: ${t.score}/100</li>`)
-    .join("")
+    .map(
+      (t) =>
+        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — Score: ${t.score}/100</li>`,
+    )
+    .join("");
 
   try {
     await resend.emails.send({
@@ -61,20 +64,23 @@ export async function sendAlertEmail(
           </p>
         </div>
       `,
-    })
+    });
   } catch (err) {
-    console.error("Failed to send alert email:", err)
+    console.error("Failed to send alert email:", err);
   }
 }
 
 export async function sendDigestEmail(
   to: string,
   nicheName: string,
-  trends: { title: string; score: number; status: string }[]
+  trends: { title: string; score: number; status: string }[],
 ): Promise<void> {
   const trendsHtml = trends
-    .map(t => `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — ${t.score}/100 — <span style="color:#717171">${t.status}</span></li>`)
-    .join("")
+    .map(
+      (t) =>
+        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — ${t.score}/100 — <span style="color:#717171">${t.status}</span></li>`,
+    )
+    .join("");
 
   try {
     await resend.emails.send({
@@ -92,8 +98,8 @@ export async function sendDigestEmail(
           </a>
         </div>
       `,
-    })
+    });
   } catch (err) {
-    console.error("Failed to send digest email:", err)
+    console.error("Failed to send digest email:", err);
   }
 }

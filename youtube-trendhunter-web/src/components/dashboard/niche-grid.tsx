@@ -1,45 +1,39 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Plus, Check, Loader2, Target, Zap } from "lucide-react"
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Plus, Check, Loader2, Target, Zap } from "lucide-react";
 
 interface NicheGridProps {
   allNiches: Array<{
-    id: string
-    name: string
-    slug: string
-    description: string | null
-    keywords: string[] | null
-    userNiches: Array<{ id: string }>
-    _count: { trends: number }
-  }>
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    keywords: string[] | null;
+    userNiches: Array<{ id: string }>;
+    _count: { trends: number };
+  }>;
   userNiches: Array<{
-    niche: { id: string; name: string; slug: string }
-  }>
-  plan: string
-  currentCount: number
-  maxCount: number
+    niche: { id: string; name: string; slug: string };
+  }>;
+  plan: string;
+  currentCount: number;
+  maxCount: number;
 }
 
-export function NicheGrid({
-  allNiches,
-  userNiches,
-  plan,
-  currentCount,
-  maxCount,
-}: NicheGridProps) {
+export function NicheGrid({ allNiches, userNiches, plan, currentCount, maxCount }: NicheGridProps) {
   const [following, setFollowing] = useState<Set<string>>(
-    new Set(userNiches.map((un) => un.niche.id))
-  )
-  const [loadingId, setLoadingId] = useState<string | null>(null)
+    new Set(userNiches.map((un) => un.niche.id)),
+  );
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const isFreeUserAtLimit = plan === "FREE" && currentCount >= maxCount
+  const isFreeUserAtLimit = plan === "FREE" && currentCount >= maxCount;
 
   const handleFollow = async (nicheId: string, willFollow: boolean) => {
-    setLoadingId(nicheId)
+    setLoadingId(nicheId);
     try {
       if (willFollow) {
         // Follow niche
@@ -47,37 +41,37 @@ export function NicheGrid({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nicheId }),
-        })
+        });
 
         if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "Erreur lors du suivi")
+          const error = await response.json();
+          throw new Error(error.error || "Erreur lors du suivi");
         }
 
-        setFollowing((prev) => new Set([...prev, nicheId]))
+        setFollowing((prev) => new Set([...prev, nicheId]));
       } else {
         // Unfollow niche
         const response = await fetch(`/api/niches/${nicheId}`, {
           method: "DELETE",
-        })
+        });
 
         if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || "Erreur lors de l'arrêt du suivi")
+          const error = await response.json();
+          throw new Error(error.error || "Erreur lors de l'arrêt du suivi");
         }
 
         setFollowing((prev) => {
-          const next = new Set(prev)
-          next.delete(nicheId)
-          return next
-        })
+          const next = new Set(prev);
+          next.delete(nicheId);
+          return next;
+        });
       }
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Une erreur est survenue")
+      alert(error instanceof Error ? error.message : "Une erreur est survenue");
     } finally {
-      setLoadingId(null)
+      setLoadingId(null);
     }
-  }
+  };
 
   return (
     <div className="max-w-4xl">
@@ -121,9 +115,7 @@ export function NicheGrid({
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <h3 className="font-medium text-dark-ink">{niche.name}</h3>
-                  <p className="text-sm text-dark-ink-secondary">
-                    /{niche.slug}
-                  </p>
+                  <p className="text-sm text-dark-ink-secondary">/{niche.slug}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="members">SUIVI</Badge>
@@ -150,9 +142,7 @@ export function NicheGrid({
               <CardContent className="py-8 text-center text-dark-ink-secondary">
                 <Target className="w-8 h-8 mx-auto mb-2 text-dark-ink-tertiary" />
                 <p>Vous ne suivez aucune niche pour le moment</p>
-                <p className="text-sm mt-1">
-                  Ajoutez une niche ci-dessous pour commencer
-                </p>
+                <p className="text-sm mt-1">Ajoutez une niche ci-dessous pour commencer</p>
               </CardContent>
             </Card>
           )}
@@ -166,8 +156,8 @@ export function NicheGrid({
         </h2>
         <div className="grid md:grid-cols-2 gap-3">
           {allNiches.map((niche) => {
-            const isFollowing = following.has(niche.id)
-            const canFollow = !isFreeUserAtLimit || isFollowing
+            const isFollowing = following.has(niche.id);
+            const canFollow = !isFreeUserAtLimit || isFollowing;
 
             return (
               <Card
@@ -218,10 +208,10 @@ export function NicheGrid({
                   )}
                 </CardContent>
               </Card>
-            )
+            );
           })}
         </div>
       </div>
     </div>
-  )
+  );
 }

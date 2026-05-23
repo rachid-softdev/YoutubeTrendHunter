@@ -1,48 +1,43 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Loader2, Bell, Mail, Webhook } from "lucide-react"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Loader2, Bell, Mail, Webhook } from "lucide-react";
 
 interface AlertFormProps {
   userNiches: Array<{
-    niche: { id: string; name: string; slug: string }
-  }>
+    niche: { id: string; name: string; slug: string };
+  }>;
   alert?: {
-    id: string
-    type: string
-    threshold: number
-    channel: string
-    nicheId: string | null
-    isActive: boolean
-  }
+    id: string;
+    type: string;
+    threshold: number;
+    channel: string;
+    nicheId: string | null;
+    isActive: boolean;
+  };
   onSubmit: (data: {
-    type: "SCORE_THRESHOLD" | "DAILY_DIGEST" | "SPIKE"
-    threshold: number
-    channel: "EMAIL" | "WEBHOOK"
-    nicheId?: string
-  }) => Promise<void>
-  onCancel?: () => void
+    type: "SCORE_THRESHOLD" | "DAILY_DIGEST" | "SPIKE";
+    threshold: number;
+    channel: "EMAIL" | "WEBHOOK";
+    nicheId?: string;
+  }) => Promise<void>;
+  onCancel?: () => void;
 }
 
-export function AlertForm({
-  userNiches,
-  alert,
-  onSubmit,
-  onCancel,
-}: AlertFormProps) {
-  const [type, setType] = useState<string>(alert?.type || "SCORE_THRESHOLD")
-  const [threshold, setThreshold] = useState(alert?.threshold || 70)
-  const [channel, setChannel] = useState<string>(alert?.channel || "EMAIL")
-  const [nicheId, setNicheId] = useState<string>(alert?.nicheId || "all")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function AlertForm({ userNiches, alert, onSubmit, onCancel }: AlertFormProps) {
+  const [type, setType] = useState<string>(alert?.type || "SCORE_THRESHOLD");
+  const [threshold, setThreshold] = useState(alert?.threshold || 70);
+  const [channel, setChannel] = useState<string>(alert?.channel || "EMAIL");
+  const [nicheId, setNicheId] = useState<string>(alert?.nicheId || "all");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
 
     try {
       await onSubmit({
@@ -50,34 +45,32 @@ export function AlertForm({
         threshold,
         channel: channel as "EMAIL" | "WEBHOOK",
         nicheId: nicheId === "all" ? undefined : nicheId,
-      })
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Une erreur est survenue")
+      setError(err instanceof Error ? err.message : "Une erreur est survenue");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const getTypeDescription = () => {
     switch (type) {
       case "SCORE_THRESHOLD":
-        return "Déclenché quand un trend dépasse un score défini"
+        return "Déclenché quand un trend dépasse un score défini";
       case "DAILY_DIGEST":
-        return "Envoie un résumé quotidien de toutes les tendances"
+        return "Envoie un résumé quotidien de toutes les tendances";
       case "SPIKE":
-        return "Déclenché quand la vélocité dépasse un seuil défini"
+        return "Déclenché quand la vélocité dépasse un seuil défini";
       default:
-        return ""
+        return "";
     }
-  }
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Alert Type */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-dark-ink-secondary">
-          Type d&apos;alerte
-        </label>
+        <label className="text-sm font-medium text-dark-ink-secondary">Type d&apos;alerte</label>
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
@@ -162,5 +155,5 @@ export function AlertForm({
         </Button>
       </div>
     </form>
-  )
+  );
 }

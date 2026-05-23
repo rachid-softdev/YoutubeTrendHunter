@@ -1,14 +1,14 @@
-import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check"
-import { NicheGrid } from "@/components/dashboard/niche-grid"
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check";
+import { NicheGrid } from "@/components/dashboard/niche-grid";
 
 export default async function NichesPage() {
-  const session = await auth()
-  if (!session?.user?.id) return null
+  const session = await auth();
+  if (!session?.user?.id) return null;
 
-  const plan = await getUserPlan(session.user.id)
-  const limits = PLAN_LIMITS[plan]
+  const plan = await getUserPlan(session.user.id);
+  const limits = PLAN_LIMITS[plan];
 
   // Get all available niches with user status and trend counts
   const allNiches = await prisma.niche.findMany({
@@ -22,15 +22,15 @@ export default async function NichesPage() {
         select: { trends: true },
       },
     },
-  })
+  });
 
   const userNiches = await prisma.userNiche.findMany({
     where: { userId: session.user.id },
     include: { niche: true },
-  })
+  });
 
-  const currentCount = userNiches.length
-  const maxCount = plan === "FREE" ? limits.niches : -1 // -1 means unlimited
+  const currentCount = userNiches.length;
+  const maxCount = plan === "FREE" ? limits.niches : -1; // -1 means unlimited
 
   return (
     <NicheGrid
@@ -40,5 +40,5 @@ export default async function NichesPage() {
       currentCount={currentCount}
       maxCount={maxCount}
     />
-  )
+  );
 }

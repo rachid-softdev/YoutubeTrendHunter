@@ -36,15 +36,9 @@ export const PLANS = [
     price: "39€",
     period: "/mois",
     description: "Pour les équipes",
-    features: [
-      "Tout Pro",
-      "5 utilisateurs",
-      "API access",
-      "Webhooks",
-      "Account manager dédié",
-    ],
+    features: ["Tout Pro", "5 utilisateurs", "API access", "Webhooks", "Account manager dédié"],
     cta: "Contact commercial",
     href: "mailto:contact@trendhunter.app",
     popular: false,
   },
-]
+];
