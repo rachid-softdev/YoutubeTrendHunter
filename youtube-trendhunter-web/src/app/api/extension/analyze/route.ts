@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getUserPlan } from "@/lib/plan-check";
 import { getVideoStats, getVideoDetails } from "@/lib/youtube";
 import { scoreVideo } from "@/lib/trend-scorer";
+import { verifyApiToken } from "@/lib/api-tokens";
+import { withRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const rateLimitResponse = await withRateLimit(req, "extension");
+  if (rateLimitResponse) return rateLimitResponse;
   const authHeader = req.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
 
@@ -12,20 +16,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Token manquant" }, { status: 401 });
   }
 
-  const apiToken = await prisma.apiToken.findUnique({
-    where: { token },
-    include: { user: true },
-  });
-
-  if (!apiToken) {
+  const result = await verifyApiToken(token);
+  if (!result) {
     return NextResponse.json({ error: "Token invalide", code: "INVALID_TOKEN" }, { status: 401 });
   }
-
-  // Update last used
-  await prisma.apiToken.update({
-    where: { id: apiToken.id },
-    data: { lastUsedAt: new Date() },
-  });
 
   try {
     const body = await req.json();
@@ -50,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const plan = await getUserPlan(apiToken.userId);
+    const plan = await getUserPlan(result.userId);
 
     // If FREE plan, limit analysis (mock score for demo)
     if (plan === "FREE") {
@@ -65,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     // Get user's followed niches to find the best match
     const userNiches = await prisma.userNiche.findMany({
-      where: { userId: apiToken.userId },
+      where: { userId: result.userId },
       include: { niche: true },
     });
 

@@ -27,5 +27,8 @@ export default defineConfig({
       48: 'icons/icon48.png',
       128: 'icons/icon128.png',
     },
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self';",
+    },
   },
 })

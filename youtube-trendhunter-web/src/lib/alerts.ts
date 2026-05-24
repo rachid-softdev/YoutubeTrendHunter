@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendAlertEmail, sendDigestEmail } from "@/lib/email";
+import { validateWebhookUrl } from "@/lib/validate-url";
 import type { Alert, Trend } from "@prisma/client";
 
 type WebhookAlert = Alert & {
@@ -9,6 +10,12 @@ type WebhookAlert = Alert & {
 export async function sendWebhookAlert(alert: WebhookAlert, trends: Trend[]): Promise<boolean> {
   const webhookUrl = alert.webhookUrl;
   if (!webhookUrl) return false;
+
+  const validation = await validateWebhookUrl(webhookUrl);
+  if (!validation.valid) {
+    console.error("[Alerts] Webhook URL rejected:", validation.error, "URL:", webhookUrl);
+    return false;
+  }
 
   try {
     const payload = {

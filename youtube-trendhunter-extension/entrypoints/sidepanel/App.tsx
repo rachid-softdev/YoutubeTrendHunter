@@ -39,14 +39,14 @@ export default function App() {
   }
 
   async function handleConnect(token: string) {
-    await browser.storage.local.set({ apiToken: token })
+    await browser.storage.session.set({ apiToken: token })
     setScreen('loading')
     await loadNiches()
     await loadTrends()
   }
 
   async function handleLogout() {
-    await browser.storage.local.remove('apiToken')
+    await browser.storage.session.remove('apiToken')
     setTrends([])
     setPlan('FREE')
     setScreen('auth')
@@ -54,7 +54,7 @@ export default function App() {
 
   async function handleNicheChange(slug: string) {
     setSelectedNiche(slug)
-    await browser.storage.local.set({ selectedNiche: slug })
+    await browser.storage.session.set({ selectedNiche: slug })
     const response = await browser.runtime.sendMessage({
       type: 'GET_TRENDS',
     })
@@ -66,13 +66,13 @@ export default function App() {
 
   useEffect(() => {
     ;(async () => {
-      const { apiToken, selectedNiche } = await browser.storage.local.get(['apiToken', 'selectedNiche'])
+      const { apiToken, selectedNiche } = await browser.storage.session.get(['apiToken', 'selectedNiche'])
       if (!apiToken) {
         setScreen('auth')
         return
       }
       if (!selectedNiche) {
-        await browser.storage.local.set({ selectedNiche: 'tech-ia' })
+        await browser.storage.session.set({ selectedNiche: 'tech-ia' })
       }
       await loadNiches()
       await loadTrends()

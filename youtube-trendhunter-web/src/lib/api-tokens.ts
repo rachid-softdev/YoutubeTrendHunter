@@ -74,15 +74,55 @@ export async function createApiToken(userId: string, name: string, expiresAt?: D
 
 export async function verifyApiToken(token: string) {
   const parsed = parseToken(token);
-  if (!parsed) return null;
 
-  const tokenHash = hashToken(parsed.raw);
+  if (parsed) {
+    // NEW FORMAT: th_<raw>.<hashPrefix>
+    const tokenHash = hashToken(parsed.raw);
 
-  const apiToken = await prisma.apiToken.findFirst({
-    where: {
-      token: tokenHash,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-    },
+    const apiToken = await prisma.apiToken.findFirst({
+      where: {
+        token: tokenHash,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!apiToken) {
+      log("warn", "API token verification failed - not found or expired", {
+        tokenPrefix: parsed.hashPrefix,
+      });
+      return null;
+    }
+
+    await prisma.apiToken.update({
+      where: { id: apiToken.id },
+      data: { lastUsedAt: new Date() },
+    });
+
+    return {
+      tokenId: apiToken.id,
+      userId: apiToken.user.id,
+      user: apiToken.user,
+    };
+  }
+
+  // LEGACY FALLBACK: plaintext UUID tokens
+  // Check if this is a UUID format (old tokens)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(token)) {
+    return null;
+  }
+
+  const legacyToken = await prisma.apiToken.findUnique({
+    where: { token },
     include: {
       user: {
         select: {
@@ -94,22 +134,28 @@ export async function verifyApiToken(token: string) {
     },
   });
 
-  if (!apiToken) {
-    log("warn", "API token verification failed - not found or expired", {
-      tokenPrefix: parsed.hashPrefix,
+  if (!legacyToken) {
+    log("warn", "Legacy API token verification failed - not found", {
+      tokenPrefix: token.slice(0, 8),
     });
     return null;
   }
 
+  // Transparently upgrade: hash the token in-place and update lastUsedAt atomically
+  const newHash = hashToken(token);
   await prisma.apiToken.update({
-    where: { id: apiToken.id },
-    data: { lastUsedAt: new Date() },
+    where: { id: legacyToken.id },
+    data: { token: newHash, lastUsedAt: new Date() },
+  });
+
+  log("info", "API token migrated from plaintext to hash", {
+    tokenId: legacyToken.id,
   });
 
   return {
-    tokenId: apiToken.id,
-    userId: apiToken.user.id,
-    user: apiToken.user,
+    tokenId: legacyToken.id,
+    userId: legacyToken.user.id,
+    user: legacyToken.user,
   };
 }
 

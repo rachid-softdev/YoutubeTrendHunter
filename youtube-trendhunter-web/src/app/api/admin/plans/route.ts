@@ -7,11 +7,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [];
+
 export const dynamic = "force-dynamic";
 
 async function requireAdmin() {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.email || !ADMIN_EMAILS.includes(session.user.email)) {
     throw new Error("UNAUTHORIZED");
   }
   return session;
