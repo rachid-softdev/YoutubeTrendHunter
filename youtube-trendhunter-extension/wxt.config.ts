@@ -1,0 +1,31 @@
+import { defineConfig } from 'wxt'
+
+export default defineConfig({
+  modules: ['@wxt-dev/module-react'],
+  manifest: {
+    name: 'TrendHunter — Veille YouTube IA',
+    version: '1.0.0',
+    description: 'Détectez les tendances YouTube émergentes avant vos concurrents.',
+    permissions: ['storage', 'activeTab', 'sidePanel'],
+    host_permissions: [
+      'https://www.youtube.com/*',
+      'https://trendhunter.app/*',
+    ],
+    side_panel: {
+      default_path: 'sidepanel.html',
+    },
+    action: {
+      default_title: 'TrendHunter',
+      default_icon: {
+        16: 'icons/icon16.png',
+        48: 'icons/icon48.png',
+        128: 'icons/icon128.png',
+      },
+    },
+    icons: {
+      16: 'icons/icon16.png',
+      48: 'icons/icon48.png',
+      128: 'icons/icon128.png',
+    },
+  },
+})
