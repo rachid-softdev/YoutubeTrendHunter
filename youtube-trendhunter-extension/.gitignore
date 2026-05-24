@@ -15,3 +15,7 @@
 .env
 .env.development
 .env.production
+
+# wxt build output
+.output/
+.wxt/
