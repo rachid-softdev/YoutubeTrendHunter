@@ -1,0 +1,65 @@
+{
+  "name": "@youtube-trendhunter/root",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "dev:web": "turbo run dev --filter=youtube-trendhunter-web",
+    "build": "turbo run build",
+    "build:web": "turbo run build --filter=youtube-trendhunter-web",
+    "start": "turbo run start --filter=youtube-trendhunter-web",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e --filter=youtube-trendhunter-web",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck",
+    "prepare": "husky",
+    "clean": "turbo run clean",
+    "web:dev": "pnpm --filter @youtube-trendhunter/web dev",
+    "web:dev:complete": "pnpm --filter @youtube-trendhunter/web dev:complete",
+    "web:dev:mailhog": "pnpm --filter @youtube-trendhunter/web dev:mailhog",
+    "web:build": "pnpm --filter @youtube-trendhunter/web build",
+    "web:start": "pnpm --filter @youtube-trendhunter/web start",
+    "web:lint": "pnpm --filter @youtube-trendhunter/web lint",
+    "web:typecheck": "pnpm --filter @youtube-trendhunter/web typecheck",
+    "web:test": "pnpm --filter @youtube-trendhunter/web test",
+    "web:test:e2e": "pnpm --filter @youtube-trendhunter/web test:e2e",
+    "ext:dev": "pnpm --filter @youtube-trendhunter/extension dev",
+    "ext:build": "pnpm --filter @youtube-trendhunter/extension build",
+    "ext:zip": "pnpm --filter @youtube-trendhunter/extension zip",
+    "db:generate": "pnpm --filter @youtube-trendhunter/web db:generate",
+    "db:push": "pnpm --filter @youtube-trendhunter/web db:push",
+    "db:studio": "pnpm --filter @youtube-trendhunter/web db:studio",
+    "setup:stripe": "pnpm --filter @youtube-trendhunter/web setup:stripe",
+    "stripe:setup": "pnpm --filter @youtube-trendhunter/web stripe:setup",
+    "stripe:stop": "pnpm --filter @youtube-trendhunter/web stripe:stop",
+    "stripe:test": "pnpm --filter @youtube-trendhunter/web stripe:test",
+    "dev:services": "pnpm --filter @youtube-trendhunter/web dev:services",
+    "dev:services:stop": "pnpm --filter @youtube-trendhunter/web dev:services:stop"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
+    "turbo": "^2.4.4"
+  },
+  "lint-staged": {
+    "*": [
+      "biome format --write --no-errors-on-unmatched --files-ignore-unknown=true"
+    ],
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "pnpm run typecheck"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
