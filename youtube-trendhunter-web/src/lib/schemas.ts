@@ -25,6 +25,7 @@ export const alertCreateSchema = z.object({
   type: z.enum(["SCORE_THRESHOLD", "DAILY_DIGEST", "SPIKE"]),
   threshold: z.number().int().min(0).max(100).default(70),
   channel: z.enum(["EMAIL", "WEBHOOK"]).default("EMAIL"),
+  webhookUrl: z.string().url("URL invalide").optional(),
 });
 
 export const alertUpdateSchema = alertCreateSchema

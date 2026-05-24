@@ -24,26 +24,50 @@ export default defineContentScript({
       badge.style.cssText =
         'display:inline-flex;align-items:center;gap:8px;margin:8px 0;padding:8px 12px;background:#212121;border:1px solid #3D3D3D;border-radius:8px;font-family:Roboto,Arial,sans-serif;font-size:13px;color:#F1F1F1'
 
+      const innerDiv = document.createElement('div');
+      innerDiv.style.display = 'flex';
+      innerDiv.style.alignItems = 'center';
+      innerDiv.style.gap = '8px';
+
       if (score != null) {
         const scoreColor =
           score >= 75 ? '#FF0000' : score >= 50 ? '#F59E0B' : '#22C55E'
-        badge.innerHTML =
-          '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="background:' +
-          scoreColor +
-          ';color:white;padding:2px 8px;border-radius:4px;font-weight:700;font-size:14px">' +
-          Math.round(score) +
-          '</span>' +
-          '<span>Score TrendHunter</span>' +
-          '<span style="color:#AAAAAA;font-size:11px">via TrendHunter</span>' +
-          '</div>'
+
+        const scoreSpan = document.createElement('span');
+        scoreSpan.style.background = scoreColor;
+        scoreSpan.style.color = 'white';
+        scoreSpan.style.padding = '2px 8px';
+        scoreSpan.style.borderRadius = '4px';
+        scoreSpan.style.fontWeight = '700';
+        scoreSpan.style.fontSize = '14px';
+        scoreSpan.textContent = String(Math.round(score));
+
+        const labelSpan = document.createElement('span');
+        labelSpan.textContent = 'Score TrendHunter';
+
+        const sourceSpan = document.createElement('span');
+        sourceSpan.style.color = '#AAAAAA';
+        sourceSpan.style.fontSize = '11px';
+        sourceSpan.textContent = 'via TrendHunter';
+
+        innerDiv.appendChild(scoreSpan);
+        innerDiv.appendChild(labelSpan);
+        innerDiv.appendChild(sourceSpan);
       } else {
-        badge.innerHTML =
-          '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="font-weight:500">Analyser avec TrendHunter</span>' +
-          '<span style="color:#AAAAAA;font-size:11px">Extension</span>' +
-          '</div>'
+        const labelSpan = document.createElement('span');
+        labelSpan.style.fontWeight = '500';
+        labelSpan.textContent = 'Analyser avec TrendHunter';
+
+        const sourceSpan = document.createElement('span');
+        sourceSpan.style.color = '#AAAAAA';
+        sourceSpan.style.fontSize = '11px';
+        sourceSpan.textContent = 'Extension';
+
+        innerDiv.appendChild(labelSpan);
+        innerDiv.appendChild(sourceSpan);
       }
+
+      badge.appendChild(innerDiv);
 
       container.parentNode?.insertBefore(badge, container.nextSibling)
     }
@@ -56,7 +80,7 @@ export default defineContentScript({
       const videoId = getVideoId()
       if (videoId && videoId !== currentVideoId) {
         currentVideoId = videoId
-        const { apiToken } = await browser.storage.local.get('apiToken')
+        const { apiToken } = await browser.storage.session.get('apiToken')
         if (apiToken) {
           const response: AnalyzeVideoResponse = await browser.runtime.sendMessage({
             type: 'ANALYZE_VIDEO',

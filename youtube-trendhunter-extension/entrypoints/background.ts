@@ -15,7 +15,7 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener(
     async (message: { type: string; videoId?: string }) => {
       if (message.type === 'GET_TRENDS') {
-        const { apiToken, selectedNiche } = await browser.storage.local.get([
+        const { apiToken, selectedNiche } = await browser.storage.session.get([
           'apiToken',
           'selectedNiche',
         ])
@@ -33,7 +33,7 @@ export default defineBackground(() => {
       }
 
       if (message.type === 'ANALYZE_VIDEO') {
-        const { apiToken } = await browser.storage.local.get('apiToken')
+        const { apiToken } = await browser.storage.session.get('apiToken')
         if (!apiToken) return { error: 'NOT_AUTHENTICATED' }
         try {
           const res = await fetch(`${API_BASE}${API_ENDPOINTS.analyze}`, {

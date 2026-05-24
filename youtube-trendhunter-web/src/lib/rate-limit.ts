@@ -45,8 +45,12 @@ export async function withRateLimit(
     }
 
     return null;
-  } catch {
-    return null; // Allow if Redis is down
+  } catch (error) {
+    console.error("[RateLimit] Redis error, denying request:", error);
+    return NextResponse.json(
+      { error: "Service temporairement indisponible" },
+      { status: 503 },
+    );
   }
 }
 
@@ -61,6 +65,6 @@ export async function checkRateLimit(
     if (current === 1) await redis.expire(`ratelimit:${key}:${type}`, limit.window);
     return current <= limit.max;
   } catch {
-    return true;
+    return false;
   }
 }

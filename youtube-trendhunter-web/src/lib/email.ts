@@ -1,5 +1,14 @@
 import { Resend } from "resend";
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM ?? "TrendHunter <alerts@trendhunter.app>";
 
@@ -12,7 +21,7 @@ export async function sendWelcomeEmail(to: string, userName: string): Promise<vo
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0F0F0F;color:#F1F1F1">
           <div style="font-size:24px;font-weight:700;color:#FF0000;margin-bottom:16px">TrendHunter</div>
-          <h1 style="font-size:28px;margin-bottom:8px">Bienvenue, ${userName} !</h1>
+          <h1 style="font-size:28px;margin-bottom:8px">Bienvenue, ${escapeHtml(userName)} !</h1>
           <p style="color:#AAAAAA;font-size:16px;line-height:1.6">
             Merci d'avoir rejoint TrendHunter. Vous faites maintenant partie des créateurs qui ont un temps d'avance sur l'algorithme YouTube.
           </p>
@@ -41,7 +50,7 @@ export async function sendAlertEmail(
   const trendsHtml = trends
     .map(
       (t) =>
-        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — Score: ${t.score}/100</li>`,
+        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${escapeHtml(t.title)}</strong> — Score: ${t.score}/100</li>`,
     )
     .join("");
 
@@ -53,7 +62,7 @@ export async function sendAlertEmail(
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0F0F0F;color:#F1F1F1">
           <div style="font-size:24px;font-weight:700;color:#FF0000;margin-bottom:16px">TrendHunter</div>
-          <h1 style="font-size:22px;margin-bottom:4px">Alerte : ${nicheName}</h1>
+          <h1 style="font-size:22px;margin-bottom:4px">Alerte : ${escapeHtml(nicheName)}</h1>
           <p style="color:#AAAAAA;font-size:14px;margin-bottom:16px">De nouvelles tendances ont été détectées dans votre niche.</p>
           <ul style="padding-left:20px;color:#AAAAAA">${trendsHtml}</ul>
           <a href="${process.env.NEXTAUTH_URL}/dashboard" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF0000;color:#fff;font-weight:700;text-decoration:none;border-radius:4px">
@@ -78,7 +87,7 @@ export async function sendDigestEmail(
   const trendsHtml = trends
     .map(
       (t) =>
-        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${t.title}</strong> — ${t.score}/100 — <span style="color:#717171">${t.status}</span></li>`,
+        `<li style="margin-bottom:8px;color:#F1F1F1"><strong>${escapeHtml(t.title)}</strong> — ${t.score}/100 — <span style="color:#717171">${t.status}</span></li>`,
     )
     .join("");
 
@@ -90,7 +99,7 @@ export async function sendDigestEmail(
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0F0F0F;color:#F1F1F1">
           <div style="font-size:24px;font-weight:700;color:#FF0000;margin-bottom:16px">TrendHunter</div>
-          <h1 style="font-size:22px;margin-bottom:4px">Digest quotidien : ${nicheName}</h1>
+          <h1 style="font-size:22px;margin-bottom:4px">Digest quotidien : ${escapeHtml(nicheName)}</h1>
           <p style="color:#AAAAAA;font-size:14px;margin-bottom:16px">Voici les tendances du jour.</p>
           <ul style="padding-left:20px;color:#AAAAAA">${trendsHtml}</ul>
           <a href="${process.env.NEXTAUTH_URL}/dashboard" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#FF0000;color:#fff;font-weight:700;text-decoration:none;border-radius:4px">
