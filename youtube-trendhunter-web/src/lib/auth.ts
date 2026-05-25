@@ -19,6 +19,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { role: true },
+        });
+        session.user.role = dbUser?.role ?? "USER";
         const subscription = await prisma.subscription.findUnique({
           where: { userId: user.id },
         });
