@@ -1,6 +1,14 @@
 import { defineContentScript } from 'wxt/utils/define-content-script'
 import type { AnalyzeVideoResponse } from '../shared/types'
 
+function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
+  let timer: ReturnType<typeof setTimeout>
+  return ((...args: unknown[]) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), delay)
+  }) as T
+}
+
 export default defineContentScript({
   matches: ['https://www.youtube.com/*'],
   runAt: 'document_idle',
@@ -93,7 +101,8 @@ export default defineContentScript({
       }
     }
 
-    const observer = new MutationObserver(() => { checkVideo() })
+    const debouncedCheck = debounce(() => { checkVideo() }, 500)
+    const observer = new MutationObserver(() => { debouncedCheck() })
     observer.observe(document.body || document.documentElement, {
       childList: true,
       subtree: true,

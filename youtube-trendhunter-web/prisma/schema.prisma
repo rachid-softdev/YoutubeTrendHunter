@@ -64,6 +64,8 @@ model User {
 
   stripeCustomerId String? @unique
 
+  subscription Subscription?
+
   @@index([orgId])
 }
 
@@ -158,6 +160,25 @@ enum AlertChannel {
   WEBHOOK
 }
 
+enum AuditAction {
+  USER_SIGNUP
+  USER_LOGIN
+  USER_LOGOUT
+  PLAN_UPGRADE
+  PLAN_DOWNGRADE
+  SUBSCRIPTION_CANCEL
+  SUBSCRIPTION_REACTIVATE
+  API_TOKEN_CREATE
+  API_TOKEN_DELETE
+  ALERT_CREATE
+  ALERT_DELETE
+  DATA_EXPORT
+  ACCOUNT_DELETE
+  NICHE_SELECT
+  NICHE_DESELECT
+  CRON_TRENDS_PROCESSED
+}
+
 model ApiToken {
   id        String   @id @default(cuid())
   userId    String
@@ -173,9 +194,9 @@ model ApiToken {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   userId    String
-  action    String
+  action    AuditAction
   ipAddress String?
   userAgent String?
   metadata  Json?
@@ -266,24 +287,34 @@ enum DowngradeStrategy {
   FREEZE     // Bloque nouvelles actions, garde données
 }
 
+enum SubscriptionPlan {
+  FREE
+  PRO
+  TEAM
+}
+
 model Subscription {
-  id                   String             @id @default(cuid())
-  orgId                String
-  planKey              String
-  status               SubscriptionStatus @default(ACTIVE)
-  stripeSubscriptionId String?            @unique
-  stripePriceId        String?
-  currentPeriodStart   DateTime?
-  currentPeriodEnd     DateTime?
-  trialEnd             DateTime?
-  trialStart           DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  id                     String             @id @default(cuid())
+  userId                 String             @unique
+  orgId                  String?
+  planKey                String?
+  plan                   SubscriptionPlan   @default(FREE)
+  status                 SubscriptionStatus @default(ACTIVE)
+  stripeSubscriptionId   String?            @unique
+  stripePriceId          String?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  stripeCurrentPeriodEnd DateTime?
+  trialEnd               DateTime?
+  trialStart             DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([orgId, planKey]) // Une seule sub active par org
   @@index([orgId])
+  @@index([userId])
   @@index([stripeSubscriptionId])
 }
 

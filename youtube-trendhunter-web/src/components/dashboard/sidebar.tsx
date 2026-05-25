@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Bell, CreditCard, Target, Play, LogOut, Settings } from "lucide-react";
 import { signOut } from "next-auth/react";
-import { cn } from "@/lib/utils";
+import { cn } from "@youtube-trendhunter/ui";
 import { Separator } from "@/components/ui/separator";
 
 const navItems = [

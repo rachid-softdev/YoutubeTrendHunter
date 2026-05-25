@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserPlan } from "@/lib/plan-check";
 import { verifyApiToken } from "@/lib/api-tokens";
+import { getUserPlan } from "@/lib/plan-check";
 import { withRateLimit } from "@/lib/rate-limit";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const rateLimitResponse = await withRateLimit(req, "extension");

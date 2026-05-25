@@ -6,8 +6,6 @@ import { GenerateTokenButton } from "@/components/dashboard/generate-token-butto
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CopyButton } from "@/components/dashboard/copy-button";
-import { Copy } from "lucide-react";
 
 export default async function BillingPage() {
   const session = await auth();
@@ -17,6 +15,7 @@ export default async function BillingPage() {
 
   const apiToken = await prisma.apiToken.findFirst({
     where: { userId: session.user.id },
+    select: { id: true, name: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
 
@@ -53,11 +52,12 @@ export default async function BillingPage() {
         </CardHeader>
         <CardContent>
           {apiToken && (
-            <div className="mb-4 flex items-center gap-2">
-              <code className="flex-1 p-2 bg-dark-overlay rounded-none text-sm font-mono text-dark-ink truncate">
-                {apiToken.token}
-              </code>
-              <CopyButton value={apiToken.token} />
+            <div className="mb-4">
+              <p className="text-sm text-dark-ink-secondary mb-2">
+                Dernier token créé le{" "}
+                {apiToken.createdAt.toLocaleDateString("fr-FR")}.
+                Le token complet est affiché uniquement lors de la création.
+              </p>
             </div>
           )}
           <GenerateTokenButton />

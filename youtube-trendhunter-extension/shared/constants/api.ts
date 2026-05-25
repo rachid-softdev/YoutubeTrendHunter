@@ -1,4 +1,4 @@
-export const API_BASE = 'https://trendhunter.app'
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'https://trendhunter.app'
 
 export const API_ENDPOINTS = {
   trends: '/api/extension/trends',

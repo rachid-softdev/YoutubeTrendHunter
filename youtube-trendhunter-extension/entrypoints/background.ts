@@ -10,6 +10,10 @@ export default defineBackground(() => {
   browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) => {
     const isYoutube = tab.url?.includes('youtube.com') ?? false
     browser.sidePanel.setOptions({ tabId, enabled: isYoutube })
+    // Close sidepanel if not on YouTube
+    if (!isYoutube) {
+      browser.sidePanel.close({ tabId }).catch(() => {}) // ignore if already closed
+    }
   })
 
   browser.runtime.onMessage.addListener(

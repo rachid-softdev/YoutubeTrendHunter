@@ -1,10 +1,14 @@
-/** @type {import('vitest').Config'} */
-import config from "../../vitest.config.ts";
+import { defineConfig } from "vitest/config";
+import path from "path";
 
-export default {
-  ...config,
+export default defineConfig({
   test: {
-    ...config.test,
     environment: "jsdom",
+    globals: true,
   },
-};
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+});

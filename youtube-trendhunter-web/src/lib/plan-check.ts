@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
-// @ts-ignore - Old Plan enum type
-import type { Plan } from "@prisma/client";
+import type { SubscriptionPlan } from "@prisma/client";
 
-export async function getUserPlan(userId: string): Promise<Plan> {
+export async function getUserPlan(userId: string): Promise<SubscriptionPlan> {
   const sub = await prisma.subscription.findUnique({
     where: { userId },
     select: {
@@ -30,7 +29,7 @@ export async function getUserPlan(userId: string): Promise<Plan> {
 
   // Subscription expired or canceled
   if (sub.status === "CANCELED" || sub.status === "INCOMPLETE") return "FREE";
-  if (sub.stripeCurrentPeriodEnd < new Date()) return "FREE";
+  if (!sub.stripeCurrentPeriodEnd || sub.stripeCurrentPeriodEnd < new Date()) return "FREE";
 
   return sub.plan;
 }
@@ -60,7 +59,7 @@ export async function getTrialDaysRemaining(userId: string): Promise<number> {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
-export async function activateTrial(userId: string, plan: Plan, days: number = 7) {
+export async function activateTrial(userId: string, plan: SubscriptionPlan, days: number = 7) {
   const now = new Date();
   const trialEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
