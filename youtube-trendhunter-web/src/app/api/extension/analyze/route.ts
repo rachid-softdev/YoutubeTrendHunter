@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { verifyApiToken } from "@/lib/api-tokens";
 import { getUserPlan } from "@/lib/plan-check";
 import { getVideoStats, getVideoDetails } from "@/lib/youtube";
 import { scoreVideo } from "@/lib/trend-scorer";
-import { verifyApiToken } from "@/lib/api-tokens";
 import { withRateLimit } from "@/lib/rate-limit";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   const rateLimitResponse = await withRateLimit(req, "extension");

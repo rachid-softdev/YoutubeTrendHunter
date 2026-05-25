@@ -4,9 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { trendsRefreshSchema } from "@/lib/schemas";
 
 export async function POST(req: NextRequest) {
-  // Auth via cron secret header
-  const cronSecret = req.headers.get("x-cron-secret");
-  if (cronSecret !== process.env.CRON_SECRET) {
+  // Auth via Authorization header
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 

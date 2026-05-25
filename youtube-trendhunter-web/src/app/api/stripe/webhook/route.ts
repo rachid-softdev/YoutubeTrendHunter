@@ -21,9 +21,26 @@ export async function POST(req: NextRequest) {
   let event;
   try {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-  } catch {
+  } catch (err) {
+    console.error("[Stripe Webhook] Signature verification failed:", err);
     return NextResponse.json({ error: "Webhook invalide" }, { status: 400 });
   }
+
+  // === IDEMPOTENCY CHECK ===
+  const existingEvent = await prisma.stripeEvent.findUnique({
+    where: { eventId: event.id },
+  });
+  if (existingEvent && existingEvent.processed) {
+    console.log(`[Stripe Webhook] Duplicate event skipped: ${event.id}`);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  // Record event as received (before processing)
+  await prisma.stripeEvent.upsert({
+    where: { eventId: event.id },
+    create: { eventId: event.id, type: event.type, processed: false },
+    update: {},
+  });
 
   switch (event.type) {
     case "checkout.session.completed": {
@@ -107,6 +124,14 @@ export async function POST(req: NextRequest) {
       break;
     }
   }
+
+  // Mark as processed after successful handling
+  await prisma.stripeEvent.update({
+    where: { eventId: event.id },
+    data: { processed: true },
+  }).catch(() => {
+    console.warn(`[Stripe Webhook] Failed to mark event ${event.id} as processed`);
+  });
 
   return NextResponse.json({ received: true });
 }

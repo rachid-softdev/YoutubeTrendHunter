@@ -50,7 +50,6 @@ const features = [
 // Cached user count - revalidated every hour
 const getUserCountCached = unstable_cache(
   async () => {
-    "use no-store";
     return prisma.user.count();
   },
   ["user-count"],
