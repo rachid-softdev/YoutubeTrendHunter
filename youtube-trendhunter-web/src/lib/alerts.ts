@@ -152,8 +152,18 @@ export async function createAlert(data: {
   type: "SCORE_THRESHOLD" | "DAILY_DIGEST" | "SPIKE";
   threshold: number;
   channel: "EMAIL" | "WEBHOOK";
+  webhookUrl?: string;
 }): Promise<Alert> {
-  return prisma.alert.create({ data });
+  return prisma.alert.create({
+    data: {
+      userId: data.userId,
+      nicheId: data.nicheId ?? null,
+      type: data.type,
+      threshold: data.threshold,
+      channel: data.channel,
+      webhookUrl: data.webhookUrl ?? null,
+    },
+  });
 }
 
 export async function updateAlert(

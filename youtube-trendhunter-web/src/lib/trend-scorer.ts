@@ -1,4 +1,18 @@
+import { z } from "zod";
 import { anthropic } from "@/lib/anthropic";
+
+const trendScoreSchema = z.object({
+  score: z.number().min(0).max(100),
+  status: z.enum(["EMERGING", "GROWING", "PEAK", "FADING"]),
+  contentAngles: z.array(z.string()).min(1),
+  reasoning: z.string(),
+});
+
+const videoScoreSchema = z.object({
+  score: z.number().min(0).max(100),
+  status: z.enum(["EMERGING", "GROWING", "PEAK", "FADING"]),
+  contentAngles: z.array(z.string()).min(1),
+});
 
 interface TrendInput {
   title: string;
@@ -65,7 +79,13 @@ export async function scoreTrend(input: TrendInput): Promise<TrendScore> {
   });
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
-  return JSON.parse(text) as TrendScore;
+  try {
+    const parsed = JSON.parse(text);
+    return trendScoreSchema.parse(parsed);
+  } catch {
+    console.warn(`[TrendScorer] Failed to parse Claude response for "${input.title}", returning fallback`);
+    return { score: 50, status: "EMERGING", contentAngles: [], reasoning: "Fallback: parse error" };
+  }
 }
 
 export async function scoreVideo(input: VideoInput): Promise<VideoScore> {
@@ -106,5 +126,11 @@ export async function scoreVideo(input: VideoInput): Promise<VideoScore> {
   });
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
-  return JSON.parse(text) as VideoScore;
+  try {
+    const parsed = JSON.parse(text);
+    return videoScoreSchema.parse(parsed);
+  } catch {
+    console.warn(`[TrendScorer] Failed to parse Claude response for video "${input.title}", returning fallback`);
+    return { score: 50, status: "EMERGING", contentAngles: [] };
+  }
 }

@@ -1,8 +1,18 @@
+import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import type { Session } from "next-auth";
 
 import type { SubscriptionPlan } from "@prisma/client";
 
-export async function getUserPlan(userId: string): Promise<SubscriptionPlan> {
+export async function getUserPlan(
+  userId: string,
+  session?: Session | null,
+): Promise<SubscriptionPlan> {
+  // Use session data if available to avoid DB round-trip
+  if (session?.user?.plan) {
+    return session.user.plan;
+  }
+
   const sub = await prisma.subscription.findUnique({
     where: { userId },
     select: {
@@ -60,6 +70,22 @@ export async function getTrialDaysRemaining(userId: string): Promise<number> {
 }
 
 export async function activateTrial(userId: string, plan: SubscriptionPlan, days: number = 7) {
+  // Guard: prevent activating trial if already on active trial or paid subscription
+  const existing = await prisma.subscription.findUnique({
+    where: { userId },
+    select: { trialStart: true, trialEnd: true, status: true },
+  });
+
+  if (existing) {
+    const now = new Date();
+    if (existing.trialStart && existing.trialEnd && now >= existing.trialStart && now <= existing.trialEnd) {
+      throw new Error("Trial already active");
+    }
+    if (existing.status === "ACTIVE") {
+      throw new Error("Paid subscription already exists");
+    }
+  }
+
   const now = new Date();
   const trialEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
@@ -70,6 +96,9 @@ export async function activateTrial(userId: string, plan: SubscriptionPlan, days
       trialEnd,
       plan,
       status: "TRIALING",
+      stripeSubscriptionId: `trial_${crypto.randomUUID()}`,
+      stripePriceId: null,
+      stripeCurrentPeriodEnd: trialEnd,
     },
     create: {
       userId,
@@ -77,8 +106,8 @@ export async function activateTrial(userId: string, plan: SubscriptionPlan, days
       status: "TRIALING",
       trialStart: now,
       trialEnd,
-      stripeSubscriptionId: `trial_${Date.now()}`,
-      stripePriceId: plan === "TEAM" ? "team_trial" : "pro_trial",
+      stripeSubscriptionId: `trial_${crypto.randomUUID()}`,
+      stripePriceId: null,
       stripeCurrentPeriodEnd: trialEnd,
     },
   });

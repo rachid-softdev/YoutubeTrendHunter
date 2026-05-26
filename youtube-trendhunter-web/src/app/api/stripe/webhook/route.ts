@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -42,96 +43,134 @@ export async function POST(req: NextRequest) {
     update: {},
   });
 
+  let processingError: Error | null = null;
+
   switch (event.type) {
     case "checkout.session.completed": {
-      const checkoutSession = event.data.object as any;
-      if (checkoutSession.mode !== "subscription") break;
+      try {
+        const checkoutSession = event.data.object as Stripe.Checkout.Session;
+        if (checkoutSession.mode !== "subscription") break;
 
-      const sub = (await stripe.subscriptions.retrieve(
-        checkoutSession.subscription as string,
-      )) as any;
-      const userId = sub.metadata.userId;
+        const subscriptionId = checkoutSession.subscription as string;
+        const sub = await stripe.subscriptions.retrieve(subscriptionId);
+        const userId = sub.metadata.userId;
 
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: {
-          userId,
-          stripeSubscriptionId: sub.id,
-          stripePriceId: sub.items.data[0].price.id,
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
-          plan: getPlanFromPriceId(sub.items.data[0].price.id),
-          status: "ACTIVE",
-        },
-        update: {
-          stripePriceId: sub.items.data[0].price.id,
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
-          plan: getPlanFromPriceId(sub.items.data[0].price.id),
-          status: "ACTIVE",
-        },
-      });
+        await prisma.subscription.upsert({
+          where: { userId },
+          create: {
+            userId,
+            stripeSubscriptionId: sub.id,
+            stripePriceId: sub.items.data[0].price.id,
+            stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+            plan: getPlanFromPriceId(sub.items.data[0].price.id),
+            status: "ACTIVE",
+          },
+          update: {
+            stripePriceId: sub.items.data[0].price.id,
+            stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+            plan: getPlanFromPriceId(sub.items.data[0].price.id),
+            status: "ACTIVE",
+          },
+        });
+        break;
+      } catch (err) {
+        processingError = err instanceof Error ? err : new Error(String(err));
+        console.error(`[Stripe Webhook] Failed to handle ${event.type}:`, processingError);
+      }
       break;
     }
 
     case "invoice.payment_succeeded": {
-      const invoice = event.data.object as any;
-      if (!invoice.subscription) break;
+      try {
+        const invoice = event.data.object as Stripe.Invoice;
+        if (!invoice.subscription) break;
 
-      const sub = (await stripe.subscriptions.retrieve(invoice.subscription as string)) as any;
-      const userId = sub.metadata.userId;
+        const sub = await stripe.subscriptions.retrieve(invoice.subscription as string);
+        const userId = sub.metadata.userId;
 
-      await prisma.subscription.update({
-        where: { userId },
-        data: {
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
-          status: "ACTIVE",
-        },
-      });
+        await prisma.subscription.update({
+          where: { userId },
+          data: {
+            stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+            status: "ACTIVE",
+          },
+        });
+        break;
+      } catch (err) {
+        processingError = err instanceof Error ? err : new Error(String(err));
+        console.error(`[Stripe Webhook] Failed to handle ${event.type}:`, processingError);
+      }
       break;
     }
 
     case "customer.subscription.updated": {
-      const subscription = event.data.object as any;
-      const userId = subscription.metadata.userId;
+      try {
+        const subscription = event.data.object as Stripe.Subscription;
+        const userId = subscription.metadata.userId;
 
-      await prisma.subscription.update({
-        where: { userId },
-        data: {
-          stripePriceId: subscription.items.data[0].price.id,
-          plan: getPlanFromPriceId(subscription.items.data[0].price.id),
-          status: "ACTIVE",
-          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        },
-      });
+        await prisma.subscription.update({
+          where: { userId },
+          data: {
+            stripePriceId: subscription.items.data[0].price.id,
+            plan: getPlanFromPriceId(subscription.items.data[0].price.id),
+            status: "ACTIVE",
+            stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          },
+        });
+        break;
+      } catch (err) {
+        processingError = err instanceof Error ? err : new Error(String(err));
+        console.error(`[Stripe Webhook] Failed to handle ${event.type}:`, processingError);
+      }
       break;
     }
 
     case "customer.subscription.deleted": {
-      const subscription = event.data.object as any;
-      const userId = subscription.metadata.userId;
+      try {
+        const subscription = event.data.object as Stripe.Subscription;
+        const userId = subscription.metadata.userId;
 
-      await prisma.subscription.update({
-        where: { userId },
-        data: { status: "CANCELED", plan: "FREE" },
-      });
+        await prisma.subscription.update({
+          where: { userId },
+          data: { status: "CANCELED", plan: "FREE" },
+        });
+        break;
+      } catch (err) {
+        processingError = err instanceof Error ? err : new Error(String(err));
+        console.error(`[Stripe Webhook] Failed to handle ${event.type}:`, processingError);
+      }
       break;
     }
 
     case "customer.subscription.trial_will_end": {
-      const subscription = event.data.object as any;
-      const userId = subscription.metadata.userId;
+      try {
+        const subscription = event.data.object as Stripe.Subscription;
+        const userId = subscription.metadata.userId;
 
-      console.log(`Trial will end soon for user ${userId}`);
+        console.log(`Trial will end soon for user ${userId}`);
+        break;
+      } catch (err) {
+        processingError = err instanceof Error ? err : new Error(String(err));
+        console.error(`[Stripe Webhook] Failed to handle ${event.type}:`, processingError);
+      }
       break;
     }
   }
 
-  // Mark as processed after successful handling
-  await prisma.stripeEvent.update({
-    where: { eventId: event.id },
-    data: { processed: true },
-  }).catch(() => {
-    console.warn(`[Stripe Webhook] Failed to mark event ${event.id} as processed`);
-  });
+  // Only mark as processed if no handler errored
+  if (!processingError) {
+    await prisma.stripeEvent.update({
+      where: { eventId: event.id },
+      data: { processed: true },
+    }).catch((err) => {
+      console.warn(`[Stripe Webhook] Failed to mark event ${event.id} as processed:`, err);
+    });
+    return NextResponse.json({ received: true });
+  }
 
-  return NextResponse.json({ received: true });
+  console.error(`[Stripe Webhook] Event ${event.id} (${event.type}) NOT marked processed — will retry`);
+  return NextResponse.json(
+    { error: `Handler failed: ${processingError.message}` },
+    { status: 500 },
+  );
 }

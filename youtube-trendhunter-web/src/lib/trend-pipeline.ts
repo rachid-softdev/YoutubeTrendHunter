@@ -16,7 +16,7 @@ async function collectCandidates(niche: Niche): Promise<TrendCandidate[]> {
   const seen = new Set<string>();
 
   try {
-    const { videos } = await searchVideos(niche.keywords, 15);
+    const { videos } = await searchVideos(niche.keywords, 15, { language: niche.language, region: niche.language === "fr" ? "FR" : niche.language.toUpperCase() });
     const videoIds = videos.map((v) => v.videoId);
     const stats = await getVideoStats(videoIds);
     const statsMap = new Map(stats.map((s) => [s.videoId, s]));

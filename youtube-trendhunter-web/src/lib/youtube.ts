@@ -1,6 +1,73 @@
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY!;
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 
+// YouTube API raw response types
+interface YouTubeSearchItem {
+  id: { videoId: string };
+  snippet: {
+    title: string;
+    description: string;
+    channelTitle: string;
+    publishedAt: string;
+    thumbnails: {
+      default?: { url: string };
+      medium?: { url: string };
+      high?: { url: string };
+    };
+  };
+}
+
+interface YouTubeVideoItem {
+  id: string;
+  snippet: {
+    publishedAt: string;
+  };
+  statistics: {
+    viewCount?: string;
+    likeCount?: string;
+    commentCount?: string;
+  };
+}
+
+// YouTube Data API /videos endpoint returns id as string, not { videoId: string }
+interface YouTubeTrendingItem {
+  id: string;
+  snippet: {
+    title: string;
+    description: string;
+    channelTitle: string;
+    publishedAt: string;
+    thumbnails: {
+      default?: { url: string };
+      medium?: { url: string };
+      high?: { url: string };
+    };
+  };
+}
+
+interface YouTubeVideoDetailsItem {
+  id: string;
+  snippet: {
+    title: string;
+    description: string;
+    channelTitle: string;
+    channelId: string;
+    publishedAt: string;
+    thumbnails?: {
+      default?: { url: string };
+      medium?: { url: string };
+      high?: { url: string };
+    };
+    tags?: string[];
+    categoryId: string;
+  };
+  statistics?: {
+    viewCount?: string;
+    likeCount?: string;
+    commentCount?: string;
+  };
+}
+
 export interface YouTubeVideoResult {
   videoId: string;
   title: string;
@@ -26,6 +93,7 @@ export interface YouTubeVideoStats {
 export async function searchVideos(
   keywords: string[],
   maxResults: number = 10,
+  options?: { language?: string; region?: string },
 ): Promise<YouTubeSearchResponse> {
   const query = keywords.join(" | ");
   const params = new URLSearchParams({
@@ -33,16 +101,16 @@ export async function searchVideos(
     q: query,
     maxResults: String(maxResults),
     type: "video",
-    relevanceLanguage: "fr",
-    regionCode: "FR",
+    relevanceLanguage: options?.language ?? "fr",
+    regionCode: options?.region ?? "FR",
     key: YOUTUBE_API_KEY,
   });
 
   const res = await fetch(`${YOUTUBE_API_BASE}/search?${params}`);
   if (!res.ok) throw new Error(`YouTube search failed: ${res.status}`);
-  const data = await res.json();
+  const data: { items: YouTubeSearchItem[]; pageInfo?: { totalResults: number } } = await res.json();
 
-  const videos: YouTubeVideoResult[] = data.items.map((item: any) => ({
+  const videos: YouTubeVideoResult[] = data.items.map((item: YouTubeSearchItem) => ({
     videoId: item.id.videoId,
     title: item.snippet.title,
     description: item.snippet.description,
@@ -63,9 +131,9 @@ export async function getVideoStats(videoIds: string[]): Promise<YouTubeVideoSta
 
   const res = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`);
   if (!res.ok) throw new Error(`YouTube videos failed: ${res.status}`);
-  const data = await res.json();
+  const data: { items: YouTubeVideoItem[] } = await res.json();
 
-  return data.items.map((item: any) => ({
+  return data.items.map((item: YouTubeVideoItem) => ({
     videoId: item.id,
     viewCount: parseInt(item.statistics?.viewCount ?? "0"),
     likeCount: parseInt(item.statistics?.likeCount ?? "0"),
@@ -89,9 +157,9 @@ export async function getTrendingVideos(
 
   const res = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`);
   if (!res.ok) throw new Error(`YouTube trending failed: ${res.status}`);
-  const data = await res.json();
+  const data: { items: YouTubeTrendingItem[] } = await res.json();
 
-  return data.items.map((item: any) => ({
+  return data.items.map((item: YouTubeTrendingItem) => ({
     videoId: item.id,
     title: item.snippet.title,
     description: item.snippet.description,
@@ -122,7 +190,7 @@ export async function getVideoDetails(videoId: string): Promise<YouTubeVideoDeta
 
   const res = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`);
   if (!res.ok) throw new Error(`YouTube video details failed: ${res.status}`);
-  const data = await res.json();
+  const data: { items: YouTubeVideoDetailsItem[] } = await res.json();
 
   if (!data.items || data.items.length === 0) {
     throw new Error("Video not found");

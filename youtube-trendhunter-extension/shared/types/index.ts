@@ -12,7 +12,7 @@ export interface Niche {
   name: string
 }
 
-export type Plan = 'FREE' | 'PRO' | 'BUSINESS'
+export type Plan = 'FREE' | 'PRO' | 'TEAM'
 
 export interface GetTrendsResponse {
   data?: { trends: Trend[]; plan: Plan }

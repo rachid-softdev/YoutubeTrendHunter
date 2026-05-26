@@ -32,11 +32,20 @@ export async function GET(req: NextRequest) {
   if (!niche) return NextResponse.json({ error: "Niche introuvable" }, { status: 404 });
 
   if (plan === "FREE") {
-    const userNiches = await prisma.userNiche.count({
+    const userNiches = await prisma.userNiche.findMany({
       where: { userId: session.user.id },
+      select: { nicheId: true },
     });
-    if (userNiches >= 1) {
-      return NextResponse.json({ error: "Limite plan Free atteinte" }, { status: 403 });
+
+    // FREE users can follow exactly 1 niche
+    if (userNiches.length >= 1) {
+      // If they already follow a different niche, block
+      if (!userNiches.some((un) => un.nicheId === niche.id)) {
+        return NextResponse.json(
+          { error: "Limite plan Free atteinte — vous suivez déjà une niche" },
+          { status: 403 },
+        );
+      }
     }
   }
 

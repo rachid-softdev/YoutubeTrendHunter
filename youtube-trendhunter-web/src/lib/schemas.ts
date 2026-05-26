@@ -20,7 +20,7 @@ export const extensionAnalyzeSchema = z.object({
 });
 
 // ─── Alerts ───
-export const alertCreateSchema = z.object({
+const alertCreateSchemaBase = z.object({
   nicheId: z.string().optional(),
   type: z.enum(["SCORE_THRESHOLD", "DAILY_DIGEST", "SPIKE"]),
   threshold: z.number().int().min(0).max(100).default(70),
@@ -28,11 +28,26 @@ export const alertCreateSchema = z.object({
   webhookUrl: z.string().url("URL invalide").optional(),
 });
 
-export const alertUpdateSchema = alertCreateSchema
+export const alertCreateSchema = alertCreateSchemaBase.refine(
+  (data) => data.channel !== "WEBHOOK" || (data.webhookUrl && data.webhookUrl.length > 0),
+  {
+    message: "Webhook URL requise pour le canal WEBHOOK",
+    path: ["webhookUrl"],
+  },
+);
+
+export const alertUpdateSchema = alertCreateSchemaBase
   .extend({
     isActive: z.boolean().optional(),
   })
-  .partial();
+  .partial()
+  .refine(
+    (data) => data.channel !== "WEBHOOK" || (data.webhookUrl && data.webhookUrl.length > 0),
+    {
+      message: "Webhook URL requise pour le canal WEBHOOK",
+      path: ["webhookUrl"],
+    },
+  );
 
 // ─── User ───
 export const deleteAccountSchema = z.object({
