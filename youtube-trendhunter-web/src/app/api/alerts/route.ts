@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const { nicheId, type, threshold, channel } = parsed.data;
+    const { nicheId, type, threshold, channel, webhookUrl } = parsed.data;
 
     // Verify niche if provided
     if (nicheId) {
@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
       type,
       threshold,
       channel,
+      webhookUrl,
     });
 
     // Audit log

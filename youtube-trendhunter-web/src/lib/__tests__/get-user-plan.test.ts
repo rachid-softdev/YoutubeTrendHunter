@@ -116,7 +116,8 @@ describe("getUserPlan", () => {
 
 describe("activateTrial", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(null);
   });
 
   it("creates a new trial subscription", async () => {
@@ -162,14 +163,14 @@ describe("activateTrial", () => {
     expect(result).toBeDefined();
   });
 
-  it("uses TEAM price ID for TEAM plan trials", async () => {
+  it("uses TEAM plan for TEAM plan trials", async () => {
     vi.mocked(prisma.subscription.upsert).mockResolvedValue({
       id: "sub_123",
       userId: "user_123",
       plan: "TEAM",
       status: "TRIALING",
       stripeSubscriptionId: "trial_123",
-      stripePriceId: "team_trial",
+      stripePriceId: null,
       stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 7),
       trialStart: new Date(),
       trialEnd: new Date(Date.now() + 86400000 * 7),
@@ -180,7 +181,7 @@ describe("activateTrial", () => {
     expect(prisma.subscription.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
-          stripePriceId: "team_trial",
+          stripePriceId: null,
         }),
       }),
     );

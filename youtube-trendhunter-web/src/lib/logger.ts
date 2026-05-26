@@ -14,7 +14,7 @@ export function log(level: LogLevel, message: string, meta?: Record<string, unkn
     level,
     message,
     environment: process.env.NODE_ENV || "development",
-    ...meta,
+    ...(meta ? { meta } : {}),
   };
 
   if (process.env.NODE_ENV === "production") {
