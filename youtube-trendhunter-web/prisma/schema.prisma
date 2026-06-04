@@ -127,6 +127,7 @@ model Trend {
 
   niche  Niche   @relation(fields: [nicheId], references: [id], onDelete: Cascade)
 
+  @@unique([title, nicheId])
   @@index([nicheId, score(sort: Desc)])
   @@index([detectedAt])
 }

@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import type Stripe from "stripe";
+import { SubscriptionStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,18 @@ function getPlanFromPriceId(priceId: string) {
   if (priceId === process.env.STRIPE_PRO_PRICE_ID) return "PRO" as const;
   if (priceId === process.env.STRIPE_TEAM_PRICE_ID) return "TEAM" as const;
   return "FREE" as const;
+}
+
+function mapStripeStatus(stripeStatus: Stripe.Subscription.Status): SubscriptionStatus {
+  switch (stripeStatus) {
+    case "active": return "ACTIVE";
+    case "past_due": return "PAST_DUE";
+    case "canceled": return "CANCELED";
+    case "incomplete": return "INCOMPLETE";
+    case "trialing": return "TRIALING";
+    case "paused": return "PAST_DUE";
+    default: return "ACTIVE";
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -113,7 +126,7 @@ export async function POST(req: NextRequest) {
           data: {
             stripePriceId: subscription.items.data[0].price.id,
             plan: getPlanFromPriceId(subscription.items.data[0].price.id),
-            status: "ACTIVE",
+            status: mapStripeStatus(subscription.status),
             stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
           },
         });
