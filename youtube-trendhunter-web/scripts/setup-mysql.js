@@ -21,11 +21,16 @@ function checkMySQL() {
   }
 }
 
+function getMysqlPassword() {
+  return process.env.MYSQL_PASSWORD || "";
+}
+
 function createDatabase() {
   try {
     console.log("📊 Creating database...");
-
-    const createDbCommand = `mysql -u root -pazerty123 -e "CREATE DATABASE IF NOT EXISTS trendhunter; SHOW DATABASES;"`;
+    const password = getMysqlPassword();
+    const auth = password ? `-p${password}` : "";
+    const createDbCommand = `mysql -u root ${auth} -e "CREATE DATABASE IF NOT EXISTS trendhunter; SHOW DATABASES;"`;
     execSync(createDbCommand, { stdio: "inherit" });
 
     console.log('✅ Database "trendhunter" created successfully');
@@ -33,8 +38,7 @@ function createDatabase() {
   } catch (error) {
     console.error("❌ Failed to create database");
     console.log("Make sure MySQL is running and credentials are correct");
-    console.log("Default credentials used: root/azerty123");
-    console.log("You can modify them in your .env.local file");
+    console.log("Set MYSQL_PASSWORD env variable or run without password");
     return false;
   }
 }

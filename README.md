@@ -15,7 +15,7 @@ Track and analyze YouTube trending videos with real-time data extraction and ana
 
 - **Frontend**: Next.js 16, React 19, Tailwind CSS
 - **Backend**: Next.js API Routes, NextAuth.js
-- **Database**: Prisma with MySQL
+- **Database**: Prisma with PostgreSQL
 - **Payments**: Stripe
 - **AI**: Anthropic Claude
 - **Caching**: Upstash Redis
