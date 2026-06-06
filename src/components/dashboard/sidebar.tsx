@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from "next/image"
 import { LayoutDashboard, TrendingUp, Bell, CreditCard, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -48,9 +49,9 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
 
       <div className="pt-4 border-t">
         <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-          <div className="w-8 h-8 rounded-full bg-gray-300 overflow-hidden">
+          <div className="relative w-8 h-8 rounded-full bg-gray-300 overflow-hidden">
             {user.image && (
-              <img src={user.image} alt="" className="w-full h-full object-cover" />
+              <Image src={user.image} alt="" fill className="object-cover" />
             )}
           </div>
           <div className="flex-1 min-w-0">

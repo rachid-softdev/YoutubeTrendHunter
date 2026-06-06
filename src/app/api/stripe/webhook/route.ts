@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import type Stripe from "stripe"
+
+type SubWithPeriod = Stripe.Subscription & { current_period_end: number; current_period_start: number }
+type InvoiceWithSub = Stripe.Invoice & { subscription: string | Stripe.Subscription }
 
 export const dynamic = "force-dynamic"
 
@@ -23,11 +27,12 @@ export async function POST(req: NextRequest) {
 
   switch (event.type) {
     case "checkout.session.completed": {
-      const checkoutSession = event.data.object as any
+      const checkoutSession = event.data.object as Stripe.Checkout.Session
       if (checkoutSession.mode !== "subscription") break
 
-      const sub = await stripe.subscriptions.retrieve(checkoutSession.subscription as string) as any
-      const userId = sub.metadata.userId
+      const sub = await stripe.subscriptions.retrieve(checkoutSession.subscription as string) as unknown as SubWithPeriod
+      const userId = sub.metadata!.userId
+      const periodEnd = sub.current_period_end
 
       await prisma.subscription.upsert({
         where: { userId },
@@ -35,13 +40,13 @@ export async function POST(req: NextRequest) {
           userId,
           stripeSubscriptionId: sub.id,
           stripePriceId: sub.items.data[0].price.id,
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(periodEnd * 1000),
           plan: getPlanFromPriceId(sub.items.data[0].price.id),
           status: "ACTIVE",
         },
         update: {
           stripePriceId: sub.items.data[0].price.id,
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(periodEnd * 1000),
           plan: getPlanFromPriceId(sub.items.data[0].price.id),
           status: "ACTIVE",
         },
@@ -50,16 +55,17 @@ export async function POST(req: NextRequest) {
     }
 
     case "invoice.payment_succeeded": {
-      const invoice = event.data.object as any
+      const invoice = event.data.object as InvoiceWithSub
       if (!invoice.subscription) break
 
-      const sub = await stripe.subscriptions.retrieve(invoice.subscription as string) as any
-      const userId = sub.metadata.userId
+      const sub = await stripe.subscriptions.retrieve(invoice.subscription as string) as unknown as SubWithPeriod
+      const userId = sub.metadata!.userId
+      const periodEnd = sub.current_period_end
 
       await prisma.subscription.update({
         where: { userId },
         data: {
-          stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(periodEnd * 1000),
           status: "ACTIVE",
         },
       })
@@ -67,8 +73,9 @@ export async function POST(req: NextRequest) {
     }
 
     case "customer.subscription.updated": {
-      const subscription = event.data.object as any
-      const userId = subscription.metadata.userId
+      const subscription = event.data.object as unknown as SubWithPeriod
+      const userId = subscription.metadata!.userId
+      const periodEnd = subscription.current_period_end
 
       await prisma.subscription.update({
         where: { userId },
@@ -76,15 +83,15 @@ export async function POST(req: NextRequest) {
           stripePriceId: subscription.items.data[0].price.id,
           plan: getPlanFromPriceId(subscription.items.data[0].price.id),
           status: "ACTIVE",
-          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          stripeCurrentPeriodEnd: new Date(periodEnd * 1000),
         },
       })
       break
     }
 
     case "customer.subscription.deleted": {
-      const subscription = event.data.object as any
-      const userId = subscription.metadata.userId
+      const subscription = event.data.object as unknown as SubWithPeriod
+      const userId = subscription.metadata!.userId
 
       await prisma.subscription.update({
         where: { userId },

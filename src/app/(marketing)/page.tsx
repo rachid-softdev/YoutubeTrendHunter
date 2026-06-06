@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { TrendingUp, Zap, Bell, BarChart3, Check } from "lucide-react"
+import { TrendingUp, Zap, Bell, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const features = [
@@ -53,7 +53,7 @@ export default function LandingPage() {
           <h1 className="text-5xl font-bold mb-6">
             Trouvez les tendances YouTube
             <br />
-            <span className="text-blue-600">avant qu'il ne soit trop tard</span>
+            <span className="text-blue-600">avant qu&apos;il ne soit trop tard</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             TrendHunter analyse des milliers de données pour identifier les tendances

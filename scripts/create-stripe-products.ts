@@ -1,14 +1,15 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+import Stripe from 'stripe';
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 async function createProducts() {
   console.log('Creating Stripe products...');
 
-  const starterMonthly = await stripe.products.create({
+  const starterMonthly = await stripeClient.products.create({
     name: 'TrendHunter Starter',
     description: '20 trends/month, 5 presets, basic analytics',
   });
 
-  await stripe.prices.create({
+  await stripeClient.prices.create({
     product: starterMonthly.id,
     unit_amount: 800,
     currency: 'usd',
@@ -23,12 +24,12 @@ async function createProducts() {
 
   console.log(`Created Starter Monthly: ${starterMonthly.id}`);
 
-  const starterYearly = await stripe.products.create({
+  const starterYearly = await stripeClient.products.create({
     name: 'TrendHunter Starter (Annual)',
     description: '20 trends/month, 5 presets, basic analytics, billed yearly',
   });
 
-  await stripe.prices.create({
+  await stripeClient.prices.create({
     product: starterYearly.id,
     unit_amount: 8000,
     currency: 'usd',
@@ -43,12 +44,12 @@ async function createProducts() {
 
   console.log(`Created Starter Yearly: ${starterYearly.id}`);
 
-  const proMonthly = await stripe.products.create({
+  const proMonthly = await stripeClient.products.create({
     name: 'TrendHunter Pro',
     description: '300 trends/month, unlimited presets, all modes, advanced analytics',
   });
 
-  await stripe.prices.create({
+  await stripeClient.prices.create({
     product: proMonthly.id,
     unit_amount: 2000,
     currency: 'usd',
@@ -63,12 +64,12 @@ async function createProducts() {
 
   console.log(`Created Pro Monthly: ${proMonthly.id}`);
 
-  const proYearly = await stripe.products.create({
+  const proYearly = await stripeClient.products.create({
     name: 'TrendHunter Pro (Annual)',
     description: '300 trends/month, unlimited presets, all modes, billed yearly',
   });
 
-  await stripe.prices.create({
+  await stripeClient.prices.create({
     product: proYearly.id,
     unit_amount: 20000,
     currency: 'usd',

@@ -3,7 +3,8 @@ if (!process.env.STRIPE_SECRET_KEY) {
   process.exit(1);
 }
 
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+import Stripe from 'stripe';
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const PRODUCTS = [
   {
@@ -32,7 +33,7 @@ async function createProductsAndPrices() {
   for (const productData of PRODUCTS) {
     console.log(`📦 Creating product: ${productData.name}`);
 
-    const product = await stripe.products.create({
+    const product = await stripeClient.products.create({
       name: productData.name,
       description: productData.description,
     });
@@ -42,7 +43,7 @@ async function createProductsAndPrices() {
     const prices = [];
 
     for (const priceData of productData.prices) {
-      const price = await stripe.prices.create({
+      const price = await stripeClient.prices.create({
         product: product.id,
         unit_amount: priceData.amount,
         currency: 'usd',

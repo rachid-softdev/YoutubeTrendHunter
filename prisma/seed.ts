@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient, Prisma } from "@prisma/client"
 
 const prisma = new PrismaClient()
 
@@ -142,7 +142,7 @@ async function main() {
         data: {
           ...trendData,
           niche: { connect: { id: nicheId } },
-        } as any,
+        } as Prisma.TrendCreateInput,
       }).catch(() => {
         // Ignore if already exists
       })

@@ -37,7 +37,7 @@ export default async function BillingPage() {
       <div className="p-6 border rounded-2xl">
         <h2 className="font-semibold mb-1">Token API — Extension Chrome</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Utilisez ce token pour connecter l'extension TrendHunter à votre compte.
+          Utilisez ce token pour connecter l&apos;extension TrendHunter à votre compte.
         </p>
         {apiToken && (
           <div className="mb-3 flex items-center gap-2">

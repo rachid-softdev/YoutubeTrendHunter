@@ -1,9 +1,7 @@
 import { auth } from "@/lib/auth"
 import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check"
 import { Button } from "@/components/ui/button"
-import { Bell, Mail, Webhook } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import { fr } from "date-fns/locale"
+import { Bell } from "lucide-react"
 
 export default async function AlertsPage() {
   const session = await auth()

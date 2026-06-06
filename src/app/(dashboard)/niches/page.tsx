@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Button } from "@/components/ui/button"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus } from "lucide-react"
 
 export default async function NichesPage() {
   const session = await auth()

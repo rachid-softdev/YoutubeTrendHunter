@@ -29,7 +29,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         )
         const data = await res.json()
         sendResponse({ data })
-      } catch (err) {
+      } catch {
         sendResponse({ error: "FETCH_ERROR" })
       }
     })
