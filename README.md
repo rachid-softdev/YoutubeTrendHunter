@@ -15,91 +15,35 @@ Track and analyze YouTube trending videos with real-time data extraction and ana
 
 - **Frontend**: Next.js 16, React 19, Tailwind CSS
 - **Backend**: Next.js API Routes, NextAuth.js
-- **Database**: Prisma with PostgreSQL
+- **Database**: Prisma with MySQL
 - **Payments**: Stripe
 - **AI**: Anthropic Claude
 - **Caching**: Upstash Redis
-
-## Project Structure
-
-This is a **monorepo** using [pnpm workspaces](https://pnpm.io/workspaces) and [Turbo](https://turbo.build/).
-
-```
-├── packages/
-│   └── youtube-trendhunter-ui/    # Shared UI component library
-├── youtube-trendhunter-web/        # Main Next.js web application
-├── youtube-trendhunter-desktop/    # Desktop application (placeholder)
-├── youtube-trendhunter-mobile/     # Mobile application (placeholder)
-└── youtube-trendhunter-extension/ # Browser extension
-```
 
 ## Getting Started
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
-# Start all apps in development
-pnpm dev
+# Set up environment
+npm run dev:setup
 
-# Or start a specific app
-pnpm dev:web
+# Start development
+npm run dev
 ```
 
-## Packages
+## Project Structure
 
-### Root Scripts (run from `youtube-trendhunter-web/`)
-
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all apps in parallel |
-| `pnpm dev:web` | Start only the web app |
-| `pnpm build` | Build all apps |
-| `pnpm build:web` | Build only the web app |
-| `pnpm start` | Start production web app |
-| `pnpm lint` | Lint all apps |
-| `pnpm typecheck` | Type-check all apps |
-| `pnpm test` | Run tests for all apps |
-| `pnpm test:e2e` | Run end-to-end tests (web) |
-| `pnpm db:generate` | Generate Prisma client |
-| `pnpm db:push` | Push schema to database |
-| `pnpm db:studio` | Open Prisma Studio |
-
-### Stripe Development
-
-```bash
-pnpm setup:stripe      # Setup Stripe integration
-pnpm stripe:setup     # Start Stripe CLI
-pnpm stripe:stop      # Stop Stripe CLI
-pnpm stripe:test      # Test webhooks
 ```
-
-### Services
-
-```bash
-pnpm dev:services        # Start dev services (Mailhog)
-pnpm dev:services:stop   # Stop dev services
-```
-
-### App-Specific Commands
-
-You can also run commands directly in each package:
-
-```bash
-# Web app
-cd youtube-trendhunter-web && pnpm dev
-
-# Desktop
-cd youtube-trendhunter-desktop && pnpm dev
-
-# Mobile
-cd youtube-trendhunter-mobile && pnpm dev
-
-# Extension
-cd youtube-trendhunter-extension && pnpm dev
-
-# UI Library
-cd packages/youtube-trendhunter-ui && pnpm dev
+├── src/
+│   ├── app/          # Next.js App Router pages
+│   ├── components/   # React components
+│   ├── lib/          # Utility functions
+│   └── types/        # TypeScript types
+├── prisma/           # Database schema
+├── scripts/          # Development scripts
+└── extension/        # Browser extension
 ```
 
 ## License

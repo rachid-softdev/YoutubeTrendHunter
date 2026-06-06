@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrendHunter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="screen-auth" class="screen">
+      <div class="logo-row">
+        <span class="logo-dot"></span>
+        <span class="logo-text">TrendHunter</span>
+      </div>
+      <p class="subtitle">Connectez votre compte pour accéder aux tendances</p>
+      <input type="text" id="token-input" placeholder="Collez votre token API" />
+      <button id="btn-connect" class="btn-primary">Connecter</button>
+      <a href="http://localhost:3000/billing" target="_blank" class="link">
+        Obtenir un token →
+      </a>
+    </div>
+
+    <div id="screen-main" class="screen hidden">
+      <div class="topbar">
+        <div class="logo-row">
+          <span class="logo-dot"></span>
+          <span class="logo-text">TrendHunter</span>
+        </div>
+        <select id="niche-select">
+          <option value="finance-personnelle">Finance</option>
+          <option value="tech-ia">Tech & IA</option>
+          <option value="fitness">Fitness</option>
+          <option value="cuisine">Cuisine</option>
+        </select>
+      </div>
+
+      <div id="plan-badge" class="badge-free">Plan Free</div>
+
+      <div id="trends-list"></div>
+
+      <div id="upgrade-banner" class="hidden">
+        <p>Passez Pro pour voir toutes les tendances</p>
+        <a href="http://localhost:3000/pricing" target="_blank" class="btn-upgrade">
+          Passer Pro →
+        </a>
+      </div>
+
+      <button id="btn-logout" class="btn-ghost">Déconnecter</button>
+    </div>
+
+    <div id="screen-loading" class="screen hidden">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

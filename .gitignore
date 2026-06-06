@@ -12,14 +12,10 @@
 
 # testing
 /coverage
-/playwright-report
-/test-results
 
-# next.js (root level)
-/youtube-trendhunter-web/.next/
-/youtube-trendhunter-web/out/
+# next.js
 /.next/
-next-env.d.ts
+/out/
 
 # production
 /build
@@ -27,7 +23,6 @@ next-env.d.ts
 # misc
 .DS_Store
 *.pem
-.claude/
 
 # debug
 npm-debug.log*
@@ -37,18 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-!.env.example
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
+next-env.d.ts
 
-# prisma
-/prisma/*.db
-/prisma/*.db-journal
-/youtube-trendhunter-web/src/generated/prisma
-
-# DX tooling
-.biome/
+/src/generated/prisma
