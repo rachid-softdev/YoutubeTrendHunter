@@ -19,7 +19,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        const [dbUser, subscription] = await Promise.all([
+        const [dbUser, subscription, userRoles] = await Promise.all([
           prisma.user.findUnique({
             where: { id: user.id },
             select: { role: true },
@@ -27,9 +27,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           prisma.subscription.findUnique({
             where: { userId: user.id },
           }),
+          prisma.userRole.findMany({
+            where: { userId: user.id },
+            select: { role: true },
+          }),
         ]);
         session.user.role = dbUser?.role ?? "USER";
         session.user.plan = subscription?.plan ?? "FREE";
+        session.user.userRoles = userRoles.map((ur) => ur.role);
       }
       return session;
     },

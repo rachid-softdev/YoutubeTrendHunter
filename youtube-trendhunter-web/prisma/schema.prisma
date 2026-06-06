@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Role enum
@@ -58,8 +58,8 @@ model User {
   updatedAt     DateTime  @updatedAt
   role          Role      @default(USER)
 
-  orgId         String?   // Link user to organization
-  organization  Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  orgId        String? // Link user to organization
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
 
   accounts Account[]
   sessions Session[]
@@ -73,10 +73,21 @@ model User {
 
   subscription Subscription?
 
+  userRoles UserRole[]
+
   @@index([orgId])
 }
 
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  role   Role   @default(USER)
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+}
 
 model Niche {
   id          String   @id @default(cuid())
@@ -89,9 +100,9 @@ model Niche {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  trends      Trend[]
-  userNiches  UserNiche[]
-  alerts       Alert[]
+  trends     Trend[]
+  userNiches UserNiche[]
+  alerts     Alert[]
 }
 
 model UserNiche {
@@ -114,18 +125,18 @@ model Trend {
   score       Int
   velocity    Float
   status      TrendStatus @default(EMERGING)
-  
-  searchVolume    Int?
-  videoCount      Int?
-  avgViews        Int?
-  
-  contentAngles   String[]
-  
-  detectedAt  DateTime @default(now())
-  expiresAt   DateTime
-  updatedAt   DateTime @updatedAt
 
-  niche  Niche   @relation(fields: [nicheId], references: [id], onDelete: Cascade)
+  searchVolume Int?
+  videoCount   Int?
+  avgViews     Int?
+
+  contentAngles String[]
+
+  detectedAt DateTime @default(now())
+  expiresAt  DateTime
+  updatedAt  DateTime @updatedAt
+
+  niche Niche @relation(fields: [nicheId], references: [id], onDelete: Cascade)
 
   @@unique([title, nicheId])
   @@index([nicheId, score(sort: Desc)])
@@ -140,18 +151,18 @@ enum TrendStatus {
 }
 
 model Alert {
-  id        String      @id @default(cuid())
-  userId    String
-  nicheId   String?
-  type      AlertType
-  threshold Int         @default(70)
-  channel   AlertChannel @default(EMAIL)
-  webhookUrl String?    @db.Text // URL du webhook pour les alertes
-  isActive  Boolean     @default(true)
+  id         String       @id @default(cuid())
+  userId     String
+  nicheId    String?
+  type       AlertType
+  threshold  Int          @default(70)
+  channel    AlertChannel @default(EMAIL)
+  webhookUrl String?      @db.Text // URL du webhook pour les alertes
+  isActive   Boolean      @default(true)
   lastSentAt DateTime?
-  createdAt DateTime    @default(now())
+  createdAt  DateTime     @default(now())
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   niche Niche? @relation(fields: [nicheId], references: [id], onDelete: SetNull)
 
   @@index([userId, isActive])
@@ -188,13 +199,13 @@ enum AuditAction {
 }
 
 model ApiToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique // Stocké hashé (SHA-256)
-  name      String   @default("Extension Chrome")
+  id         String    @id @default(cuid())
+  userId     String
+  token      String    @unique // Stocké hashé (SHA-256)
+  name       String    @default("Extension Chrome")
   lastUsedAt DateTime?
-  expiresAt DateTime?
-  createdAt DateTime @default(now())
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -208,7 +219,7 @@ model AuditLog {
   ipAddress String?
   userAgent String?
   metadata  Json?
-  createdAt DateTime @default(now())
+  createdAt DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -220,13 +231,13 @@ model AuditLog {
 // ============================================
 
 model Organization {
-  id                String   @id @default(cuid())
-  name              String
-  stripeCustomerId  String?  @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  stripeCustomerId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  users                 User[]
+  users                User[]
   subscriptions        Subscription[]
   entitlementOverrides EntitlementOverride[]
   webhooks             Webhook[]
@@ -235,14 +246,14 @@ model Organization {
 }
 
 model Plan {
-  id            String   @id @default(cuid())
-  key           String   @unique // "free", "pro", "team", "enterprise"
-  name          String
-  priceMonthly  Int      // en centimes
-  isActive      Boolean  @default(true)
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  key          String   @unique // "free", "pro", "team", "enterprise"
+  name         String
+  priceMonthly Int // en centimes
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   planFeatures PlanFeature[]
 
@@ -250,17 +261,17 @@ model Plan {
 }
 
 model Feature {
-  id              String       @id @default(cuid())
-  key             String       @unique // "EXPORT_PDF", "AI_SUMMARY", "API_ACCESS"
-  name            String
-  description     String?
-  type            FeatureType // "boolean", "limit", "experiment"
-  defaultConfig   Json?        // { percentage: 50, seed: "..." } pour experiments
-  isActive        Boolean      @default(true)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id            String      @id @default(cuid())
+  key           String      @unique // "EXPORT_PDF", "AI_SUMMARY", "API_ACCESS"
+  name          String
+  description   String?
+  type          FeatureType // "boolean", "limit", "experiment"
+  defaultConfig Json? // { percentage: 50, seed: "..." } pour experiments
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  planFeatures    PlanFeature[]
+  planFeatures PlanFeature[]
 
   @@index([isActive, type])
 }
@@ -272,14 +283,14 @@ enum FeatureType {
 }
 
 model PlanFeature {
-  id               String   @id @default(cuid())
-  planId           String
-  featureId        String
-  enabled          Boolean  @default(false)
-  limitValue       Int?     // null = illimité (pour type LIMIT)
-  configJson       Json?    // pour experiments
+  id                String            @id @default(cuid())
+  planId            String
+  featureId         String
+  enabled           Boolean           @default(false)
+  limitValue        Int? // null = illimité (pour type LIMIT)
+  configJson        Json? // pour experiments
   downgradeStrategy DowngradeStrategy @default(GRACEFUL)
-  sortOrder        Int      @default(0)
+  sortOrder         Int               @default(0)
 
   plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
   feature Feature @relation(fields: [featureId], references: [id], onDelete: Cascade)
@@ -290,9 +301,9 @@ model PlanFeature {
 }
 
 enum DowngradeStrategy {
-  GRACEFUL   // Garde accès jusqu'à fin de période, puis coupe
-  IMMEDIATE  // Coupe dès webhook Stripe
-  FREEZE     // Bloque nouvelles actions, garde données
+  GRACEFUL // Garde accès jusqu'à fin de période, puis coupe
+  IMMEDIATE // Coupe dès webhook Stripe
+  FREEZE // Bloque nouvelles actions, garde données
 }
 
 enum SubscriptionPlan {
@@ -335,17 +346,19 @@ enum SubscriptionStatus {
 }
 
 model EntitlementOverride {
-  id          String        @id @default(cuid())
-  scope       OverrideScope // "org" | "user"
-  scopeId     String        // orgId ou userId
-  featureKey  String
-  enabled     Boolean       @default(false)
-  limitValue  Int?
-  configJson  Json?
-  expiresAt   DateTime?
-  reason      String        // obligatoire pour audit
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  scope          OverrideScope // "org" | "user"
+  scopeId        String // orgId ou userId
+  featureKey     String
+  enabled        Boolean       @default(false)
+  limitValue     Int?
+  configJson     Json?
+  expiresAt      DateTime?
+  reason         String // obligatoire pour audit
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 
   @@unique([scope, scopeId, featureKey])
   @@index([scope, scopeId])
@@ -358,12 +371,12 @@ enum OverrideScope {
 }
 
 model UsageTracking {
-  id           String   @id @default(cuid())
-  orgId        String
-  featureKey   String
-  usageCount   Int      @default(0)
-  periodStart  DateTime
-  periodEnd    DateTime
+  id          String   @id @default(cuid())
+  orgId       String
+  featureKey  String
+  usageCount  Int      @default(0)
+  periodStart DateTime
+  periodEnd   DateTime
 
   @@unique([orgId, featureKey, periodStart])
   @@index([orgId, featureKey])
