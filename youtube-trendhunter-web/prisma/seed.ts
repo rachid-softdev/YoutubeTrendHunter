@@ -152,6 +152,41 @@ async function main() {
   }
 
   console.log("✅ Tendances de test créées");
+
+  // Create admin user with UserRole
+  const adminEmail = "admin@youthetrendhunter.com";
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail },
+    include: { userRoles: true },
+  });
+
+  if (!existingAdmin) {
+    const adminUser = await prisma.user.create({
+      data: {
+        name: "Admin",
+        email: adminEmail,
+        role: "ADMIN",
+        userRoles: {
+          create: { role: "ADMIN" },
+        },
+      },
+    });
+    console.log(`✅ Admin user created: ${adminUser.email}`);
+  } else {
+    // Ensure admin has ADMIN UserRole
+    const hasAdminRole = existingAdmin.userRoles.some((ur) => ur.role === "ADMIN");
+    if (!hasAdminRole) {
+      await prisma.userRole.create({
+        data: {
+          userId: existingAdmin.id,
+          role: "ADMIN",
+        },
+      });
+      console.log(`✅ ADMIN UserRole added to existing admin: ${existingAdmin.email}`);
+    } else {
+      console.log(`✅ Admin user already exists: ${existingAdmin.email}`);
+    }
+  }
 }
 
 main()
