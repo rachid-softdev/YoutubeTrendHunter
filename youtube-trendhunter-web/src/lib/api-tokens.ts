@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { log } from "@/lib/logger";
+import type { ApiToken } from "@prisma/client";
 
 const TOKEN_PREFIX = "th_";
 const TOKEN_LENGTH = 32;
@@ -50,13 +51,21 @@ export function verifyToken(token: string, storedHash: string): boolean {
   return prefixMatch && hashMatch;
 }
 
-export async function createApiToken(userId: string, name: string, expiresAt?: Date) {
-  const token = generateSecureToken();
+/**
+ * Crée un token API, stocke le hash en base, et retourne le token en clair UNE SEULE fois.
+ * Le token en clair n'est affiché qu'à la création — il ne pourra plus être récupéré ensuite.
+ */
+export async function createApiToken(
+  userId: string,
+  name: string,
+  expiresAt?: Date,
+): Promise<{ plainText: string; token: ApiToken }> {
+  const secureToken = generateSecureToken();
 
   const apiToken = await prisma.apiToken.create({
     data: {
       userId,
-      token: token.hash,
+      token: secureToken.hash,
       name,
       expiresAt,
     },
@@ -64,11 +73,10 @@ export async function createApiToken(userId: string, name: string, expiresAt?: D
 
   log("info", "API token created", { userId, tokenName: name });
 
+  // Le token en clair n'est affiché qu'à la création
   return {
-    id: apiToken.id,
-    token: token.formatted,
-    name: apiToken.name,
-    expiresAt: apiToken.expiresAt,
+    plainText: secureToken.formatted,
+    token: apiToken,
   };
 }
 
