@@ -1,29 +1,17 @@
-export interface Trend {
-  title: string
-  keyword: string
-  score: number
-  velocity: number
-  videoCount: number
-  contentAngles?: string[]
-}
+/**
+ * Shared extension types.
+ *
+ * Types are now defined in @youtube-trendhunter/types (the single source of truth).
+ * This barrel provides backward compatibility for existing extension imports.
+ *
+ * Prefer importing from "@youtube-trendhunter/types" directly in new code.
+ */
 
-export interface Niche {
-  slug: string
-  name: string
-}
-
-export type Plan = 'FREE' | 'PRO' | 'TEAM'
-
-export interface GetTrendsResponse {
-  data?: { trends: Trend[]; plan: Plan }
-  error?: 'NOT_AUTHENTICATED' | 'FETCH_ERROR'
-}
-
-export interface AnalyzeVideoResponse {
-  data?: { score: number; videoCount?: number; velocity?: number; title?: string; keyword?: string }
-  error?: 'NOT_AUTHENTICATED' | 'FETCH_ERROR'
-}
-
-export type ExtensionMessage =
-  | { type: 'GET_TRENDS' }
-  | { type: 'ANALYZE_VIDEO'; videoId: string }
+export type {
+  Trend,
+  Niche,
+  Plan,
+  GetTrendsResponse,
+  AnalyzeVideoResponse,
+  ExtensionMessage,
+} from "@youtube-trendhunter/types";
