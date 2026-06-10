@@ -4,7 +4,7 @@
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/retry";
-import { stripeConfig, getPlanFromPriceId } from "./stripe-config";
+import { stripeConfig, getPlanFromPriceId, getPeriodEnd } from "./stripe-config";
 import { mapStripeStatus } from "./stripe-status-mapper";
 import { getWebhookHandler } from "./stripe-webhook-handler";
 import type {
@@ -108,18 +108,23 @@ export class StripeAdapter implements PaymentProvider {
       console.info(`[Stripe Webhook] Unhandled event type: ${event.type}`);
       return { handled: false, eventType: event.type };
     }
+    try {
+      const result = await handler(event);
 
-    const result = await handler(event);
+      // Mark as processed
+      if (result.handled) {
+        await prisma.stripeEvent.update({
+          where: { eventId: event.id },
+          data: { processed: true },
+        });
+      }
 
-    // Mark as processed
-    if (result.handled) {
-      await prisma.stripeEvent.update({
-        where: { eventId: event.id },
-        data: { processed: true },
-      });
+      return result;
+    } catch (error) {
+      // Clean up StripeEvent on failure so the next retry starts fresh
+      await prisma.stripeEvent.delete({ where: { eventId: event.id } }).catch(() => {});
+      throw error;
     }
-
-    return result;
   }
 
   async retrieveSubscription(subscriptionId: string): Promise<SubscriptionData> {
@@ -129,7 +134,7 @@ export class StripeAdapter implements PaymentProvider {
         id: sub.id,
         plan: getPlanFromPriceId(sub.items.data[0].price.id),
         status: mapStripeStatus(sub.status),
-        currentPeriodEnd: new Date(sub.current_period_end * 1000),
+        currentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         cancelAtPeriodEnd: sub.cancel_at_period_end,
         stripeSubscriptionId: sub.id,
         stripePriceId: sub.items.data[0].price.id,

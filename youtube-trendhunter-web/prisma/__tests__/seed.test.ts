@@ -23,6 +23,7 @@ const mockPrismaClient = {
   niche: {
     upsert: vi.fn(),
     findMany: vi.fn(),
+    create: vi.fn(),
   },
   trend: {
     create: vi.fn(),

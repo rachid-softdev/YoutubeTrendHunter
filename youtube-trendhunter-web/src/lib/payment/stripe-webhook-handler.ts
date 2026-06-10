@@ -5,7 +5,7 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/retry";
 import { stripe } from "@/lib/stripe";
-import { getPlanFromPriceId } from "./stripe-config";
+import { getPeriodEnd, getPlanFromPriceId } from "./stripe-config";
 import { mapStripeStatus } from "./stripe-status-mapper";
 import type { WebhookResult } from "./provider";
 
@@ -51,13 +51,13 @@ const handlers: Record<string, WebhookEventHandler> = {
         userId,
         stripeSubscriptionId: sub.id,
         stripePriceId: priceId,
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         plan,
         status: "ACTIVE",
       },
       update: {
         stripePriceId: priceId,
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         plan,
         status: "ACTIVE",
       },
@@ -68,9 +68,10 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_failed": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
+    const invoiceAny = invoice as unknown as { subscription: string | Stripe.Subscription | null };
     console.warn(
       `[Stripe Webhook] Payment failed for invoice ${invoice.id}` +
-        (invoice.subscription ? `, sub: ${invoice.subscription}` : ""),
+        (invoiceAny.subscription ? `, sub: ${invoiceAny.subscription}` : ""),
     );
     // The `customer.subscription.updated` event (already handled below)
     // will update the DB status to PAST_DUE. This handler exists for
@@ -80,12 +81,13 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_succeeded": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
-    if (!invoice.subscription) {
+    const invSub = (invoice as unknown as { subscription: string | Stripe.Subscription | null })
+      .subscription;
+    if (!invSub) {
       return { handled: false, eventType: event.type };
     }
 
-    const subscriptionId =
-      typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
+    const subscriptionId = typeof invSub === "string" ? invSub : invSub.id;
 
     const sub = await withRetry(() => stripe.subscriptions.retrieve(subscriptionId), {
       maxRetries: 2,
@@ -100,7 +102,7 @@ const handlers: Record<string, WebhookEventHandler> = {
     await prisma.subscription.update({
       where: { userId },
       data: {
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         status: "ACTIVE",
       },
     });
@@ -127,13 +129,13 @@ const handlers: Record<string, WebhookEventHandler> = {
         stripePriceId: priceId,
         plan,
         status,
-        stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
       },
       update: {
         stripePriceId: priceId,
         plan,
         status,
-        stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
       },
     });
 

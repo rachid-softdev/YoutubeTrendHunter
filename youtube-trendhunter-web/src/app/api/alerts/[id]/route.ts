@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { alertUpdateSchema } from "@/lib/schemas";
 import { updateAlert, deleteAlert } from "@/lib/alerts";
 import { auditLog } from "@/lib/audit-log";
+import { invalidateCache, cacheKeys } from "@/lib/cache";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -68,6 +69,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (parsed.data.isActive !== undefined) updateData.isActive = parsed.data.isActive;
 
     const alert = await updateAlert(id, session.user.id, updateData);
+
+    // Invalidate cached alerts for this user
+    await invalidateCache(cacheKeys.alerts(session.user.id));
 
     // Fetch full alert for response
     const fullAlert = await prisma.alert.findUnique({

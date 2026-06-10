@@ -83,7 +83,7 @@ export async function auditLog(action: AuditAction, userId: string, meta: AuditM
     await prisma.auditLog.create({
       data: {
         userId,
-        action,
+        action: action as import("@prisma/client").$Enums.AuditAction,
         ipAddress: meta.ip,
         userAgent: meta.userAgent,
         metadata: meta as Prisma.InputJsonValue,

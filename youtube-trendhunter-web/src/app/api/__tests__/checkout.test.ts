@@ -63,7 +63,7 @@ describe("POST /api/stripe/checkout", () => {
 
   describe("Authentication Check", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
       const session = await auth();
       if (!session?.user?.id) {
@@ -75,7 +75,7 @@ describe("POST /api/stripe/checkout", () => {
     });
 
     it("should proceed when authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
       } as any);
 

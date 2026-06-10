@@ -379,8 +379,8 @@ describe("api-tokens", () => {
 
       await listApiTokens("user-1");
 
-      const findManyCall = vi.mocked(prisma.apiToken.findMany).mock.calls[0][0];
-      const select = findManyCall.select as Record<string, boolean>;
+      const findManyCall = vi.mocked(prisma.apiToken.findMany).mock.calls[0]?.[0];
+      const select = (findManyCall?.select ?? {}) as Record<string, boolean>;
       // Le token (hash) ne doit pas être dans la sélection
       expect(select.token).toBeUndefined();
     });

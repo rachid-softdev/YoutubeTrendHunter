@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 const JOB_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_BATCH_SIZE = 5;
@@ -21,7 +22,7 @@ export async function createJob(input: CreateJobInput) {
   return prisma.job.create({
     data: {
       type: input.type,
-      payload: input.payload,
+      payload: input.payload as Prisma.InputJsonValue,
       nicheId: input.nicheId ?? null,
       userId: input.userId ?? null,
       maxAttempts: input.maxAttempts ?? 3,
@@ -92,7 +93,7 @@ export async function completeJob(jobId: string, result: Record<string, unknown>
     where: { id: jobId },
     data: {
       status: "COMPLETED",
-      result,
+      result: result as Prisma.InputJsonValue,
       progress: 100,
       completedAt: new Date(),
       lockedAt: null,

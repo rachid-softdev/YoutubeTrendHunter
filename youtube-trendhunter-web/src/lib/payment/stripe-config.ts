@@ -1,4 +1,14 @@
+import type Stripe from "stripe";
 import type { PlanType } from "./provider";
+
+/** Helper to get the subscription period end, compatible with Stripe API v6+ camelCase changes. */
+export function getPeriodEnd(
+  sub: Stripe.Subscription | Stripe.Response<Stripe.Subscription>,
+): number {
+  return "current_period_end" in sub
+    ? (sub as Record<string, number>)["current_period_end"]
+    : ((sub as unknown as { currentPeriodEnd?: number }).currentPeriodEnd ?? 0);
+}
 
 /**
  * Stripe configuration — centralized access to Stripe-related environment variables.

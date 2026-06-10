@@ -36,7 +36,10 @@ const nextConfig: NextConfig = {
               "form-action 'self'",
             ].join("; "),
           },
-          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
           { key: "X-XSS-Protection", value: "1; mode=block" },
         ],
       },
@@ -58,7 +61,6 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ["lucide-react", "@radix-ui/react"],
-    bodySizeLimit: "100kb",
   },
   typescript: {
     ignoreBuildErrors: process.env.NODE_ENV === "production" ? false : true,

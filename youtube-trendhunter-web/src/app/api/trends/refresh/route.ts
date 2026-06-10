@@ -4,6 +4,7 @@ import { trendsRefreshSchema } from "@/lib/schemas";
 import { withRateLimit } from "@/lib/rate-limit";
 import { UnauthorizedError, NotFoundError } from "@/lib/api-error";
 import { createJob } from "@/lib/services/job.service";
+import { invalidateCache } from "@/lib/cache";
 
 export async function POST(req: NextRequest) {
   const rateLimitResponse = await withRateLimit(req, "general");
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
         payload: { nicheSlug: parsed.data.nicheSlug, nicheId: niche.id },
         nicheId: niche.id,
       });
+
+      // Invalidate cached trends so next fetch gets fresh data
+      await invalidateCache("trends:*");
 
       return NextResponse.json(
         { jobId: job.id, status: "PENDING", message: "Scoring en file d'attente" },
@@ -66,6 +70,9 @@ export async function POST(req: NextRequest) {
       );
       jobs.push(...batchJobs);
     }
+
+    // Invalidate cached trends so next fetch gets fresh data
+    await invalidateCache("trends:*");
 
     return NextResponse.json(
       {

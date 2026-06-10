@@ -48,7 +48,7 @@ describe("GET /api/trends", () => {
 
   describe("Authentication", () => {
     it("should return 401 when user is not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
       const { NextRequest } = await import("next/server");
       const req = new NextRequest("http://localhost/api/trends?niche=tech");
 
@@ -66,7 +66,7 @@ describe("GET /api/trends", () => {
     });
 
     it("should proceed when user is authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
       } as any);
 
