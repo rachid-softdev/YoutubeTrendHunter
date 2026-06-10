@@ -24,7 +24,12 @@
     "stripe:test": "node scripts/stripe-test-webhooks.js"
   },
   "dependencies": {
+    "@auth/core": "^0.41.2",
+    "@auth/prisma-adapter": "^2.11.2",
+    "@prisma/client": "6.19.3",
+    "@youtube-trendhunter/types": "workspace:*",
     "next": "^16.2.6",
+    "next-auth": "5.0.0-beta.31",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

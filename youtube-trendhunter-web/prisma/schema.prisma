@@ -103,6 +103,7 @@ model Niche {
   trends     Trend[]
   userNiches UserNiche[]
   alerts     Alert[]
+  jobs       Job[]
 }
 
 model UserNiche {
@@ -381,6 +382,40 @@ model UsageTracking {
   @@unique([orgId, featureKey, periodStart])
   @@index([orgId, featureKey])
   @@index([periodEnd])
+}
+
+// ─── Async Job Queue ───
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String // "TREND_SCORE" | "VIDEO_SCORE"
+  status      JobStatus @default(PENDING)
+  payload     Json // Input data for the job
+  result      Json? // Output data if COMPLETED
+  error       String? // Error message if FAILED
+  progress    Int       @default(0) // 0-100
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  nicheId     String?
+  userId      String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  niche Niche? @relation(fields: [nicheId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([status, lockedAt])
+  @@index([type, status])
 }
 
 // Stripe event idempotency
