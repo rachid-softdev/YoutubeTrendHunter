@@ -26,6 +26,7 @@
     "youtube-trendhunter-extension/node_modules",
     "youtube-trendhunter-mobile/node_modules",
     "packages/*/node_modules",
+    "scripts",
     "e2e",
     "playwright.config.ts"
   ]
