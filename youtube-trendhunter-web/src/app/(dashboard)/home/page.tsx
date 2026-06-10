@@ -1,11 +1,13 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getUserPlan } from "@/lib/plan-check";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { TrendCard } from "@/components/dashboard/trend-card";
 import { NicheSelector } from "@/components/dashboard/niche-selector";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Zap } from "lucide-react";
+import type { Trend, Niche } from "@prisma/client";
+import { getCached, setCached } from "@/lib/redis";
+import { getTrendsForDashboard } from "@/lib/services/trend.service";
+import { getAllActiveNiches } from "@/lib/services/niche.service";
 
 export default async function DashboardPage({
   searchParams,
@@ -19,22 +21,24 @@ export default async function DashboardPage({
   const plan = await getUserPlan(session.user.id);
   const nicheSlug = nicheQuery ?? "tech";
 
-  const niche = await prisma.niche.findUnique({
-    where: { slug: nicheSlug },
-  });
+  // Try cache first — key includes nicheSlug so switching niches gets correct data
+  const cacheKey = `dashboard:user:${session.user.id}:${plan}:${nicheSlug}`;
+  const cached = await getCached<{ trends: Trend[]; niches: Niche[] }>(cacheKey);
 
-  const trends = niche
-    ? await prisma.trend.findMany({
-        where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
-        orderBy: { score: "desc" },
-        take: plan === "FREE" ? 5 : 20,
-      })
-    : [];
+  let trends: Trend[];
+  let niches: Niche[];
 
-  const niches = await prisma.niche.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-  });
+  if (cached) {
+    trends = cached.trends;
+    niches = cached.niches;
+  } else {
+    [trends, niches] = await Promise.all([
+      getTrendsForDashboard(nicheSlug, plan),
+      getAllActiveNiches(),
+    ]);
+
+    await setCached(cacheKey, { trends, niches }, 300);
+  }
 
   return (
     <div>

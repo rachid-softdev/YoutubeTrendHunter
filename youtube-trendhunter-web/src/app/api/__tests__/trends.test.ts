@@ -29,7 +29,7 @@ vi.mock("@/lib/redis", () => ({
 }));
 
 // Mock Plan Check
-vi.mock("@/lib/plan-check", () => ({
+vi.mock("@/lib/services/subscription.service", () => ({
   getUserPlan: vi.fn().mockResolvedValue("PRO"),
   PLAN_LIMITS: {
     FREE: { niches: 1, trendsPerNiche: 5, alerts: false, export: false, api: false },

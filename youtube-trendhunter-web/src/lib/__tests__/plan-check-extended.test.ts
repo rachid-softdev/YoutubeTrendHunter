@@ -9,7 +9,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 // Import after mock
-import { isOnTrial, getTrialDaysRemaining } from "@/lib/plan-check";
+import { isOnTrial, getTrialDaysRemaining } from "@/lib/services/subscription.service";
 import { prisma } from "@/lib/prisma";
 
 describe("isOnTrial", () => {

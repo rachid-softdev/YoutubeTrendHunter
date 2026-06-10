@@ -1,24 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
-import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { checkoutSchema } from "@/lib/schemas";
 import { withRateLimit } from "@/lib/rate-limit";
+import { stripeAdapter } from "@/lib/payment/stripe-adapter";
+import { ValidationError, UnauthorizedError, NotFoundError, InternalError } from "@/lib/api-error";
 
 export async function POST(req: NextRequest) {
-  // Rate limit
   const rateLimitResponse = await withRateLimit(req, "auth");
   if (rateLimitResponse) return rateLimitResponse;
 
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return UnauthorizedError();
   }
 
   const body = await req.json();
   const parsed = checkoutSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Price ID requis" }, { status: 400 });
+    return ValidationError("Price ID invalide", parsed.error.flatten());
   }
   const { priceId } = parsed.data;
 
@@ -28,37 +28,23 @@ export async function POST(req: NextRequest) {
   });
 
   if (!user) {
-    return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+    return NotFoundError("Utilisateur");
   }
 
-  let stripeCustomerId = user.stripeCustomerId;
-
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      email: user.email!,
-      name: user.name ?? undefined,
-      metadata: { userId: session.user.id },
+  try {
+    const result = await stripeAdapter.createCheckoutSession({
+      priceId,
+      userId: session.user.id,
+      userEmail: user.email!,
+      userName: user.name ?? undefined,
+      stripeCustomerId: user.stripeCustomerId ?? undefined,
+      successUrl: `${process.env.NEXTAUTH_URL}/dashboard?success=true`,
+      cancelUrl: `${process.env.NEXTAUTH_URL}/pricing`,
     });
-    stripeCustomerId = customer.id;
 
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { stripeCustomerId },
-    });
+    return Response.json({ url: result.url });
+  } catch (err) {
+    console.error("[Checkout] Failed:", err);
+    return InternalError();
   }
-
-  const checkoutSession = await stripe.checkout.sessions.create({
-    customer: stripeCustomerId,
-    payment_method_types: ["card"],
-    billing_address_collection: "required",
-    line_items: [{ price: priceId, quantity: 1 }],
-    mode: "subscription",
-    success_url: `${process.env.NEXTAUTH_URL}/dashboard?success=true`,
-    cancel_url: `${process.env.NEXTAUTH_URL}/pricing`,
-    subscription_data: {
-      metadata: { userId: session.user.id },
-    },
-  });
-
-  return NextResponse.json({ url: checkoutSession.url });
 }

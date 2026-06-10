@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check";
+import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
+import { userExportQuerySchema } from "@/lib/schemas";
 import { getAuditLogs } from "@/lib/audit-log";
+import { ValidationError, UnauthorizedError, ForbiddenError } from "@/lib/api-error";
+
+/** Sanitize a value for CSV output — prevent CSV injection (formulas starting with =, +, -, @, %) */
+function sanitizeCsvValue(val: unknown): string {
+  const str = String(val ?? "");
+  if (/^[=+\-@%]/.test(str)) return `'${str}`;
+  const needsQuote = str.includes(",") || str.includes('"') || str.includes("\n");
+  return needsQuote ? `"${str.replace(/"/g, '""')}"` : str;
+}
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return UnauthorizedError();
   }
+
+  // Validate query parameters
+  const queryParams = Object.fromEntries(req.nextUrl.searchParams.entries());
+  const parsed = userExportQuerySchema.safeParse(queryParams);
+  if (!parsed.success) {
+    return ValidationError("Paramètres invalides", parsed.error.flatten());
+  }
+  const { format, trends: includeTrends } = parsed.data;
 
   try {
     const userId = session.user.id;
@@ -18,10 +36,7 @@ export async function GET(req: NextRequest) {
     const limits = PLAN_LIMITS[plan];
 
     if (!limits.export) {
-      return NextResponse.json(
-        { error: "L'export de données est disponible à partir du plan Pro." },
-        { status: 403 },
-      );
+      return ForbiddenError("L'export de données est disponible à partir du plan Pro.");
     }
 
     // Get user profile
@@ -78,10 +93,6 @@ export async function GET(req: NextRequest) {
 
     // Get last 100 audit logs
     const auditLogs = await getAuditLogs(userId, 100);
-
-    // Check format parameter
-    const format = req.nextUrl.searchParams.get("format") || "json";
-    const includeTrends = req.nextUrl.searchParams.get("trends") === "true";
 
     // Build export data
     const exportData = {
@@ -172,16 +183,7 @@ export async function GET(req: NextRequest) {
       const csvRows = [headers.join(",")];
 
       for (const row of trendsData) {
-        const values = headers.map((h) => {
-          const val = row[h as keyof typeof row];
-          if (
-            typeof val === "string" &&
-            (val.includes(",") || val.includes('"') || val.includes("\n"))
-          ) {
-            return `"${val.replace(/"/g, '""')}"`;
-          }
-          return val ?? "";
-        });
+        const values = headers.map((h) => sanitizeCsvValue(row[h as keyof typeof row]));
         csvRows.push(values.join(","));
       }
 
@@ -199,14 +201,36 @@ export async function GET(req: NextRequest) {
     // CSV export - summary
     if (format === "csv") {
       const csvRows = [
-        "Type,Nom,Détails,Date",
-        `Profile,${user.name || "N/A"},${user.email},${user.createdAt.toISOString()}`,
-        ...watchedNiches.map(
-          (un) => `Niche,${un.niche.name},${un.niche.slug},${un.createdAt.toISOString()}`,
+        ["Type", "Nom", "Détails", "Date"].join(","),
+        [
+          "Profile",
+          sanitizeCsvValue(user.name ?? "N/A"),
+          sanitizeCsvValue(user.email),
+          user.createdAt.toISOString(),
+        ].join(","),
+        ...watchedNiches.map((un) =>
+          [
+            "Niche",
+            sanitizeCsvValue(un.niche.name),
+            sanitizeCsvValue(un.niche.slug),
+            un.createdAt.toISOString(),
+          ].join(","),
         ),
-        ...alerts.map((a) => `Alerte,${a.type},${a.channel},${a.createdAt.toISOString()}`),
-        ...apiTokens.map(
-          (t) => `Token,${t.name},ID:${t.id.slice(0, 8)},${t.createdAt.toISOString()}`,
+        ...alerts.map((a) =>
+          [
+            "Alerte",
+            sanitizeCsvValue(a.type),
+            sanitizeCsvValue(a.channel),
+            a.createdAt.toISOString(),
+          ].join(","),
+        ),
+        ...apiTokens.map((t) =>
+          [
+            "Token",
+            sanitizeCsvValue(t.name),
+            `ID:${t.id.slice(0, 8)}`,
+            t.createdAt.toISOString(),
+          ].join(","),
         ),
       ];
 

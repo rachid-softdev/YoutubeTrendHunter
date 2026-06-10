@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check";
+import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
 import { alertCreateSchema } from "@/lib/schemas";
-import { createAlert } from "@/lib/alerts";
 import { auditLog } from "@/lib/audit-log";
+import { withRateLimit } from "@/lib/rate-limit";
+import {
+  UnauthorizedError,
+  ValidationError,
+  NotFoundError,
+  ForbiddenError,
+  InternalError,
+} from "@/lib/api-error";
+import { getUserAlerts, createAlert, getAlertById } from "@/lib/services/alert.service";
+import { getUserNiches, getNicheById } from "@/lib/services/niche.service";
 
 export async function GET(req: NextRequest) {
+  const rateLimitResponse = await withRateLimit(req, "general");
+  if (rateLimitResponse) return rateLimitResponse;
+
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return UnauthorizedError();
   }
 
   try {
@@ -18,26 +29,8 @@ export async function GET(req: NextRequest) {
 
     // Execute all queries in parallel for better performance
     const [alerts, userNiches] = await Promise.all([
-      // Get user's alerts with niche info
-      prisma.alert.findMany({
-        where: { userId: session.user.id },
-        include: {
-          niche: {
-            select: { id: true, name: true, slug: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-
-      // Get user's followed niches for the alert creation form
-      prisma.userNiche.findMany({
-        where: { userId: session.user.id },
-        include: {
-          niche: {
-            select: { id: true, name: true, slug: true },
-          },
-        },
-      }),
+      getUserAlerts(session.user.id),
+      getUserNiches(session.user.id),
     ]);
 
     return NextResponse.json({
@@ -48,14 +41,17 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching alerts:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimitResponse = await withRateLimit(req, "general");
+  if (rateLimitResponse) return rateLimitResponse;
+
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return UnauthorizedError();
   }
 
   try {
@@ -64,12 +60,8 @@ export async function POST(req: NextRequest) {
     const limits = PLAN_LIMITS[plan];
 
     if (!limits.alerts) {
-      return NextResponse.json(
-        {
-          error:
-            "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes.",
-        },
-        { status: 403 },
+      return ForbiddenError(
+        "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes.",
       );
     }
 
@@ -77,18 +69,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = alertCreateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+      return ValidationError(parsed.error.issues[0].message);
     }
 
     const { nicheId, type, threshold, channel, webhookUrl } = parsed.data;
 
     // Verify niche if provided
     if (nicheId) {
-      const niche = await prisma.niche.findUnique({
-        where: { id: nicheId },
-      });
+      const niche = await getNicheById(nicheId);
       if (!niche) {
-        return NextResponse.json({ error: "Niche introuvable" }, { status: 404 });
+        return NotFoundError("Niche");
       }
     }
 
@@ -111,18 +101,11 @@ export async function POST(req: NextRequest) {
     });
 
     // Fetch the alert with niche for response
-    const fullAlert = await prisma.alert.findUnique({
-      where: { id: alert.id },
-      include: {
-        niche: {
-          select: { id: true, name: true, slug: true },
-        },
-      },
-    });
+    const fullAlert = await getAlertById(alert.id);
 
     return NextResponse.json({ alert: fullAlert }, { status: 201 });
   } catch (error) {
     console.error("Error creating alert:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }

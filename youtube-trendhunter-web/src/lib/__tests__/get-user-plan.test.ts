@@ -9,7 +9,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { getUserPlan, activateTrial } from "@/lib/plan-check";
+import { getUserPlan, activateTrial } from "@/lib/services/subscription.service";
 import { prisma } from "@/lib/prisma";
 
 describe("getUserPlan", () => {
@@ -133,7 +133,7 @@ describe("activateTrial", () => {
       trialEnd: new Date(Date.now() + 86400000 * 7),
     } as any);
 
-    const result = await activateTrial("user_123", "PRO");
+    await activateTrial("user_123", "PRO");
 
     expect(prisma.subscription.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -148,15 +148,11 @@ describe("activateTrial", () => {
   });
 
   it("uses 7 days as default trial duration", async () => {
-    vi.mocked(prisma.subscription.upsert).mockImplementation(async ({ create }: any) => {
-      const diff = create.trialEnd.getTime() - create.trialStart.getTime();
-      const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-      return {
-        ...create,
-        id: "sub_new",
-        trialEnd: create.trialEnd,
-      };
-    });
+    vi.mocked(prisma.subscription.upsert).mockImplementation(async ({ create }: any) => ({
+      ...create,
+      id: "sub_new",
+      trialEnd: create.trialEnd,
+    }));
 
     const result = await activateTrial("user_123", "PRO");
     // Trial should be approximately 7 days

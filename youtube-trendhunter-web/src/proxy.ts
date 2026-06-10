@@ -1,29 +1,54 @@
+/**
+ * Next.js App Router proxy (formerly "middleware").
+ *
+ * Attaches diagnostic response headers (request ID, duration) and logs
+ * a structured request summary for every matched API route.
+ *
+ * NOTE: The proxy cannot access the downstream route handler's response
+ * status code — `NextResponse.next()` always returns 200 at this stage.
+ * For accurate RED metrics (rate, errors, duration), call
+ * `metrics.record()` from individual route handlers instead.
+ *
+ * See node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md
+ */
+
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import type { NextRequest, NextFetchEvent } from "next/server";
 
-export default async function middleware(req: NextRequest) {
-  const session = await auth();
-  const { pathname } = req.nextUrl;
+export function proxy(request: NextRequest, event: NextFetchEvent) {
+  const start = Date.now();
+  const requestId = crypto.randomUUID();
 
-  // Protected routes: redirect to /login if not authenticated
-  const protectedPaths = ["/dashboard", "/niches", "/alerts", "/billing", "/settings"];
-  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+  const response = NextResponse.next();
+  response.headers.set("X-Request-ID", requestId);
 
-  if (isProtected && !session) {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
+  // waitUntil runs after the route handler completes, giving us the
+  // real wall-clock duration. Status tracking is intentionally omitted
+  // because `response.status` is always 200 (NextResponse.next()).
+  event.waitUntil(
+    Promise.resolve().then(() => {
+      const duration = Date.now() - start;
+      response.headers.set("X-Duration", String(duration));
 
-  // Auth page: redirect to /dashboard if already authenticated
-  if (pathname.startsWith("/login") && session) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
+      const url = new URL(request.url);
 
-  return NextResponse.next();
+      console.warn(
+        JSON.stringify({
+          type: "request_summary",
+          method: request.method,
+          path: url.pathname,
+          status: response.status,
+          duration,
+          requestId,
+        }),
+      );
+    }),
+  );
+
+  return response;
 }
 
+// Limit the proxy to API routes only
 export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|file.svg|globe.svg|next.svg|vercel.svg|window.svg).*)",
-  ],
+  matcher: "/api/:path*",
 };

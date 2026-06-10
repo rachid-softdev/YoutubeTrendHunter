@@ -138,16 +138,19 @@ async function main() {
   for (const trend of testTrends) {
     if (trend.nicheId) {
       const { nicheId, ...trendData } = trend;
-      await prisma.trend
-        .create({
-          data: {
-            ...trendData,
-            niche: { connect: { id: nicheId } },
-          } as any,
-        })
-        .catch(() => {
-          // Ignore if already exists
-        });
+      await prisma.trend.upsert({
+        where: {
+          title_nicheId: { title: trend.title, nicheId },
+        },
+        create: {
+          ...trendData,
+          niche: { connect: { id: nicheId } },
+        },
+        update: {
+          ...trendData,
+        },
+      });
+      console.log(`✅ Trend upserted: ${trend.title}`);
     }
   }
 

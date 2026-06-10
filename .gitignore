@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+packages/*/node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -40,4 +41,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# prisma
 /src/generated/prisma
+/prisma/*.db
+/prisma/*.db-journal
+/youtube-trendhunter-web/src/generated/prisma
+
+# DX tooling
+.biome/
+.claude/
+.opencode/
+
+# turbo build cache
+.turbo/

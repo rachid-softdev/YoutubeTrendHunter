@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PLAN_LIMITS } from "@/lib/plan-check";
+import { PLAN_LIMITS } from "@/lib/services/subscription.service";
 
 describe("PLAN_LIMITS", () => {
   it("FREE plan has 1 niche limit", () => {

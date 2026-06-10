@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PLAN_LIMITS } from "../plan-check";
+import { PLAN_LIMITS } from "../services/subscription.service";
 
 describe("PLAN_LIMITS", () => {
   it("should have correct limits for FREE plan", () => {

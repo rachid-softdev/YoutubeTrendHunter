@@ -1,557 +1,684 @@
 # Plan d'implémentation — YouTube TrendHunter
 
-> Plan d'action détaillé issu de la revue de code (REVIEW.md).
-> Priorité : P0 (immédiat) → P1 (urgent) → P2 (important) → P3 (souhaitable).
+> **Date :** 9 juin 2026
+> **État :** Sprints 1-2-3 terminés (REVIEW.md → 204 tests, score sécurité ~8/10)
+> **Prochaine phase :** Sprints 4-5-6
 
 ---
 
-## P0 — Corrections bloquantes
+## SOMMAIRE
 
-### 0.1 Aligner le provider Prisma (MySQL vs PostgreSQL)
-
-**Problème :**
-- `prisma/schema.prisma` déclare `provider = "postgresql"`
-- `scripts/setup-mysql.js` configure une base **MySQL**
-- `README.md` annonce MySQL
-- `PLAN.md` annonce PostgreSQL
-
-**Action :**
-1. Décider du moteur cible. Recommandation : **PostgreSQL** (plus adapté aux features array `String[]`, mieux supporté par Vercel/Neon, le plan original).
-2. Si PostgreSQL :
-   - Supprimer ou réécrire `scripts/setup-mysql.js` → `scripts/setup-postgres.js`
-   - Mettre à jour `README.md` → PostgreSQL
-   - Mettre à jour tous les scripts qui référencent MySQL (`start-dev-with-mailhog.js`, `start-dev-complete.js`)
-3. Si MySQL :
-   - Changer `provider = "mysql"` dans `schema.prisma`
-   - Remplacer les `String[]` par une table jointe ou un champ JSON
-   - Adapter les seeds et requêtes
-
-**Fichiers impactés :**
-- `prisma/schema.prisma`
-- `scripts/setup-mysql.js`
-- `scripts/start-dev-with-mailhog.js`
-- `scripts/start-dev-complete.js`
-- `README.md`
-- `PLAN.md`
-
-**Tests :** `npx prisma db push` doit réussir, `npx prisma db seed` doit insérer les données sans erreur.
+1. [Contexte et prérequis](#1-contexte-et-prérequis)
+2. [Sprint 4 — Correctifs sécurité ouverts](#2-sprint-4--correctifs-sécurité-ouverts)
+3. [Sprint 5 — Court terme (semaine 1-2)](#3-sprint-5--court-terme-semaine-1-2)
+4. [Sprint 6 — Moyen terme (mois 1-2)](#4-sprint-6--moyen-terme-mois-1-2)
+5. [Horizon long terme (mois 3-6)](#5-horizon-long-terme-mois-3-6)
+6. [Dépendances entre sprints](#6-dépendances-entre-sprints)
+7. [Annexe : état des lieux après Sprints 1-2-3](#7-annexe-état-des-lieux-après-sprints-1-2-3)
 
 ---
 
-### 0.2 Ajouter une contrainte unique composite sur Trend
+# 1. Contexte et prérequis
 
-**Problème :**
-- `prisma/seed.ts:138-148` utilise `trend.create()` avec un `.catch()` silencieux pour éviter les doublons
-- Le schema n'a pas de `@@unique([title, nicheId])` sur Trend
+## 1.1 Ce qui a déjà été fait
 
-**Action :**
-1. Ajouter dans `model Trend` de `schema.prisma` :
-   ```prisma
-   @@unique([title, nicheId])
-   ```
-2. Remplacer le `create()` + `.catch()` dans le seed par un `upsert()` propre.
+| Phase | Contenu | Statut |
+|-------|---------|--------|
+| Sprint 1 | 7 correctifs sécurité critiques (password MySQL, hash tokens SHA-256, webhook Stripe, validation Zod Claude, upsert seed, accessibilité `lang="fr"`, limites plan API) | ✅ |
+| Sprint 2 | Cache Redis (5 endpoints), pagination cursor-based (3 endpoints), rate limiting (6 routes), retry+timeout (Stripe, Anthropic), suppression `feature-flags.disabled/`, `.env.example` complété, format d'erreur API uniforme | ✅ |
+| Sprint 3 | Services layer (5 fichiers), RED metrics + proxy.ts + admin endpoint, types unifiés web/extension (4 fichiers), singleton Prisma (déjà fait), 204 tests (déjà fait), pages placeholders admin/alertes/niches (déjà fonctionnelles) | ✅ |
 
-**Fichiers impactés :**
-- `prisma/schema.prisma`
-- `prisma/seed.ts`
+## 1.2 Stack technique actuelle
 
-**Tests :** Lancer `npx prisma db push` (doit créer l'index), exécuter le seed deux fois (pas de doublons, pas d'erreur).
+- **Frontend :** Next.js 16 (App Router), React 19, Tailwind CSS 4
+- **Backend :** Next.js API Routes, Prisma 6 ORM, PostgreSQL
+- **Auth :** NextAuth v5 (database sessions), Google OAuth
+- **Paiement :** Stripe (checkout, webhooks, portal)
+- **IA :** Anthropic Claude (scoring tendances)
+- **Cache :** Upstash Redis (TTL, rate limiting, locks)
+- **Email :** Resend (alertes, templates React Email)
+- **Monitoring :** Sentry (erreurs), PostHog (analytics), RED metrics (in-memory)
+- **Extension :** WXT (Chrome extension, Vue.js sidebar)
+- **Infra :** pnpm workspaces, Turborepo, Vercel (déploiement)
+
+## 1.3 Scores actuels
+
+| Métrique | Avant | Après Sprints 1-2-3 |
+|----------|-------|---------------------|
+| Architecture | 4/10 | ~7/10 |
+| Sécurité | 5/10 | ~8/10 |
+| Performance | 4/10 | ~7/10 |
+| Maintenabilité | 5/10 | ~7/10 |
+| Tests | 0 | 204 (14 fichiers) |
+| **Score global** | **4.2/10** | **~7/10** |
 
 ---
 
-### 0.3 Supprimer le mot de passe MySQL en dur
+# 2. Sprint 4 — Correctifs sécurité ouverts
 
-**Problème :**
-- `scripts/setup-mysql.js` contient `root` / `azerty123` en clair
+> **Effort total estimé :** 1-2 jours
+> **Priorité :** CRITICAL — À faire immédiatement avant toute nouvelle feature
+
+## 4.1 Valider le `priceId` Stripe au checkout
+
+**Problème :** `src/app/api/stripe/checkout/route.ts` accepte n'importe quel `priceId` — un utilisateur pourrait créer un checkout avec un priceId modifié manuellement.
 
 **Action :**
-1. Remplacer par des variables d'environnement lues depuis `.env` ou `.env.local`.
-2. Ajouter un prompt interactif si non définies.
-3. Si le script est conservé (voir 0.1), appliquer la correction avant tout.
+1. Lire la liste des `priceId` autorisés depuis les variables d'environnement (`STRIPE_PRO_PRICE_ID`, `STRIPE_TEAM_PRICE_ID`)
+2. Ajouter une validation Zod au body de la requête
+3. Vérifier que le `priceId` correspond à un plan connu avant de créer la session Stripe
+4. Retourner une erreur 400 claire si le priceId est inconnu
 
-**Fichiers impactés :**
-- `scripts/setup-mysql.js`
+**Fichier impacté :**
+- `src/app/api/stripe/checkout/route.ts`
+
+**Test :**
+- Envoyer un priceId invalide → 400
+- Envoyer un priceId PRO valide → session Stripe créée
+- Envoyer un priceId TEAM valide → session Stripe créée
+
+**Critères de succès :**
+- Impossible de lancer un checkout avec un priceId modifié
+- Message d'erreur explicite si priceId inconnu
 
 ---
 
-## P1 — Corrections urgentes
+## 4.2 Anti-SSRF webhook Stripe
 
-### 1.1 Sécuriser le webhook Stripe (status ACTIVE forcé)
-
-**Problème :**
-- `src/app/api/stripe/webhook/route.ts:69-82` — le handler `customer.subscription.updated` force `status: "ACTIVE"` sans vérifier le statut réel renvoyé par Stripe.
-- Un abonnement en `past_due`, `incomplete` ou `unpaid` sera marqué actif dans la BDD.
+**Problème :** Le webhook Stripe à `src/app/api/stripe/webhook/route.ts` utilise `stripe.webhooks.constructEvent()` qui vérifie la signature, mais ne valide PAS que l'événement vient bien des serveurs Stripe.
 
 **Action :**
-1. Ajouter une fonction de mapping des statuts Stripe → statuts Prisma :
-   ```typescript
-   function mapStripeStatus(stripeStatus: string): SubscriptionStatus {
-     switch (stripeStatus) {
-       case "active": return "ACTIVE"
-       case "past_due": return "PAST_DUE"
-       case "canceled": return "CANCELED"
-       case "incomplete": return "INCOMPLETE"
-       case "trialing": return "TRIALING"
-       default: return "ACTIVE"
-     }
-   }
-   ```
-2. Appliquer cette fonction dans les handlers :
-   - `checkout.session.completed` (ligne 40)
-   - `invoice.payment_succeeded` (ligne 63)
-   - `customer.subscription.updated` (ligne 78)
-3. Typer correctement les événements Stripe au lieu d'utiliser `as any`.
+1. Ajouter une vérification que l'IP source est bien Stripe (vérification réseau côté Vercel/Cloudflare)
+2. Option alternative : vérifier que le header `Stripe-Signature` correspond à notre secret ET que l'événement n'a pas déjà été traité (idempotence)
+3. Utiliser le `Stripe.Event` typé (plus de `as any`)
+4. Ajouter un cache d'idempotence Redis pour éviter le double traitement
 
-**Fichiers impactés :**
+**Fichier impacté :**
 - `src/app/api/stripe/webhook/route.ts`
 
-**Tests :** Simuler chaque type d'événement Stripe avec `stripe-test-webhooks.js` et vérifier le statut en base.
+**Test :**
+- Simuler un webhook avec signature invalide → 400
+- Simuler un webhook valide mais déjà traité → 200 (sans effet de bord)
+- Simuler un webhook valide → mise à jour BDD correcte
+
+**Critères de succès :**
+- Un webhook reçu 2x ne modifie la BDD qu'une seule fois
+- Les événements strippés sont rejetés
 
 ---
 
-### 1.2 Ajouter une validation Zod du retour Claude
+## 4.3 Filtrer les données personnelles dans l'extension
 
-**Problème :**
-- `src/lib/trend-scorer.ts:56` — `JSON.parse(text)` peut planter ou retourner des données invalides.
-- Aucune garantie que le JSON contienne les champs attendus avec les bons types.
+**Problème :** `src/app/api/extension/trends/route.ts` renvoie `user: { name, email }` dans la réponse — l'extension n'a pas besoin des données personnelles du user.
 
 **Action :**
-1. Créer un schéma Zod pour le score :
-   ```typescript
-   import { z } from "zod"
-
-   const TrendScoreSchema = z.object({
-     score: z.number().int().min(0).max(100),
-     status: z.enum(["EMERGING", "GROWING", "PEAK", "FADING"]),
-     contentAngles: z.array(z.string()).min(1).max(5),
-     reasoning: z.string().min(1),
-   })
-   ```
-2. Remplacer `JSON.parse(text) as TrendScore` par :
-   ```typescript
-   const parsed = JSON.parse(text)
-   const result = TrendScoreSchema.safeParse(parsed)
-   if (!result.success) throw new Error("Réponse Claude invalide : " + result.error.message)
-   return result.data
-   ```
-3. Supprimer l'interface `TrendScore` manuelle (redondante avec Zod).
+1. Supprimer le champ `user` de la réponse du endpoint `extension/trends`
+2. Garder seulement `trends`, `plan`, et `nextCursor`
+3. Vérifier que l'extension n'utilise pas `user.name` ou `user.email` côté client
 
 **Fichiers impactés :**
-- `src/lib/trend-scorer.ts`
+- `src/app/api/extension/trends/route.ts`
+- `youtube-trendhunter-extension/entrypoints/background.ts` (vérifier l'usage côté client)
+
+**Test :**
+- Appeler le endpoint → la réponse ne contient PAS de champ `user`
+- L'extension fonctionne normalement sans ces données
+
+**Critères de succès :**
+- Aucune donnée personnelle (nom, email) dans les réponses API de l'extension
+- L'extension continue de fonctionner
 
 ---
 
-### 1.3 Implémenter un singleton Prisma global
+## 4.4 Validation Zod sur les routes manquantes
 
-**Problème :**
-- `src/lib/prisma.ts` : `new PrismaClient({})` sans `globalThis` caching.
-- En dev avec hot-reload, des centaines d'instances Prisma sont créées.
+**Problème :** Certaines routes API n'ont pas de validation d'entrée avec Zod, exposant à des injections et erreurs silencieuses.
+
+**Routes à auditer et sécuriser :**
+
+| Route | Méthode | Risque |
+|-------|---------|--------|
+| `/api/stripe/portal` | POST | Aucune validation du body |
+| `/api/stripe/checkout` | POST | Validation partielle (manque priceId) |
+| `/api/user/export` | POST | Pas de validation du format demandé |
+| `/api/cron/trends` | POST | Aucune validation du body |
+| `/api/extension/analyze` | POST | Validation existante ✅ |
+| `/api/trends/refresh` | POST | Validation existante ✅ |
 
 **Action :**
-```typescript
-import { PrismaClient } from "@prisma/client"
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({})
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
-```
+1. Pour chaque route manquante, ajouter une validation Zod du body/query
+2. Retourner une erreur 400 avec `api-error.ts` en cas d'échec
+3. Ajouter un test unitaire pour chaque schéma
 
 **Fichiers impactés :**
-- `src/lib/prisma.ts`
+- `src/app/api/stripe/portal/route.ts`
+- `src/app/api/stripe/checkout/route.ts` (compléter)
+- `src/app/api/user/export/route.ts`
+- `src/app/api/cron/trends/route.ts`
+- `src/lib/schemas.ts` (ajouter les nouveaux schémas)
+
+**Critères de succès :**
+- 100% des routes POST/PUT/PATCH ont une validation Zod
+- Les routes GET avec query params ont une validation si nécessaire
 
 ---
 
-### 1.4 Remplacer les `any` du webhook Stripe par des types
+# 3. Sprint 5 — Court terme (semaine 1-2)
 
-**Problème :**
-- 4 occurrences de `as any` dans `stripe/webhook/route.ts` qui masquent les vrais types Stripe.
+> **Effort total estimé :** 3-5 jours
+> **Priorité :** HAUTE
+
+## 5.1 Package partagé `@youtube-trendhunter/types`
+
+**Problème :** Les types sont actuellement copiés entre `youtube-trendhunter-web/src/lib/types/` et `youtube-trendhunter-extension/shared/types/`. Pas de source unique.
 
 **Action :**
-1. Typer l'event avec `Stripe.Event` (fourni par le SDK Stripe).
-2. Typer les objets métier : `Stripe.Checkout.Session`, `Stripe.Invoice`, `Stripe.Subscription`.
-3. Plus besoin de `as any` — tout est typé automatiquement par `event.data.object`.
+1. Créer `packages/youtube-trendhunter-types/` dans le monorepo
+2. Déplacer les types partagés :
+   - `TrendScore`, `VideoScore`, `TrendInput`, `VideoInput`
+   - `PlanType`, `PlanStatus`
+   - `PaginatedResponse<T>`, `ApiError`
+   - Les types d'API de l'extension (`GetTrendsResponse`, etc.)
+3. Mettre à jour les imports dans le web et l'extension
+4. Ajouter le package au `tsconfig.json` des deux projets (paths)
 
 **Fichiers impactés :**
-- `src/app/api/stripe/webhook/route.ts`
+- NOUVEAU : `packages/youtube-trendhunter-types/package.json`
+- NOUVEAU : `packages/youtube-trendhunter-types/src/index.ts`
+- MODIFIÉ : `youtube-trendhunter-web/src/lib/types/index.ts` (re-export du package)
+- MODIFIÉ : `youtube-trendhunter-extension/shared/types/index.ts` (re-export du package)
+- MODIFIÉ : `pnpm-workspace.yaml` (ajout du nouveau package)
+
+**Tests :**
+- `tsc --noEmit` passe dans web et extension
+- Les types sont bien accessibles depuis les deux projets
+
+**Critères de succès :**
+- Un seul fichier source de vérité pour les types partagés
+- Les deux projets importent depuis le même package
 
 ---
 
-### 1.5 Supprimer les scripts destructeurs gh.sh / gh.ps1
+## 5.2 Nettoyer la dette services restante
 
-**Problème :**
-- `gh.sh` et `gh.ps1` font un `git push -f origin main` + `git gc --aggressive --prune=all`.
-- Risque de perte d'historique catastrophique.
+**Problème :** Deux fichiers n'ont pas été complètement migrés vers la couche service :
+
+1. **`my-niches/page.tsx`** : la requête `allNiches` avec `include` complexe utilise encore Prisma directement
+2. **`plan-check.ts`** : `getUserPlan()` existe maintenant dans `subscription.service.ts` en doublon
 
 **Action :**
-1. Supprimer les fichiers ou les remplacer par des scripts non destructeurs (ex. `git push origin main` simple).
-2. Ajouter un garde-fou : confirmation interactive avant force push.
+1. Migrer la requête `allNiches` dans `niche.service.ts` sous une méthode dédiée
+2. Supprimer les fonctions dupliquées de `plan-check.ts` et rediriger les imports
+3. Vérifier tous les callers de `plan-check.ts` et mettre à jour les imports
+4. Supprimer `plan-check.ts` si toutes les fonctions sont migrées
+
+**Fichiers impactés :**
+- `src/lib/services/niche.service.ts` (nouvelle méthode)
+- `src/app/(dashboard)/my-niches/page.tsx` (remplacer prisma direct)
+- `src/lib/plan-check.ts` (supprimer fonctions dupliquées)
+- Tous les fichiers importants de `plan-check.ts` (~20 fichiers à vérifier)
+
+**Callers de `plan-check.ts` à migrer :**
+
+| Fichier | Fonction utilisée | Nouvelle source |
+|---------|-------------------|-----------------|
+| `api/trends/route.ts` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `api/alerts/route.ts` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `api/niches/route.ts` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `api/niches/[id]/route.ts` | `getUserPlan` | `subscription.service` |
+| `api/user/export/route.ts` | `getUserPlan` | `subscription.service` |
+| `api/extension/auth/route.ts` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `api/extension/trends/route.ts` | `getUserPlan` | `subscription.service` |
+| `api/extension/analyze/route.ts` | `getUserPlan` | `subscription.service` |
+| `(dashboard)/page.tsx` | `getUserPlan` | `subscription.service` |
+| `(dashboard)/home/page.tsx` | `getUserPlan` | `subscription.service` |
+| `(dashboard)/my-niches/page.tsx` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `(dashboard)/alerts/page.tsx` | `getUserPlan`, `PLAN_LIMITS` | `subscription.service` |
+| `(dashboard)/billing/page.tsx` | `getUserPlan` | `subscription.service` |
+| `lib/__tests__/get-user-plan.test.ts` | `getUserPlan`, `activateTrial` | `subscription.service` |
+
+**Critères de succès :**
+- `plan-check.ts` supprimé sans régression
+- Tous les tests passent (get-user-plan.test.ts mis à jour)
+- `my-niches/page.tsx` utilise `niche.service.ts` pour toutes ses requêtes
+
+---
+
+## 5.3 Supprimer les scripts destructeurs `gh.sh` / `gh.ps1`
+
+**Problème :** Les scripts `gh.sh` et `gh.ps1` à la racine font un `git push -f origin main` suivi de `git gc --aggressive --prune=all`. Risque catastrophique de perte d'historique.
+
+**Action :**
+1. Supprimer `gh.sh`
+2. Supprimer `gh.ps1`
+3. (Optionnel) Les remplacer par un script non destructeur : `git push origin main`
 
 **Fichiers impactés :**
 - `gh.sh`
 - `gh.ps1`
 
----
-
-## P2 — Implémentations importantes
-
-### 2.1 Finir la page Alertes (`/alerts`)
-
-**Problème :**
-- Page statique. Affiche « Aucune alerte configurée » et un bouton "Créer une alerte" sans action.
-
-**Action (dans `src/app/(dashboard)/alerts/page.tsx`) :**
-1. Ajouter un formulaire de création d'alerte avec :
-   - Type : `SCORE_THRESHOLD` / `DAILY_DIGEST` / `SPIKE`
-   - Seuil (nombre, pour `SCORE_THRESHOLD`)
-   - Canal : `EMAIL` / `WEBHOOK`
-   - Niche (optionnel, liste déroulante)
-2. Créer une server action `createAlert(formData)`.
-3. Afficher la liste des alertes existantes avec possibilité de supprimer.
-4. Ajouter un bouton toggle actif/inactif.
-
-**Nouveaux fichiers :**
-- `src/components/dashboard/alert-form.tsx` (client component)
-- `src/components/dashboard/alert-list.tsx`
-
-**Fichiers impactés :**
-- `src/app/(dashboard)/alerts/page.tsx`
+**Critères de succès :**
+- Plus de risque de force-push accidentel
 
 ---
 
-### 2.2 Finir la page Niches (`/niches`)
+# 4. Sprint 6 — Moyen terme (mois 1-2)
 
-**Problème :**
-- Les boutons "Suivre" sont affichés mais n'ont pas de server action attachée.
+> **Effort total estimé :** 3-4 semaines
+> **Priorité :** MOYENNE (sauf Scoring IA = HAUTE)
 
-**Action (dans `src/app/(dashboard)/niches/page.tsx`) :**
-1. Créer deux server actions :
-   - `followNiche(nicheId: string)`
-   - `unfollowNiche(nicheId: string)`
-2. Les boutons "Suivre" deviennent des `<form>` avec `action` pointant vers ces server actions.
-3. Ajouter un bouton "Retirer" avec icône `Trash2` sur les niches suivies.
-4. Gérer la limite de niches selon le plan (FREE → 1 max).
+## 6.1 Scoring IA asynchrone avec file d'attente
 
-**Fichiers impactés :**
-- `src/app/(dashboard)/niches/page.tsx`
+**Problème :** `src/lib/trend-scorer.ts` appelle Anthropic Claude **synchronement** pendant une requête API. Si 10 niches sont refreshées en même temps, l'utilisateur attend 10 appels Claude (~30-60s). Sous charge, cela bloque complètement le serveur.
 
----
+**Solution :** Architecture file d'attente asynchrone
 
-### 2.3 Ajouter le cache Redis (Upstash)
-
-**Problème :**
-- `@upstash/redis` installé mais jamais utilisé.
-- Chaque requête `/api/trends` et page dashboard tape directement Prisma.
-
-**Action :**
-1. Créer `src/lib/redis.ts` :
-   ```typescript
-   import { Redis } from "@upstash/redis"
-
-   export const redis = new Redis({
-     url: process.env.UPSTASH_REDIS_REST_URL!,
-     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-   })
-   ```
-2. Créer un helper de cache dans `src/lib/cache.ts` :
-   ```typescript
-   export async function getOrSet<T>(
-     key: string,
-     fetch: () => Promise<T>,
-     ttl: number = 300 // 5 minutes
-   ): Promise<T> {
-     const cached = await redis.get<T>(key)
-     if (cached) return cached
-     const data = await fetch()
-     await redis.set(key, data, { ex: ttl })
-     return data
-   }
-   ```
-3. Appliquer le cache sur :
-   - `api/trends/route.ts` — cacher les tendances par niche
-   - `dashboard/page.tsx` — cacher les tendances et la liste des niches
-   - `extension/trends/route.ts` — cacher les tendances
-
-**Nouveaux fichiers :**
-- `src/lib/redis.ts`
-- `src/lib/cache.ts`
-
-**Fichiers impactés :**
-- `src/app/api/trends/route.ts`
-- `src/app/(dashboard)/dashboard/page.tsx`
-- `src/app/api/extension/trends/route.ts`
-
----
-
-### 2.4 Ajouter un fichier `.env.example`
-
-**Problème :**
-- Aucun fichier `.env.example` à la racine.
-- Les scripts référencent des variables implicitement.
-
-**Action :**
-Créer `.env.example` contenant TOUTES les variables nécessaires :
-
-```env
-# Base de données
-DATABASE_URL="postgresql://..."
-
-# Auth (NextAuth)
-AUTH_SECRET="..."
-AUTH_GOOGLE_ID="..."
-AUTH_GOOGLE_SECRET="..."
-
-# Stripe
-STRIPE_SECRET_KEY="..."
-STRIPE_WEBHOOK_SECRET="..."
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="..."
-STRIPE_PRO_PRICE_ID="..."
-STRIPE_TEAM_PRICE_ID="..."
-
-# IA
-ANTHROPIC_API_KEY="..."
-
-# Cache (Upstash)
-UPSTASH_REDIS_REST_URL="..."
-UPSTASH_REDIS_REST_TOKEN="..."
-
-# Email (Resend)
-RESEND_API_KEY="..."
-
-# App
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+[Client] → POST /api/trends/refresh
+         → Crée un job en BDD (status: PENDING)
+         → Retourne immédiatement 202 { jobId }
+         
+[Worker] → Lit les jobs PENDING toutes les 30s
+         → Appelle Claude pour chaque job
+         → Met à jour les tendances + job status: COMPLETED
+         
+[Client] → GET /api/jobs/{jobId}
+         → Retourne status (PENDING | PROCESSING | COMPLETED | FAILED)
+         → Si COMPLETED, retourne les tendances
 ```
 
-**Nouveaux fichiers :**
-- `.env.example`
+**Fichiers à créer/modifier :**
+
+| Fichier | Action |
+|---------|--------|
+| `prisma/schema.prisma` | Ajouter modèle `Job` (id, type, status, payload, result, createdAt, completedAt) |
+| `src/lib/services/job.service.ts` | `createJob()`, `getJob()`, `processNextJobs()` |
+| `src/app/api/trends/refresh/route.ts` | Refactor pour créer un job au lieu d'appeler Claude directement |
+| `src/app/api/jobs/[id]/route.ts` | Nouveau endpoint pour vérifier le statut |
+| `src/lib/workers/trend-scorer.worker.ts` | Worker qui process les jobs (appelé par cron) |
+| `src/app/api/cron/process-jobs/route.ts` | Endpoint cron pour déclencher le worker |
+
+**Considérations techniques :**
+- Utiliser la BDD PostgreSQL comme file d'attente (pas besoin de Redis Queue dans un premier temps)
+- Lock optimiste via `status: PENDING` + `updatedAt < now() - 5min` pour éviter le double-processing
+- Timeout de 60s par job Claude
+- Notification via webhook ou polling depuis le frontend
+
+**Tests :**
+- Créer un job → status PENDING
+- Process le job → status PROCESSING → COMPLETED
+- Timeout → status FAILED
+- Polling GET /api/jobs/{id} → retourne le bon statut
+
+**Critères de succès :**
+- `POST /api/trends/refresh` retourne en < 100ms (vs 30s aujourd'hui)
+- Possibilité de suivre la progression côté frontend
+- Résilience : si le worker crashe, les jobs sont récupérés après timeout
 
 ---
 
-### 2.5 Implémenter les notifications email (Resend)
+## 6.2 Anti-corruption layer Stripe
 
-**Problème :**
-- `resend` installé dans `package.json` mais pas utilisé.
-- Aucune notification pour les alertes de tendances.
+**Problème :** Le code Stripe est dispersé dans plusieurs fichiers et typé avec `as any`. Changer de provider de paiement nécessiterait de tout réécrire.
 
 **Action :**
-1. Créer `src/lib/email.ts` :
-   ```typescript
-   import { Resend } from "resend"
-   export const resend = new Resend(process.env.RESEND_API_KEY!)
-   ```
-2. Créer un template email basique pour les alertes.
-3. (Optionnel) Créer une route API `/api/email/test` pour le debug.
+1. Créer une abstraction `PaymentProvider` :
 
-**Nouveaux fichiers :**
-- `src/lib/email.ts`
-- `src/emails/trend-alert.tsx` (template React Email)
+```typescript
+// src/lib/payment/provider.ts
+export interface PaymentProvider {
+  createCheckoutSession(params: CheckoutParams): Promise<CheckoutResult>
+  createPortalSession(params: PortalParams): Promise<string>
+  handleWebhook(event: unknown): Promise<WebhookResult>
+  retrieveSubscription(id: string): Promise<SubscriptionData>
+  cancelSubscription(id: string): Promise<void>
+}
+
+// src/lib/payment/stripe-adapter.ts
+export class StripeAdapter implements PaymentProvider { ... }
+```
+
+2. Déplacer toute la logique Stripe existante dans l'adaptateur :
+   - `src/app/api/stripe/checkout/route.ts` → `stripe-adapter.createCheckoutSession()`
+   - `src/app/api/stripe/webhook/route.ts` → `stripe-adapter.handleWebhook()`
+   - `src/app/api/stripe/portal/route.ts` → `stripe-adapter.createPortalSession()`
+
+3. Déplacer les types Stripe éparpillés dans l'abstraction
+
+**Fichiers impactés :**
+
+| Fichier | Action |
+|---------|--------|
+| `src/lib/payment/provider.ts` | NOUVEAU — interface PaymentProvider |
+| `src/lib/payment/stripe-adapter.ts` | NOUVEAU — implémentation Stripe |
+| `src/lib/payment/map-status.ts` | NOUVEAU — fonction de mapping statuts |
+| `src/app/api/stripe/checkout/route.ts` | REFACTOR — utiliser l'adaptateur |
+| `src/app/api/stripe/webhook/route.ts` | REFACTOR — utiliser l'adaptateur |
+| `src/app/api/stripe/portal/route.ts` | REFACTOR — utiliser l'adaptateur |
+| `src/lib/stripe.ts` | DÉPLACER — intégrer dans stripe-adapter.ts |
+
+**Tests :**
+- Créer un mock de `PaymentProvider` pour les tests unitaires
+- Tester chaque méthode avec des entrées valides/invalides
+- Vérifier que le webhook Stripe est correctement parsé
+
+**Critères de succès :**
+- 0 `as any` dans le code Stripe
+- Toute la logique Stripe encapsulée dans `payment/`
+- Changement de provider = changer une seule classe
 
 ---
 
-### 2.6 Ajouter `/api/trends/[id]` et `/api/niches`
+## 6.3 CI/CD — Staging, tests pré-commit, déploiement
 
-**Problème :**
-- PLAN.md liste ces endpoints mais ils n'existent pas.
+**Problème :** Pas d'environnement staging, les tests ne sont pas exécutés automatiquement, pas de CI/CD fiable.
 
 **Action :**
-1. Créer `src/app/api/trends/[id]/route.ts` :
-   - GET : détail d'une tendance
-   - (Optionnel) DELETE : supprimer une tendance (admin)
-2. Créer `src/app/api/niches/route.ts` :
-   - GET : lister toutes les niches
-   - POST : créer une niche (admin)
+
+1. **Staging environment :**
+   - Créer un projet Vercel staging (branch `staging`)
+   - Base de données PostgreSQL staging (Neon free tier)
+   - Variables d'environnement staging
+   - Déploiement automatique sur push vers `staging`
+
+2. **Tests pré-commit :**
+   - Configurer Husky pour exécuter `vitest run` avant chaque commit
+   - Configurer lint-staged pour `eslint` + `prettier` sur les fichiers modifiés
+   - Ajouter `npm run typecheck` (tsc --noEmit) au pipeline
+
+3. **GitHub Actions :**
+   - Workflow `ci.yml` :
+     - `pnpm install` → `pnpm lint` → `pnpm typecheck` → `pnpm test`
+     - S'exécute sur PR et push vers main/staging
+   - Workflow `deploy.yml` :
+     - Déploiement staging automatique (branch staging)
+     - Déploiement production manuel (tag ou workflow_dispatch)
+   - Workflow `security.yml` :
+     - Scan des vulnérabilités npm (pnpm audit)
+     - Scan des secrets (truffleHog ou gitLeaks)
+
+**Fichiers impactés :**
+
+| Fichier | Action |
+|---------|--------|
+| `.github/workflows/ci.yml` | NOUVEAU ou MODIFIÉ |
+| `.github/workflows/deploy.yml` | NOUVEAU ou MODIFIÉ |
+| `.github/workflows/security.yml` | NOUVEAU |
+| `.husky/pre-commit` | MODIFIÉ |
+| `.husky/pre-push` | NOUVEAU |
+| `.lintstagedrc.json` | MODIFIÉ ou NOUVEAU |
+| `package.json` (scripts) | MODIFIÉ — ajouter `typecheck`, `test:ci` |
+| `vercel.json` | MODIFIÉ — config staging |
+
+**Critères de succès :**
+- Un push sur `staging` déclenche automatiquement déploiement + tests
+- Un commit ne peut pas passer sans tests verts
+- Les dépendances vulnérables sont détectées en CI
 
 ---
 
-### 2.7 Ajouter le rate limiting
+## 6.4 Backup BDD automatisé + procédure DRP
 
-**Problème :**
-- Aucune protection contre les abus sur les routes API.
+**Problème :** Aucune sauvegarde de la base de données. En cas de corruption ou de suppression accidentelle, toutes les données sont perdues.
 
 **Action :**
-1. Créer `src/lib/rate-limit.ts` avec Upstash Redis :
-   ```typescript
-   import { redis } from "./redis"
 
-   export async function rateLimit(
-     identifier: string,
-     maxRequests: number = 10,
-     window: number = 60 // secondes
-   ): Promise<{ success: boolean }> {
-     const key = `ratelimit:${identifier}`
-     const current = await redis.incr(key)
-     if (current === 1) await redis.expire(key, window)
-     return { success: current <= maxRequests }
-   }
-   ```
-2. Appliquer sur toutes les routes API sensibles :
-   - `/api/trends`
-   - `/api/extension/trends`
-   - `/api/extension/auth`
-   - `/api/stripe/checkout`
-   - `/api/stripe/portal`
+1. **Backup automatisé :**
+   - Script `scripts/backup-db.sh` utilisant `pg_dump`
+   - Sauvegarde quotidienne vers un bucket S3/Backblaze B2
+   - Rétention : 7 jours de sauvegardes quotidiennes, 4 semaines de sauvegardes hebdomadaires
+   - Backup avant chaque migration Prisma (`prisma/preHook`)
+
+2. **Procédure DRP (Disaster Recovery Plan) :**
+   - Documenter dans `DRP.md` :
+     - URLs des services (production, staging)
+     - Accès BDD (provider, credentials)
+     - Procédure de restauration :
+       ```bash
+       # 1. Arrêter l'app
+       # 2. Restaurer la dernière sauvegarde
+       psql DATABASE_URL < backup_2026-06-09.sql
+       # 3. Vérifier l'intégrité
+       npx prisma db push --accept-data-loss
+       # 4. Redémarrer l'app
+       # 5. Vérifier les métriques
+       ```
+     - Contacts d'urgence
+     - Temps de restauration estimé (RTO) : 30 min
+     - Perte de données maximale acceptable (RPO) : 24h
+
+3. **Vérification mensuelle :**
+   - Script de test de restauration sur un environnement isolé
+   - Alerte si le backup n'a pas été fait depuis > 48h
+
+**Fichiers impactés :**
+
+| Fichier | Action |
+|---------|--------|
+| `scripts/backup-db.sh` | NOUVEAU |
+| `DRP.md` | NOUVEAU |
+| `package.json` | MODIFIÉ — ajouter script `backup` |
+
+**Critères de succès :**
+- Backup automatique quotidien fonctionnel
+- Procédure documentée testée trimestriellement
+- RTO < 30 min, RPO < 24h
 
 ---
 
-## P3 — Améliorations souhaitables
+# 5. Horizon long terme (mois 3-6)
 
-### 3.1 Mettre à jour PLAN.md ou le supprimer
+> **Effort total estimé :** 4-8 semaines
+> **Priorité :** FAIBLE — à planifier après les sprints 4-5-6
 
-**Problème :**
-- PLAN.md (3069 lignes) contient de nombreuses sections non implémentées, des incohérences avec le code réel.
+## 5.1 Storybook pour le design system
 
-**Action :**
-1. Option A : Réécrire PLAN.md pour refléter l'état actuel + les prochaines étapes (recommandé).
-2. Option B : Supprimer PLAN.md et utiliser REAMDE.md + IMPLEMENTATION_PLAN.md comme sources de vérité.
-
-### 3.2 Corriger `lang="en"` dans le layout racine
-
-**Problème :**
-- `src/app/layout.tsx` a `lang="en"` mais 100% de l'UI est en français.
+**Problème :** Le design system (`packages/youtube-trendhunter-ui`) n'est pas documenté. Pas de catalogue visuel des composants.
 
 **Action :**
-- Changer `lang="en"` → `lang="fr"` dans `src/app/layout.tsx`.
+1. Installer Storybook dans le package UI
+2. Documenter tous les composants existants (Button, Card, Badge, Input, etc.)
+3. Ajouter des stories pour les variantes, états (loading, error, empty, disabled)
+4. Ajouter des tests de régression visuelle (Chromatic ou Percy)
 
-### 3.3 Rendre les URLs de l'extension configurables
+**Fichiers impactés :**
+- `packages/youtube-trendhunter-ui/.storybook/` (nouveau)
+- `packages/youtube-trendhunter-ui/src/**/*.stories.tsx` (nouveaux)
 
-**Problème :**
-- `extension/background.js` et `extension/sidebar/index.html` ont `http://localhost:3000` en dur.
+## 5.2 Monitoring dashboard (métriques RED)
 
-**Action :**
-1. Créer un système de build simple (ou un fichier de config) pour injecter l'URL de l'API.
-2. Par défaut : `http://localhost:3000` en dev, `https://trendhunter.app` en prod.
-3. Option : utiliser le stockage `chrome.storage.sync` pour configurer l'URL depuis l'UI.
-
-### 3.4 Finir le content script de l'extension
-
-**Problème :**
-- `extension/content.js` = `console.log("TrendHunter loaded")` uniquement.
-
-**Action :**
-1. Analyser la page YouTube pour extraire :
-   - Titres des vidéos tendances
-   - Métriques (vues, likes)
-2. Envoyer les données à l'extension via `chrome.runtime.sendMessage`.
-3. Afficher un badge de score TrendHunter à côté des vidéos.
-
-### 3.5 Améliorer l'extension sidebar (contentAngles)
-
-**Problème :**
-- `extension/sidebar/app.js` affiche les tendances mais pas les `contentAngles` (pourtant envoyés par l'API).
+**Problème :** Les métriques RED (Rate, Errors, Duration) existent via `src/lib/observability.ts` mais :
+- Pas de persistance (perdu au redémarrage du serveur)
+- Pas de visualisation
+- Pas d'alertes
 
 **Action :**
-- Ajouter un affichage des angles de contenu dans le rendu des tendances :
+1. Stocker les métriques dans Redis (persistance entre les redémarrages)
+2. Ajouter des graphiques dans la page `/admin/monitoring`
+3. Configurer des alertes :
+   - Taux d'erreur > 5% sur 5 min → Slack
+   - Latence moyenne > 2s sur un endpoint → Slack
+   - pic de requêtes > 1000/min → Slack
+4. Dashboard temps réel avec rafraîchissement automatique (SSE ou polling 10s)
 
-### 3.6 Ajouter un système de tests
+**Fichiers impactés :**
+- `src/lib/observability.ts` (persistance Redis)
+- `src/app/(dashboard)/admin/page.tsx` (onglet Monitoring enrichi)
+- `src/lib/services/alert.service.ts` (alertes métier → opérationnelles)
 
-**Problème :**
-- Aucun test dans le projet (ni unitaire, ni intégration, ni e2e).
+## 5.3 Tests e2e (Playwright)
 
-**Action :**
-1. Installer Vitest :
-   ```bash
-   npm install -D vitest @testing-library/react @testing-library/jest-dom
-   ```
-2. Ajouter un script `test` dans `package.json`.
-3. Créer des tests pour :
-   - `src/lib/plan-check.ts` (logique métier)
-   - `src/lib/utils.ts` (utility)
-   - `src/components/ui/button.tsx` (composant)
-   - `src/app/api/stripe/webhook/route.ts` (route API)
-4. Créer un test d'intégration pour le webhook Stripe.
-
-### 3.7 Implémenter la gestion admin
-
-**Problème :**
-- PLAN.md prévoit un dashboard admin avec gestion des utilisateurs et des niches.
-- Aucune implémentation.
+**Problème :** 204 tests unitaires mais aucun test end-to-end. Les parcours critiques (auth, checkout, dashboard) ne sont pas testés dans leur intégralité.
 
 **Action :**
-1. Ajouter un rôle `ADMIN` dans l'enum `Plan` ou créer un champ `role` sur User.
-2. Créer `src/app/(admin)/` avec route guard.
-3. Pages : liste utilisateurs, gestion niches, vue globale des tendances.
+1. Installer Playwright
+2. Tester les parcours critiques :
+   - Landing page → inscription → dashboard
+   - Checkout Stripe → abonnement PRO → accès aux fonctionnalités
+   - Création d'alerte → modification → suppression
+   - Refresh des tendances → affichage dans le dashboard
+   - Extension Chrome (si possible)
+3. Exécuter les tests e2e en CI sur l'environnement staging
 
-### 3.8 Gérer le refresh / rotation des tokens API
+**Fichiers impactés :**
+- `e2e/` (nouveau dossier)
+- `e2e/auth.spec.ts`
+- `e2e/checkout.spec.ts`
+- `e2e/dashboard.spec.ts`
+- `e2e/alerts.spec.ts`
+- `.github/workflows/e2e.yml` (nouveau)
 
-**Problème :**
-- Les tokens API sont stockés en clair.
-- Pas d'expiration automatique.
-- Régénérer un token détruit tous les précédents.
+## 5.4 Autres améliorations
 
-**Action :**
-1. Ajouter une date d'expiration configurable sur les tokens.
-2. Ne pas supprimer tous les tokens lors de la génération — permettre plusieurs tokens par utilisateur.
-3. Ajouter la possibilité de nommer/révoquer des tokens individuellement.
+### 5.4.1 URLs extension configurables
+- Remplacer les URLs en dur (`http://localhost:3000`) par une config build
+- Utiliser `chrome.storage.sync` pour l'URL de l'API
+- Valeurs par défaut : dev → `http://localhost:3000`, prod → `https://trendhunter.app`
 
-### 3.9 Ajouter une API CORS configurable
+### 5.4.2 Content script extension enrichi
+- Analyser la page YouTube pour extraire les métriques des vidéos
+- Afficher un badge de score TrendHunter à côté des vidéos
+- Envoyer les données à la sidebar
 
-**Problème :**
-- Pas de gestion CORS, l'extension communique avec l'API sans en-têtes CORS parce que le backend Next.js les gère implicitement.
+### 5.4.3 ContentAngles dans la sidebar extension
+- Actuellement les `contentAngles` sont envoyés par l'API mais pas affichés
+- Ajouter un affichage dans le rendu des tendances
 
-**Action :**
-1. Créer `src/lib/cors.ts` :
-   ```typescript
-   export const corsHeaders = {
-     "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-   }
-   ```
-2. Ajouter les headers CORS sur toutes les routes API.
-3. Gérer les requêtes OPTIONS (preflight) pour l'extension Chrome.
+### 5.4.4 Gestion des tokens API avancée
+- Permettre de nommer les tokens
+- Filtrer par statut (actif/expiré/révoqué)
+- Ajouter un scope par niche
+- Interface utilisateur dans `/settings/api`
+
+### 5.4.5 Mettre à jour PLAN.md
+- Le fichier `PLAN.md` (3069 lignes) contient des sections non implémentées
+- Option A : Réécrire pour refléter l'état actuel
+- Option B : Supprimer et utiliser README.md + IMPLEMENTATION_PLAN.md
 
 ---
 
-## Résumé des priorités
-
-| Priorité | Tâches | Effort estimé |
-|----------|--------|---------------|
-| **P0** | 3 corrections bloquantes | 1 jour |
-| **P1** | 5 corrections urgentes | 2 jours |
-| **P2** | 7 implémentations importantes | 5 jours |
-| **P3** | 9 améliorations souhaitables | 5 jours |
-| **Total** | **24 tâches** | **~13 jours** |
-
----
-
-## Dépendances entre tâches
+# 6. Dépendances entre sprints
 
 ```mermaid
 graph TD
-    %% P0 - Base
-    P0_1[0.1 Aligner provider DB] --> P0_2[0.2 Contrainte unique Trend]
-    P0_1 --> P0_3[0.3 Supprimer password en dur]
+    %% Sprint 4 — Sécurité
+    S4_1[4.1 Valider priceId Stripe] --> S5_1[5.1 Package types]
+    S4_2[4.2 Anti-SSRF webhook] --> S6_2[6.2 Anti-corruption Stripe]
+    S4_3[4.3 Filtrer données perso extension] --> S5_1
+    S4_4[4.4 Validation Zod routes] --> S5_2[5.2 Nettoyer services]
     
-    %% P1 - Sécurité & qualité
-    P0_1 --> P1_1[1.1 Securiser webhook Stripe]
-    P1_1 --> P1_4[1.4 Typer le webhook]
-    P0_3 --> P1_5[1.5 Supprimer gh.sh/gh.ps1]
-    P1_2[1.2 Validation Zod Claude] --> P2_5[2.5 Notifications email]
-    P1_3[1.3 Singleton Prisma] --> P2_3[2.3 Cache Redis]
+    %% Sprint 5 — Court terme
+    S5_1 --> S5_3[5.3 Supprimer gh.sh/gh.ps1]
+    S5_2 --> S6_1[6.1 Scoring asynchrone]
     
-    %% P2 - Fonctionnalités
-    P0_2 --> P2_1[2.1 Finir Alertes]
-    P0_2 --> P2_2[2.2 Finir Niches]
-    P1_3 --> P2_3
-    P2_3 --> P2_7[2.7 Rate limiting]
-    P2_4[2.4 .env.example] --> P2_5
-    P2_6[2.6 API routes manquantes]
+    %% Sprint 6 — Moyen terme
+    S6_1 --> S5_2
+    S6_2 --> S6_3[6.3 CI/CD]
+    S6_3 --> S6_4[6.4 Backup BDD]
     
-    %% P3 - Améliorations
-    P2_1 --> P3_5[3.5 Extension contentAngles]
-    P2_2 --> P3_7[3.7 Gestion admin]
-    P2_5 --> P3_6[3.6 Tests]
-    P2_7 --> P3_9[3.9 CORS]
-    P3_1[3.1 Mettre à jour PLAN.md]
-    P3_2[3.2 Corriger lang]
-    P3_3[3.3 URLs extension configurables]
-    P3_4[3.4 Content script extension]
-    P3_8[3.8 Rotation tokens]
+    %% Long terme
+    S6_3 --> L5_3[5.3 Tests e2e]
+    S5_1 --> L5_1[5.1 Storybook]
+    S6_2 --> L5_2[5.2 Monitoring dashboard]
+    S6_1 --> L5_4[5.4 Autres améliorations]
+```
+
+## Ordre d'exécution recommandé
+
+```
+Sprint 4 ────────────────────── Sprint 5 ────────────── Sprint 6 ─────────── Long terme
+                                                                             
+4.1 priceId     ─────→  5.1 Package types     ─────→  6.1 Scoring async    ──→  5.3 Tests e2e
+4.2 Anti-SSRF   ─────→                         ─────→  6.2 Anti-corruption  ──→  5.2 Monitoring
+4.3 Données     ─────→  5.2 Nettoyer services  ─────→  6.3 CI/CD            ──→  5.1 Storybook
+4.4 Zod routes  ─────→  5.3 gh.sh/gh.ps1       ─────→  6.4 Backup BDD       ──→  5.4 Autres
 ```
 
 ---
 
-*Plan généré le 4 juin 2026 depuis REVIEW.md.*
+# 7. Annexe : état des lieux après Sprints 1-2-3
+
+## 7.1 Fichiers créés
+
+| Fichier | Sprint | Objectif |
+|---------|--------|----------|
+| `src/lib/schemas.ts` (étendu) | 1 | TrendScoreSchema Zod |
+| `src/lib/api-error.ts` | 2 | Format d'erreur API uniforme |
+| `src/lib/retry.ts` | 2 | `withRetry()` helper avec backoff + timeout |
+| `src/lib/services/trend.service.ts` | 3 | Repository Trend |
+| `src/lib/services/niche.service.ts` | 3 | Repository Niche |
+| `src/lib/services/alert.service.ts` | 3 | Repository Alert |
+| `src/lib/services/subscription.service.ts` | 3 | Repository Subscription |
+| `src/lib/services/user.service.ts` | 3 | Repository User |
+| `src/lib/observability.ts` | 3 | RED metrics collector |
+| `src/proxy.ts` | 3 | Next.js 16 proxy (middleware) |
+| `src/app/api/admin/metrics/route.ts` | 3 | Endpoint métriques admin |
+| `src/lib/types/trend.types.ts` | 3 | Types Trend unifiés |
+| `src/lib/types/api.types.ts` | 3 | Types API unifiés |
+| `src/lib/types/plan.types.ts` | 3 | Types Plan unifiés |
+| `src/lib/types/index.ts` | 3 | Barrel export |
+
+## 7.2 Fichiers modifiés
+
+| Fichier | Sprint | Changement |
+|---------|--------|------------|
+| `scripts/setup-mysql.js` | 1 | Password → vars d'env |
+| `src/lib/api-tokens.ts` | 1 | Hash SHA-256 |
+| `src/app/api/stripe/webhook/route.ts` | 1,2 | 7 statuts Stripe + retry |
+| `src/lib/trend-scorer.ts` | 1,2,3 | Validation Zod + retry + types |
+| `prisma/seed.ts` | 1 | upsert statt create+catch |
+| `src/app/layout.tsx` | 1 | `lang="fr"` |
+| `src/components/theme-toggle.tsx` | 1 | aria-label |
+| `src/components/dashboard/sidebar.tsx` | 1 | aria-label navigation |
+| `src/app/api/trends/route.ts` | 1,2,3 | Limites plan + cache + pagination + rate-limit + api-error + services |
+| `src/lib/plan-check.ts` | 1,3 | Suppression session shortcut + types |
+| `.env.example` | 2 | HEALTH_CHECK_SECRET, ADMIN_EMAILS |
+| `src/lib/stripe.ts` | 2 | Timeout + maxNetworkRetries |
+| `src/app/(dashboard)/home/page.tsx` | 2,3 | Cache Redis + services |
+| `src/app/(dashboard)/my-niches/page.tsx` | 2,3 | Cache Redis + services |
+| `src/app/(dashboard)/alerts/page.tsx` | 3 | Services |
+| `src/app/(dashboard)/admin/page.tsx` | 3 | Services |
+| `src/app/api/niches/route.ts` | 2,3 | Cache + pagination + rate-limit + services |
+| `src/app/api/alerts/route.ts` | 2,3 | Rate-limit + services |
+| `src/app/api/extension/auth/route.ts` | 2 | Rate-limit |
+| `src/app/api/extension/trends/route.ts` | 2,3 | Cache + pagination + services |
+| `src/app/api/trends/refresh/route.ts` | 2 | Rate-limit + api-error |
+| `src/app/api/niches/[id]/route.ts` | 2 | Rate-limit |
+| `src/youtube-trendhunter-extension/shared/types/index.ts` | 3 | JSDoc + consistency |
+
+## 7.3 Fichiers supprimés
+
+| Fichier | Sprint | Raison |
+|---------|--------|--------|
+| `src/lib/feature-flags.disabled/` (7 fichiers) | 2 | Code mort non utilisé |
+
+## 7.4 Fichiers non modifiés (mais pertinents)
+
+| Fichier | Raison |
+|---------|--------|
+| `src/lib/prisma.ts` | Singleton déjà implémenté |
+| `src/lib/redis.ts` | Stub déjà complet, activé dans Sprint 2 |
+| `src/lib/rate-limit.ts` | Stub déjà complet, activé dans Sprint 2 |
+
+## 7.5 Couverture de tests (204 tests)
+
+| Fichier de test | Tests | Couvre |
+|-----------------|-------|--------|
+| `lib/__tests__/get-user-plan.test.ts` | 12 | getUserPlan + activateTrial |
+| `lib/__tests__/trend-scorer.test.ts` | 18 | ScoreTrend + ScoreVideo + Zod + fallbacks |
+| `lib/__tests__/plan-check.test.ts` | 9 | PLAN_LIMITS |
+| `lib/__tests__/plan-check-extended.test.ts` | 11 | isOnTrial + getTrialDaysRemaining |
+| `lib/__tests__/plan-check-integration.test.ts` | 4 | PLAN_LIMITS intégration |
+| `lib/__tests__/schemas.test.ts` | 16 | 6 schémas Zod |
+| `lib/__tests__/schemas-extended.test.ts` | 10 | trendsRefresh + extensionAuth |
+| `lib/__tests__/schemas-trendscore.test.ts` | 18 | TrendScoreSchema |
+| `lib/__tests__/api-tokens.test.ts` | 30 | hash, generate, parse, verify, create, revoke, list, cleanup |
+| `lib/__tests__/plans.test.ts` | 16 | Plans display data |
+| `lib/__tests__/analytics.test.ts` | 20 | User lifecycle, onboarding, events, identify |
+| `app/__tests__/layout-accessibility.test.tsx` | 10 | lang, aria, metadata, OpenGraph |
+| `components/__tests__/theme-toggle-accessibility.test.tsx` | 10 | aria-label, rôle, clavier |
+| `prisma/__tests__/seed.test.ts` | 13 | Upsert, doublons, admin, cleanup |
+
+---
+
+*Plan d'implémentation généré le 9 juin 2026 — basé sur REVIEW.md + Sprints 1-2-3 exécutés.*

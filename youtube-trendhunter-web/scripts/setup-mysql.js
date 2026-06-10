@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+// ============================================
+// MySQL Setup Script
+// Lit les identifiants depuis les variables d'environnement.
+// Voir .env.example pour la configuration requise.
+// ============================================
+
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -21,24 +27,37 @@ function checkMySQL() {
   }
 }
 
-function getMysqlPassword() {
-  return process.env.MYSQL_PASSWORD || "";
+function getMysqlCredentials() {
+  const user = process.env.MYSQL_USER || "root";
+  const password = process.env.MYSQL_PASSWORD;
+
+  if (!password) {
+    console.error("❌ MYSQL_PASSWORD non définie");
+    console.log("");
+    console.log("  Veuillez définir la variable d'environnement MYSQL_PASSWORD :");
+    console.log("    export MYSQL_PASSWORD=votre_mot_de_passe");
+    console.log("  Ou créez un fichier .env.local à partir de .env.example :");
+    console.log("    cp .env.example .env.local");
+    console.log("    # puis éditez MYSQL_PASSWORD dans .env.local");
+    console.log("");
+    process.exit(1);
+  }
+
+  return { user, password };
 }
 
 function createDatabase() {
   try {
     console.log("📊 Creating database...");
-    const password = getMysqlPassword();
-    const auth = password ? `-p${password}` : "";
-    const createDbCommand = `mysql -u root ${auth} -e "CREATE DATABASE IF NOT EXISTS trendhunter; SHOW DATABASES;"`;
+    const { user, password } = getMysqlCredentials();
+    const createDbCommand = `mysql -u ${user} -p${password} -e "CREATE DATABASE IF NOT EXISTS trendhunter; SHOW DATABASES;"`;
     execSync(createDbCommand, { stdio: "inherit" });
 
     console.log('✅ Database "trendhunter" created successfully');
     return true;
   } catch (error) {
     console.error("❌ Failed to create database");
-    console.log("Make sure MySQL is running and credentials are correct");
-    console.log("Set MYSQL_PASSWORD env variable or run without password");
+    console.log("Make sure MySQL is running and MYSQL_PASSWORD is correct");
     return false;
   }
 }
@@ -125,8 +144,6 @@ function main() {
   console.log("• Host: localhost");
   console.log("• Port: 3306");
   console.log("• Database: trendhunter");
-  console.log("• User: root");
-  console.log("• Password: azerty123");
 }
 
 main();

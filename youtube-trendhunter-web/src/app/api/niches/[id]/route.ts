@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserPlan } from "@/lib/plan-check";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { auditLog } from "@/lib/audit-log";
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

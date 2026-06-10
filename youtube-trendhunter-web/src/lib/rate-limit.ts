@@ -22,12 +22,10 @@ export async function withRateLimit(
   const { max, window } = limits[type];
 
   try {
-    const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, window);
-    }
-
-    const remaining = Math.max(0, max - current);
+    // Atomic rate-limit: SET NX creates key + expiry atomically for first request;
+    // subsequent requests just INCR.
+    const created = await redis.set(key, 1, { ex: window, nx: true });
+    const current = created === "OK" ? 1 : await redis.incr(key);
 
     if (current > max) {
       const ttl = await redis.ttl(key);
@@ -47,10 +45,7 @@ export async function withRateLimit(
     return null;
   } catch (error) {
     console.error("[RateLimit] Redis error, denying request:", error);
-    return NextResponse.json(
-      { error: "Service temporairement indisponible" },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "Service temporairement indisponible" }, { status: 503 });
   }
 }
 
@@ -60,9 +55,10 @@ export async function checkRateLimit(
   type: RateLimitType = "general",
 ): Promise<boolean> {
   const limit = limits[type];
+  const redisKey = `ratelimit:${key}:${type}`;
   try {
-    const current = await redis.incr(`ratelimit:${key}:${type}`);
-    if (current === 1) await redis.expire(`ratelimit:${key}:${type}`, limit.window);
+    const created = await redis.set(redisKey, 1, { ex: limit.window, nx: true });
+    const current = created === "OK" ? 1 : await redis.incr(redisKey);
     return current <= limit.max;
   } catch {
     return false;

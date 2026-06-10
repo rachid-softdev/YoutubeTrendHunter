@@ -19,5 +19,15 @@
       }
     ]
   },
-  "exclude": ["node_modules", "youtube-trendhunter-web/node_modules", "youtube-trendhunter-desktop/node_modules", "youtube-trendhunter-extension/node_modules", "youtube-trendhunter-mobile/node_modules", "packages/*/node_modules"]
+  "exclude": [
+    "node_modules",
+    "youtube-trendhunter-web/node_modules",
+    "youtube-trendhunter-desktop/node_modules",
+    "youtube-trendhunter-extension/node_modules",
+    "youtube-trendhunter-mobile/node_modules",
+    "packages/*/node_modules",
+    "scripts",
+    "e2e",
+    "playwright.config.ts"
+  ]
 }

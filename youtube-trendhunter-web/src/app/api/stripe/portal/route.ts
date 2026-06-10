@@ -1,12 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
-import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { portalSessionSchema } from "@/lib/schemas";
+import { stripeAdapter } from "@/lib/payment/stripe-adapter";
+import { ValidationError, UnauthorizedError, InternalError } from "@/lib/api-error";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    return UnauthorizedError();
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const parsed = portalSessionSchema.safeParse(body);
+  if (!parsed.success) {
+    return ValidationError("Données invalides", parsed.error.flatten());
   }
 
   const user = await prisma.user.findUnique({
@@ -15,13 +23,17 @@ export async function POST() {
   });
 
   if (!user?.stripeCustomerId) {
-    return NextResponse.json({ error: "Aucun abonnement" }, { status: 400 });
+    return Response.json({ error: "Aucun abonnement" }, { status: 400 });
   }
 
-  const portalSession = await stripe.billingPortal.sessions.create({
-    customer: user.stripeCustomerId,
-    return_url: `${process.env.NEXTAUTH_URL}/billing`,
-  });
-
-  return NextResponse.json({ url: portalSession.url });
+  try {
+    const result = await stripeAdapter.createPortalSession({
+      customerId: user.stripeCustomerId,
+      returnUrl: parsed.data.returnUrl ?? `${process.env.NEXTAUTH_URL}/billing`,
+    });
+    return Response.json({ url: result.url });
+  } catch (err) {
+    console.error("[Portal] Failed:", err);
+    return InternalError();
+  }
 }
