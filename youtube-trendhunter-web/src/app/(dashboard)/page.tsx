@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserPlan } from "@/lib/plan-check";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { TrendCard } from "@/components/dashboard/trend-card";
 import { NicheSelector } from "@/components/dashboard/niche-selector";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";

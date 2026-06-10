@@ -30,7 +30,7 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
         </Link>
       </div>
 
-      <nav className="space-y-1 flex-1">
+      <nav className="space-y-1 flex-1" aria-label="Navigation principale">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;

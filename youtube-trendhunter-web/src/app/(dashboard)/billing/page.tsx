@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getUserPlan } from "@/lib/plan-check";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { ManageSubscriptionButton } from "@/components/dashboard/manage-subscription-button";
 import { GenerateTokenButton } from "@/components/dashboard/generate-token-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -47,16 +47,15 @@ export default async function BillingPage() {
         <CardHeader>
           <CardTitle>Token API — Extension Chrome</CardTitle>
           <CardDescription>
-            Utilisez ce token pour connecter l'extension TrendHunter à votre compte.
+            Utilisez ce token pour connecter l&rsquo;extension TrendHunter à votre compte.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {apiToken && (
             <div className="mb-4">
               <p className="text-sm text-dark-ink-secondary mb-2">
-                Dernier token créé le{" "}
-                {apiToken.createdAt.toLocaleDateString("fr-FR")}.
-                Le token complet est affiché uniquement lors de la création.
+                Dernier token créé le {apiToken.createdAt.toLocaleDateString("fr-FR")}. Le token
+                complet est affiché uniquement lors de la création.
               </p>
             </div>
           )}

@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
-  Play,
   Users,
   CreditCard,
   TrendingUp,
@@ -17,24 +16,29 @@ import {
   Ban,
   CheckCircle,
   XCircle,
-  RefreshCw,
-  AlertTriangle,
   Activity,
   Database,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getRecentUsers } from "@/lib/services/user.service";
+import { getAllNichesWithCounts } from "@/lib/services/niche.service";
+import { getActiveTrendCount } from "@/lib/services/trend.service";
+import { getActiveAlertCount } from "@/lib/services/alert.service";
+import { getUserCount } from "@/lib/services/user.service";
+import { getNicheCount } from "@/lib/services/niche.service";
+import { getSubscriptionCount, countByPlan } from "@/lib/services/subscription.service";
+import MonitoringTab from "./monitoring-tab";
 
 export const metadata: Metadata = {
   title: "Administration - TrendHunter",
 };
 
 const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [];
-
-type TabType = "overview" | "users" | "revenue" | "logs" | "niches" | "monitoring";
 
 interface TabProps {
   params: Promise<{ tab?: string }>;
@@ -60,13 +64,13 @@ export default async function AdminPage({ params }: TabProps) {
     activeAlerts,
     totalNiches,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.subscription.count(),
-    prisma.subscription.count({ where: { plan: "PRO" } }),
-    prisma.subscription.count({ where: { plan: "TEAM" } }),
-    prisma.trend.count({ where: { expiresAt: { gt: new Date() } } }),
-    prisma.alert.count({ where: { isActive: true } }),
-    prisma.niche.count(),
+    getUserCount(),
+    getSubscriptionCount(),
+    countByPlan("PRO"),
+    countByPlan("TEAM"),
+    getActiveTrendCount(),
+    getActiveAlertCount(),
+    getNicheCount(),
   ]);
 
   const mrrEstimate = proCount * 15 + teamCount * 39;
@@ -156,7 +160,7 @@ function NavTab({
 }: {
   href: string;
   active: boolean;
-  icon: any;
+  icon: LucideIcon;
   label: string;
 }) {
   return (
@@ -266,14 +270,7 @@ function OverviewTab({
 
 // ============ USERS TAB ============
 async function UsersTab() {
-  const users = await prisma.user.findMany({
-    take: 50,
-    orderBy: { createdAt: "desc" },
-    include: {
-      subscription: true,
-      _count: { select: { alerts: true, apiTokens: true } },
-    },
-  });
+  const users = await getRecentUsers(50);
 
   return (
     <div className="space-y-6">
@@ -375,8 +372,6 @@ function RevenueTab({
 
   // Revenue mensuel simulé
   const monthlyRevenue = [450, 600, 750, 900, 1050, 1200];
-  const maxMonthly = Math.max(...monthlyRevenue);
-
   return (
     <div className="space-y-6">
       {/* MRR Card */}
@@ -569,12 +564,7 @@ async function LogsTab() {
 
 // ============ NICHES TAB ============
 async function NichesTab() {
-  const niches = await prisma.niche.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      _count: { select: { trends: true, alerts: true } },
-    },
-  });
+  const niches = await getAllNichesWithCounts();
 
   return (
     <div className="space-y-6">
@@ -630,131 +620,4 @@ async function NichesTab() {
   );
 }
 
-// ============ MONITORING TAB ============
-function MonitoringTab() {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* API Health */}
-        <Card className="bg-dark-surface border-hairline-dark">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              API Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">Opérationnelle</p>
-            <p className="text-dark-ink-secondary text-sm">Toutes les routes OK</p>
-          </CardContent>
-        </Card>
-
-        {/* Database */}
-        <Card className="bg-dark-surface border-hairline-dark">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              Base de données
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">Connectée</p>
-            <p className="text-dark-ink-secondary text-sm">PostgreSQL - 0ms</p>
-          </CardContent>
-        </Card>
-
-        {/* Redis */}
-        <Card className="bg-dark-surface border-hairline-dark">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              Cache Redis
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">Opérationnel</p>
-            <p className="text-dark-ink-secondary text-sm">Upstash - OK</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Cron Status */}
-      <Card className="bg-dark-surface border-hairline-dark">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RefreshCw className="w-5 h-5" />
-            État des Tâches Cron
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center p-3 bg-dark-canvas rounded-lg">
-              <div>
-                <p className="font-medium">Trend Processing</p>
-                <p className="text-xs text-dark-ink-tertiary">Tous les jours à 00:00</p>
-              </div>
-              <Badge variant="outline">Planifié</Badge>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-dark-canvas rounded-lg">
-              <div>
-                <p className="font-medium">Alert Check</p>
-                <p className="text-xs text-dark-ink-tertiary">Toutes les heures</p>
-              </div>
-              <Badge variant="outline">Planifié</Badge>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-dark-canvas rounded-lg">
-              <div>
-                <p className="font-medium">Trend Cleanup</p>
-                <p className="text-xs text-dark-ink-tertiary">Tous les jours à 04:00</p>
-              </div>
-              <Badge variant="outline">Planifié</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Errors Card */}
-      <Card className="bg-dark-surface border-hairline-dark">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-yellow-500" />
-            Erreurs Récentes (Sentry)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-dark-ink-secondary">
-            <p>Aucune erreur récente</p>
-            <p className="text-sm">Le monitoring Sentry est configuré</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* External Services */}
-      <Card className="bg-dark-surface border-hairline-dark">
-        <CardHeader>
-          <CardTitle>Services Externes</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center p-2">
-              <span>Stripe</span>
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connecté</Badge>
-            </div>
-            <div className="flex justify-between items-center p-2">
-              <span>YouTube API</span>
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connecté</Badge>
-            </div>
-            <div className="flex justify-between items-center p-2">
-              <span>Anthropic (Claude)</span>
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connecté</Badge>
-            </div>
-            <div className="flex justify-between items-center p-2">
-              <span>Resend (Email)</span>
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Connecté</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+// MonitoringTab is imported from ./monitoring-tab (client component)

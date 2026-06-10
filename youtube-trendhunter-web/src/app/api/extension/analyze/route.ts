@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyApiToken } from "@/lib/api-tokens";
-import { getUserPlan } from "@/lib/plan-check";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { getVideoStats, getVideoDetails } from "@/lib/youtube";
 import { scoreVideo } from "@/lib/trend-scorer";
 import { withRateLimit } from "@/lib/rate-limit";
