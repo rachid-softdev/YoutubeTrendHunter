@@ -88,4 +88,25 @@ export const TrendScoreSchema = z.object({
   reasoning: z.string().optional(),
 });
 
+// ─── Portal ───
+export const portalSchema = z.object({
+  customerId: z.string().min(1, "Customer ID requis"),
+  returnUrl: z.string().url("URL de retour invalide").optional(),
+});
+
+// ─── User Export (body/advanced) ───
+export const userExportSchema = z.object({
+  format: z.enum(["json", "csv"]).optional().default("json"),
+  trends: z.coerce.boolean().optional().default(false),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+});
+
+// ─── Job Processing ───
+export const processJobsSchema = z.object({
+  jobTypes: z.array(z.enum(["TREND_SCORE", "VIDEO_SCORE"])).optional(),
+  maxJobs: z.number().int().min(1).max(100).optional().default(10),
+  workerId: z.string().optional(),
+});
+
 export { z };

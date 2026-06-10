@@ -5,7 +5,7 @@ import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/retry";
 import { stripe } from "@/lib/stripe";
-import { getPlanFromPriceId } from "./stripe-config";
+import { getPeriodEnd, getPlanFromPriceId } from "./stripe-config";
 import { mapStripeStatus } from "./stripe-status-mapper";
 import type { WebhookResult } from "./provider";
 
@@ -51,13 +51,13 @@ const handlers: Record<string, WebhookEventHandler> = {
         userId,
         stripeSubscriptionId: sub.id,
         stripePriceId: priceId,
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         plan,
         status: "ACTIVE",
       },
       update: {
         stripePriceId: priceId,
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         plan,
         status: "ACTIVE",
       },
@@ -100,7 +100,7 @@ const handlers: Record<string, WebhookEventHandler> = {
     await prisma.subscription.update({
       where: { userId },
       data: {
-        stripeCurrentPeriodEnd: new Date(sub.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(sub) * 1000),
         status: "ACTIVE",
       },
     });
@@ -127,13 +127,13 @@ const handlers: Record<string, WebhookEventHandler> = {
         stripePriceId: priceId,
         plan,
         status,
-        stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
       },
       update: {
         stripePriceId: priceId,
         plan,
         status,
-        stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
       },
     });
 
