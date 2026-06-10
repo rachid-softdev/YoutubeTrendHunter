@@ -30,7 +30,10 @@ export async function invalidateCache(pattern: string): Promise<void> {
     const keys: string[] = [];
     let cursor: number | string = 0;
     do {
-      const result = await redis.scan(cursor, { match: pattern, count: 100 });
+      const result = (await redis.scan(cursor, { match: pattern, count: 100 })) as [
+        string,
+        string[],
+      ];
       cursor = result[0];
       keys.push(...(result[1] as string[]));
     } while (Number(cursor) !== 0);

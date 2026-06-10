@@ -25,6 +25,22 @@ export function rateLimitKey(identifier: string): string {
   return `ratelimit:${identifier}`;
 }
 
+// ── Cache Key Builders ──
+
+export const cacheKeys = {
+  trends: (nicheSlug: string, plan: string) => `trends:list:${nicheSlug}:${plan}`,
+  niches: (plan: string) => `niches:list:${plan}`,
+  alerts: (userId: string) => `alerts:${userId}`,
+};
+
+// ── Cache TTL (seconds) ──
+
+export const cacheTTL = {
+  trends: 300,
+  niches: 600,
+  alerts: 120,
+};
+
 // ── Re-exported helpers ──
 
 export { getCached, setCached, invalidateCache };

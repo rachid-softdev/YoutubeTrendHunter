@@ -137,7 +137,8 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
   describe("FREE Plan Limits", () => {
     it("limite FREE à 5 tendances max, même si la BDD en a plus", async () => {
       vi.mocked(prisma.userNiche.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }) => {
+      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
+      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
         // Simule que la BDD a 100 tendances mais que take force à 5
         const fullList = Array.from({ length: 100 }, (_, i) => ({
           id: `trend-${i}`,
@@ -150,15 +151,16 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true, 100);
 
       expect(result.status).toBe(200);
-      expect(result.body.trends).toHaveLength(5);
-      expect(result.body.plan).toBe("FREE");
+      expect(result.body!.trends).toHaveLength(5);
+      expect(result.body!.plan).toBe("FREE");
     });
 
     it("limite FREE à 5 même avec un client qui demande limit=100", async () => {
       // Le paramètre limit du client n'est pas parsé par la route →
       // la limite est toujours contrôlée par le serveur.
       vi.mocked(prisma.userNiche.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }) => {
+      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
+      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
         const bigList = Array.from({ length: 50 }, (_, i) => ({
           id: `t-${i}`,
           title: `Trend ${i}`,
@@ -170,7 +172,7 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true, 50);
 
       expect(result.status).toBe(200);
-      expect(result.body.trends.length).toBeLessThanOrEqual(5);
+      expect(result.body?.trends?.length).toBeLessThanOrEqual(5);
     });
 
     it("bloque FREE si la niche est déjà suivie", async () => {
@@ -185,7 +187,8 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
 
   describe("PRO Plan Limits", () => {
     it("limite PRO à 20 tendances max", async () => {
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }) => {
+      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
+      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
         const bigList = Array.from({ length: 100 }, (_, i) => ({
           id: `trend-${i}`,
           title: `Pro Trend ${i}`,
@@ -197,8 +200,8 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true, 50);
 
       expect(result.status).toBe(200);
-      expect(result.body.trends).toHaveLength(20);
-      expect(result.body.plan).toBe("PRO");
+      expect(result.body!.trends).toHaveLength(20);
+      expect(result.body!.plan).toBe("PRO");
     });
 
     it("ne bloque pas les PRO sur les niches multiples", async () => {
@@ -214,13 +217,14 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true, 3);
 
       expect(result.status).toBe(200);
-      expect(result.body.trends.length).toBeLessThanOrEqual(20);
+      expect(result.body?.trends?.length).toBeLessThanOrEqual(20);
     });
   });
 
   describe("TEAM Plan Limits", () => {
     it("limite TEAM à 20 tendances (comme PRO)", async () => {
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }) => {
+      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
+      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
         return Array.from({ length: take ?? 0 }, (_, i) => ({
           id: `t-${i}`,
           title: `Team Trend ${i}`,
@@ -231,7 +235,7 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       const result = await simulateTrendsHandler({ user: { id: "user-team" } }, "TEAM", true, 30);
 
       expect(result.status).toBe(200);
-      expect(result.body.trends).toHaveLength(20);
+      expect(result.body!.trends).toHaveLength(20);
     });
   });
 

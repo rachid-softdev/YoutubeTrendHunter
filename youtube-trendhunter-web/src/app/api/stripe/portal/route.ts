@@ -3,9 +3,13 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { portalSessionSchema } from "@/lib/schemas";
 import { stripeAdapter } from "@/lib/payment/stripe-adapter";
+import { withRateLimit } from "@/lib/rate-limit";
 import { ValidationError, UnauthorizedError, InternalError } from "@/lib/api-error";
 
 export async function POST(req: NextRequest) {
+  const rateLimitResponse = await withRateLimit(req, "auth");
+  if (rateLimitResponse) return rateLimitResponse;
+
   const session = await auth();
   if (!session?.user?.id) {
     return UnauthorizedError();

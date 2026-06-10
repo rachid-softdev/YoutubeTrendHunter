@@ -7,7 +7,7 @@ export function getPeriodEnd(
 ): number {
   return "current_period_end" in sub
     ? (sub as Record<string, number>)["current_period_end"]
-    : sub.currentPeriodEnd;
+    : ((sub as unknown as { currentPeriodEnd?: number }).currentPeriodEnd ?? 0);
 }
 
 /**

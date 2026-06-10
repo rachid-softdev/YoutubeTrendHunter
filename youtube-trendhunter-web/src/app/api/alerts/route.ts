@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
 import { alertCreateSchema } from "@/lib/schemas";
 import { auditLog } from "@/lib/audit-log";
+import { getCached, setCached, cacheKeys, cacheTTL, invalidateCache } from "@/lib/cache";
 import { withRateLimit } from "@/lib/rate-limit";
 import {
   UnauthorizedError,
@@ -27,18 +28,30 @@ export async function GET(req: NextRequest) {
     const plan = await getUserPlan(session.user.id);
     const limits = PLAN_LIMITS[plan];
 
+    // Check cache for this user's alerts
+    const cacheKey = cacheKeys.alerts(session.user.id);
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     // Execute all queries in parallel for better performance
     const [alerts, userNiches] = await Promise.all([
       getUserAlerts(session.user.id),
       getUserNiches(session.user.id),
     ]);
 
-    return NextResponse.json({
+    const data = {
       alerts,
       userNiches,
       plan,
       canCreate: limits.alerts,
-    });
+    };
+
+    // Cache the response
+    await setCached(cacheKey, data, cacheTTL.alerts);
+
+    return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching alerts:", error);
     return InternalError();
@@ -99,6 +112,9 @@ export async function POST(req: NextRequest) {
       niche: nicheId || "all",
       plan,
     });
+
+    // Invalidate cached alerts for this user
+    await invalidateCache(cacheKeys.alerts(session.user.id));
 
     // Fetch the alert with niche for response
     const fullAlert = await getAlertById(alert.id);

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
 import { trendsQuerySchema } from "@/lib/schemas";
-import { getCached, setCached } from "@/lib/redis";
+import { getCached, setCached, cacheKeys, cacheTTL } from "@/lib/cache";
 import { withRateLimit } from "@/lib/rate-limit";
 import { UnauthorizedError, ValidationError, NotFoundError, ForbiddenError } from "@/lib/api-error";
 
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   // Check cache only for first page (no cursor)
   if (!cursor) {
-    const cacheKey = `trends:list:${parsed.data.niche}:${plan}`;
+    const cacheKey = cacheKeys.trends(parsed.data.niche, plan);
     const cached = await getCached(cacheKey);
     if (cached) {
       return NextResponse.json(cached);
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
   // Cache only the first page
   if (!cursor) {
-    await setCached(`trends:list:${parsed.data.niche}:${plan}`, result, 300);
+    await setCached(cacheKeys.trends(parsed.data.niche, plan), result, cacheTTL.trends);
   }
 
   return NextResponse.json(result);

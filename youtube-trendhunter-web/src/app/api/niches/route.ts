@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
 import { auditLog } from "@/lib/audit-log";
 import { z } from "@/lib/schemas";
-import { getCached, setCached } from "@/lib/redis";
+import { getCached, setCached, cacheKeys, cacheTTL, invalidateCache } from "@/lib/cache";
 import { withRateLimit } from "@/lib/rate-limit";
 import {
   UnauthorizedError,
@@ -51,11 +51,12 @@ export async function GET(req: NextRequest) {
     const allFollowed = await getAllFollowedNicheIds(session.user.id);
 
     // Get all available niches (public/static — cache for 10 min)
-    const cacheKey = "niches:public";
+    const plan = await getUserPlan(session.user.id);
+    const cacheKey = cacheKeys.niches(plan);
     let availableNiches = await getCached<{ id: string; name: string; slug: string }[]>(cacheKey);
     if (!availableNiches) {
       availableNiches = await getAllActiveNiches();
-      await setCached(cacheKey, availableNiches, 600);
+      await setCached(cacheKey, availableNiches, cacheTTL.niches);
     }
 
     return NextResponse.json({
@@ -121,6 +122,9 @@ export async function POST(req: NextRequest) {
       nicheName: niche.name,
       plan,
     });
+
+    // Invalidate cached niches so next fetch gets fresh data
+    await invalidateCache("niches:*");
 
     return NextResponse.json({ userNiche }, { status: 201 });
   } catch (error) {

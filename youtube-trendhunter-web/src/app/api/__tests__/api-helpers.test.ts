@@ -70,7 +70,7 @@ describe("Extension Auth API", () => {
 
   describe("authentication logic", () => {
     it("requires authentication", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
       const session = await auth();
       const isAuthenticated = !!session?.user?.id;
@@ -79,7 +79,7 @@ describe("Extension Auth API", () => {
     });
 
     it("allows authenticated users", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
         user: { id: "user_123", name: "Test", email: "test@example.com" },
       } as any);
 
@@ -119,9 +119,9 @@ describe("Extension Analyze API", () => {
     });
 
     it("returns falsy when no header", () => {
-      const authHeader = null;
-      const token = authHeader?.replace("Bearer ", "");
-      // null?.replace() returns undefined (falsy), which is correct for "no token"
+      const authHeader: string | null = null;
+       
+      const token = authHeader != null ? (authHeader as string).replace("Bearer ", "") : undefined;
       expect(token).toBeFalsy();
     });
   });

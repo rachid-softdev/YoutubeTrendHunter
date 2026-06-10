@@ -68,9 +68,10 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_failed": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
+    const invoiceAny = invoice as unknown as { subscription: string | Stripe.Subscription | null };
     console.warn(
       `[Stripe Webhook] Payment failed for invoice ${invoice.id}` +
-        (invoice.subscription ? `, sub: ${invoice.subscription}` : ""),
+        (invoiceAny.subscription ? `, sub: ${invoiceAny.subscription}` : ""),
     );
     // The `customer.subscription.updated` event (already handled below)
     // will update the DB status to PAST_DUE. This handler exists for
@@ -80,12 +81,13 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_succeeded": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
-    if (!invoice.subscription) {
+    const invSub = (invoice as unknown as { subscription: string | Stripe.Subscription | null })
+      .subscription;
+    if (!invSub) {
       return { handled: false, eventType: event.type };
     }
 
-    const subscriptionId =
-      typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
+    const subscriptionId = typeof invSub === "string" ? invSub : invSub.id;
 
     const sub = await withRetry(() => stripe.subscriptions.retrieve(subscriptionId), {
       maxRetries: 2,

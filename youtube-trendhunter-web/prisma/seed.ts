@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -145,10 +145,10 @@ async function main() {
         create: {
           ...trendData,
           niche: { connect: { id: nicheId } },
-        },
+        } as Prisma.TrendCreateInput,
         update: {
           ...trendData,
-        },
+        } as Prisma.TrendUpdateInput,
       });
       console.log(`✅ Trend upserted: ${trend.title}`);
     }

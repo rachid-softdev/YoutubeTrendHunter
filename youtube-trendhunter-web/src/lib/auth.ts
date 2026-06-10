@@ -34,7 +34,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ]);
         session.user.role = dbUser?.role ?? "USER";
         session.user.plan = subscription?.plan ?? "FREE";
-        session.user.userRoles = userRoles.map((ur) => ur.role);
+        session.user.userRoles = userRoles.map((ur) => ({
+          id: user.id + "_" + ur.role,
+          role: ur.role,
+          userId: user.id,
+        }));
       }
       return session;
     },

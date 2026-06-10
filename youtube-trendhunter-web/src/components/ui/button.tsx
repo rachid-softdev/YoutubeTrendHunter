@@ -16,6 +16,7 @@ export interface ButtonProps
     | "outline"
     | "ghost"
     | "secondary"
+    | "link"
     | "subscribe"
     | "subscribed";
   size?: "default" | "sm" | "lg" | "icon";

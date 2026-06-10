@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
 import { userExportQuerySchema } from "@/lib/schemas";
 import { getAuditLogs } from "@/lib/audit-log";
+import { withRateLimit } from "@/lib/rate-limit";
 import { ValidationError, UnauthorizedError, ForbiddenError } from "@/lib/api-error";
 
 /** Sanitize a value for CSV output — prevent CSV injection (formulas starting with =, +, -, @, %) */
@@ -15,6 +16,9 @@ function sanitizeCsvValue(val: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimitResponse = await withRateLimit(req, "general");
+  if (rateLimitResponse) return rateLimitResponse;
+
   const session = await auth();
   if (!session?.user?.id) {
     return UnauthorizedError();
@@ -130,7 +134,9 @@ export async function GET(req: NextRequest) {
         ? {
             plan: subscription.plan,
             status: subscription.status,
-            stripeCurrentPeriodEnd: subscription.stripeCurrentPeriodEnd.toISOString(),
+            stripeCurrentPeriodEnd: (
+              subscription.stripeCurrentPeriodEnd ?? new Date()
+            ).toISOString(),
             createdAt: subscription.createdAt.toISOString(),
           }
         : null,
