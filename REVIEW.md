@@ -1,1238 +1,733 @@
-# Revue de code complète — YouTube TrendHunter
-
-> **Date :** 9 juin 2026
-> **Méthodologie :** 17 agents de revue (Cartographie, Front-End x6, Back-End x8, Métier x3, Data x3, Database x3, Infrastructure x4, Architecte)
-> **Périmètre :** Monorepo complet — web, extension, UI package, mobile (placeholder), desktop (placeholder)
+# TrendHunter — Code Review Complète
 
 ---
 
-## SOMMAIRE
+## 🗺️ ÉTAPE 0 — Cartographie du Codebase
 
-1. [CARTOGRAPHIE — Rapport @review map](#1-cartographie--rapport-review-map)
-2. [FRONT-END — 6 agents](#2-front-end--6-agents)
-3. [BACK-END — 8 agents](#3-back-end--8-agents)
-4. [COUCHE MÉTIER — 3 agents](#4-couche-métier--3-agents)
-5. [COUCHE DATA ACCESS — 3 agents](#5-couche-data-access--3-agents)
-6. [COUCHE DATABASE — 3 agents](#6-couche-database--3-agents)
-7. [COUCHE INFRASTRUCTURE — 4 agents](#7-couche-infrastructure--4-agents)
-8. [SYNTHÈSE ARCHITECTE — Agent final](#8-synthèse-architecte--agent-final)
-
----
-
-# 1. CARTOGRAPHIE — Rapport @review map
-
-## Arborescence des modules clés
+### Arborescence des modules clés (max 3 niveaux)
 
 ```
-YoutubeTrendHunter/                              # Monorepo root
-│
-├── packages/
-│   └── youtube-trendhunter-ui/                  # Bibliothèque UI partagée
-│       └── src/
-│           ├── index.ts                         # Export cn()
-│           └── utils.ts                         # Utilitaire cn() (clsx + tailwind-merge)
-│
-├── youtube-trendhunter-web/                     # Application web Next.js 16 (PRINCIPALE)
-│   ├── prisma/
-│   │   ├── schema.prisma                        # Schéma BDD (17 modèles)
-│   │   ├── seed.ts                              # Données de seed
-│   │   └── migrations/                          # Migrations Prisma
-│   ├── src/
-│   │   ├── app/                                 # App Router Next.js
-│   │   │   ├── (auth)/                          # Groupe authentification
-│   │   │   │   ├── layout.tsx
-│   │   │   │   └── login/
-│   │   │   ├── (dashboard)/                     # Groupe dashboard (authentifié)
-│   │   │   │   ├── layout.tsx
-│   │   │   │   ├── page.tsx                     # Page d'accueil dashboard (tendances)
-│   │   │   │   ├── loading.tsx
-│   │   │   │   ├── admin/
-│   │   │   │   ├── alerts/
-│   │   │   │   ├── billing/
-│   │   │   │   ├── home/
-│   │   │   │   ├── my-niches/
-│   │   │   │   └── settings/
-│   │   │   ├── (marketing)/                     # Groupe marketing (public)
-│   │   │   │   ├── layout.tsx
-│   │   │   │   ├── page.tsx                     # Landing page
-│   │   │   │   ├── blog/
-│   │   │   │   ├── comparatif/
-│   │   │   │   ├── features/
-│   │   │   │   ├── niches/
-│   │   │   │   ├── pricing/
-│   │   │   │   ├── privacy/
-│   │   │   │   └── terms/
-│   │   │   ├── api/                             # API Routes
-│   │   │   │   ├── admin/ (users, niches, plans, stats)
-│   │   │   │   ├── alerts/ + [id]
-│   │   │   │   ├── auth/[...nextauth]
-│   │   │   │   ├── cron/trends
-│   │   │   │   ├── extension/ (auth, analyze, trends)
-│   │   │   │   ├── health/
-│   │   │   │   ├── niches/ + [id]
-│   │   │   │   ├── stripe/ (checkout, portal, webhook)
-│   │   │   │   ├── trends/ + refresh
-│   │   │   │   └── user/ + export + audit-logs
-│   │   │   ├── layout.tsx                       # Root layout
-│   │   │   ├── globals.css                      # Styles globaux (Tailwind)
-│   │   │   ├── providers.tsx
-│   │   │   ├── error.tsx
-│   │   │   ├── global-error.tsx
-│   │   │   ├── not-found.tsx
-│   │   │   ├── manifest.ts
-│   │   │   ├── robots.ts
-│   │   │   └── sitemap.ts
-│   │   ├── components/
-│   │   │   ├── ui/                              # Composants UI atomiques
-│   │   │   │   ├── alert.tsx, badge.tsx, button.tsx, card.tsx
-│   │   │   │   ├── input.tsx, select.tsx, separator.tsx, textarea.tsx
-│   │   │   │   └── __tests__/
-│   │   │   ├── dashboard/                       # Composants métier dashboard
-│   │   │   │   ├── alert-form.tsx, alert-list.tsx, alerts-client.tsx
-│   │   │   │   ├── audit-log-viewer.tsx
-│   │   │   │   ├── copy-button.tsx
-│   │   │   │   ├── generate-token-button.tsx
-│   │   │   │   ├── manage-subscription-button.tsx
-│   │   │   │   ├── mobile-nav.tsx
-│   │   │   │   ├── niche-follow-button.tsx
-│   │   │   │   ├── niche-grid.tsx, niche-selector.tsx
-│   │   │   │   ├── settings-content.tsx
-│   │   │   │   ├── sidebar.tsx
-│   │   │   │   ├── trend-card.tsx
-│   │   │   │   └── __tests__/
-│   │   │   ├── analytics-client.tsx
-│   │   │   ├── analytics-cta.tsx
-│   │   │   ├── cookie-consent.tsx
-│   │   │   ├── error-boundary.tsx
-│   │   │   ├── feature-guard.tsx
-│   │   │   ├── theme-toggle.tsx
-│   │   │   └── onboarding/ (5 composants)
-│   │   ├── hooks/
-│   │   │   └── use-entitlements.tsx
-│   │   ├── lib/                                 # Logique métier & services
-│   │   │   ├── auth.ts, auth/require-admin.ts
-│   │   │   ├── alerts.ts, analytics.ts, anthropic.ts
-│   │   │   ├── api-tokens.ts, audit-log.ts, blog.ts
-│   │   │   ├── email.ts, env.ts, logger.ts
-│   │   │   ├── plan-check.ts, plans.ts
-│   │   │   ├── prisma.ts, redis.ts, rate-limit.ts
-│   │   │   ├── schemas.ts, stripe.ts
-│   │   │   ├── security-alert.ts, test-utils.ts
-│   │   │   ├── trend-pipeline.ts, trend-scorer.ts
-│   │   │   ├── validate-url.ts, youtube.ts
-│   │   │   ├── feature-flags.disabled/ (6 fichiers — désactivé)
-│   │   │   └── __tests__/ (8 fichiers test)
-│   │   ├── types/
-│   │   │   └── index.ts                         # Module augmentation NextAuth
-│   │   └── proxy.ts
-│   ├── e2e/ (4 specs Playwright)
-│   ├── scripts/ (18 scripts)
-│   ├── content/blog/
-│   └── public/
-│
-├── youtube-trendhunter-extension/               # Extension Chrome (WXT + Manifest V3)
-│   ├── entrypoints/
-│   │   ├── background.ts                        # Service worker
-│   │   ├── content.ts                           # Content script (stub)
-│   │   └── sidepanel/
-│   │       ├── App.tsx, main.tsx
-│   │       └── components/ (MainScreen, LoadingScreen, AuthScreen)
-│   ├── shared/
-│   │   ├── constants/api.ts
-│   │   └── types/index.ts
-│   └── public/
-│
-├── youtube-trendhunter-mobile/                  # Placeholder — package.json only
-├── youtube-trendhunter-desktop/                 # Placeholder — package.json only
-│
-├── .github/workflows/                           # CI/CD (6 workflows)
-├── .husky/                                      # Git hooks
-└── .changeset/                                  # Versioning config
+YoutubeTrendHunter/
+├── src/
+│   ├── app/
+│   │   ├── (auth)/
+│   │   │   ├── layout.tsx
+│   │   │   └── login/page.tsx
+│   │   ├── (dashboard)/
+│   │   │   ├── layout.tsx
+│   │   │   ├── dashboard/page.tsx
+│   │   │   ├── niches/page.tsx
+│   │   │   ├── alerts/page.tsx
+│   │   │   └── billing/page.tsx
+│   │   ├── (marketing)/
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── pricing/page.tsx
+│   │   ├── api/
+│   │   │   ├── auth/[...nextauth]/route.ts
+│   │   │   ├── stripe/{checkout,portal,webhook}/route.ts
+│   │   │   ├── trends/route.ts
+│   │   │   └── extension/{auth,trends}/route.ts
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── globals.css
+│   ├── components/
+│   │   ├── ui/{button,input,badge}.tsx
+│   │   └── dashboard/{sidebar,trend-card,niche-selector,generate-token-button,manage-subscription-button}.tsx
+│   ├── lib/{auth,prisma,stripe,anthropic,trend-scorer,plan-check,utils}.ts
+│   ├── types/index.ts
+│   └── proxy.ts (middleware)
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+├── extension/
+│   ├── manifest.json
+│   ├── background.js
+│   ├── content.js
+│   └── sidebar/{index.html,app.js,style.css}
+├── scripts/          ← 17 scripts (setup, stripe, mailhog, dev)
+├── next.config.ts
+├── tsconfig.json
+├── package.json
+├── AGENTS.md
+├── PLAN.md
+└── README.md
 ```
 
-## Stack technique détectée
+### Stack technique détectée
 
 | Couche | Technologie | Version |
-|--------|------------|---------|
-| **Framework web** | Next.js | ^16.2.6 (Turbopack) |
-| **UI** | React | ^19.2.4 |
-| **Langage** | TypeScript | ^5.x |
-| **Styling** | Tailwind CSS | ^4 |
-| **Base de données** | PostgreSQL (Prisma) | Prisma ^6.4.1 |
-| **Auth** | NextAuth.js | v5 (App Router) |
-| **Paiements** | Stripe | SDK récent |
-| **IA** | Anthropic Claude | SDK @anthropic-ai/sdk |
-| **Cache** | Upstash Redis | Installé, NON utilisé |
-| **Email** | Resend | Installé, NON utilisé |
-| **Analytics** | PostHog | Intégré côté client |
-| **Monitoring** | Sentry | Configuré (client + server + edge) |
-| **Extension** | WXT | ^0.20.26 (Manifest V3) |
-| **UI Library** | Radix UI (Slot) + CVA | React 19 compatible |
-| **Linting** | Biome | ^2.4.15 |
-| **Testing** | Vitest + Playwright | ^4.1.6 / ^1.60.0 |
-| **Build** | Turborepo | ^2.4.4 |
-| **Package** | pnpm | ^9.15.9 |
-
-## Points d'entrée principaux
-
-### Pages (Front-end)
-| Route | Fichier | Type |
-|-------|---------|------|
-| `/` | `(marketing)/page.tsx` | Landing page |
-| `/login` | `(auth)/login/page.tsx` | Login |
-| `/dashboard` | `(dashboard)/page.tsx` | Dashboard tendances |
-| `/home` | `(dashboard)/home/page.tsx` | Home dashboard |
-| `/my-niches` | `(dashboard)/my-niches/page.tsx` | Gestion niches |
-| `/alerts` | `(dashboard)/alerts/page.tsx` | Alertes (placeholder) |
-| `/settings` | `(dashboard)/settings/page.tsx` | Paramètres |
-| `/billing` | `(dashboard)/billing/page.tsx` | Facturation |
-| `/admin` | `(dashboard)/admin/page.tsx` | Admin |
-| `/pricing` | `(marketing)/pricing/page.tsx` | Tarifs |
-| `/features` | `(marketing)/features/page.tsx` | Features |
-| `/niches` | `(marketing)/niches/page.tsx` | Niches marketing |
-| `/blog` | `(marketing)/blog/page.tsx` | Blog |
-| `/privacy` | `(marketing)/privacy/page.tsx` | Privacy |
-| `/terms` | `(marketing)/terms/page.tsx` | Terms |
-
-### API Routes (Back-end)
-| Endpoint | Fichier | Méthodes |
-|----------|---------|----------|
-| `/api/auth/[...nextauth]` | `api/auth/[...nextauth]/route.ts` | NextAuth |
-| `/api/health` | `api/health/route.ts` | GET |
-| `/api/trends` | `api/trends/route.ts` | GET |
-| `/api/trends/refresh` | `api/trends/refresh/route.ts` | POST |
-| `/api/niches` | `api/niches/route.ts` | GET/POST |
-| `/api/niches/[id]` | `api/niches/[id]/route.ts` | GET/PUT/DELETE |
-| `/api/alerts` | `api/alerts/route.ts` | GET/POST |
-| `/api/alerts/[id]` | `api/alerts/[id]/route.ts` | GET/PUT/DELETE |
-| `/api/user` | `api/user/route.ts` | GET/PUT |
-| `/api/user/export` | `api/user/export/route.ts` | GET |
-| `/api/user/audit-logs` | `api/user/audit-logs/route.ts` | GET |
-| `/api/stripe/checkout` | `api/stripe/checkout/route.ts` | POST |
-| `/api/stripe/portal` | `api/stripe/portal/route.ts` | POST |
-| `/api/stripe/webhook` | `api/stripe/webhook/route.ts` | POST |
-| `/api/extension/auth` | `api/extension/auth/route.ts` | POST |
-| `/api/extension/analyze` | `api/extension/analyze/route.ts` | POST |
-| `/api/extension/trends` | `api/extension/trends/route.ts` | GET |
-| `/api/cron/trends` | `api/cron/trends/route.ts` | GET |
-| `/api/admin/users` | `api/admin/users/route.ts` | GET |
-| `/api/admin/niches` | `api/admin/niches/route.ts` | POST |
-| `/api/admin/plans` | `api/admin/plans/route.ts` | GET/POST |
-| `/api/admin/stats` | `api/admin/stats/route.ts` | GET |
-
-## Volume estimé
-
-| Métrique | Valeur |
-|----------|--------|
-| **Fichiers source** (ts, tsx, prisma) | ~210 fichiers (hors exclusions) |
-| **Lignes de code** | ~15 000 - 20 000 estimé |
-| **Composants React** | ~35 composants |
-| **API Routes** | 22 endpoints |
-| **Modèles Prisma** | 17 modèles |
-| **Tests unitaires** | 12 fichiers test |
-| **Tests e2e** | 4 specs Playwright |
-| **Scripts** | 18 scripts d'administration |
-
-### Répartition par extension
-| Extension | Nombre |
-|-----------|--------|
-| `.tsx` | ~80 fichiers |
-| `.ts` | ~120 fichiers |
-| `.prisma` | 1 fichier |
-| `.css` | 1 fichier (globals.css) + 1 extension |
-
-## Dépendances externes principales
-
-### Production
-| Package | Version | Usage |
-|---------|---------|-------|
-| `next` | ^16.2.6 | Framework |
-| `react` + `react-dom` | ^19.2.4 | UI |
-| `prisma` + `@prisma/client` | ^6.4.1 | ORM / DB |
-| `next-auth` | v5 (beta) | Authentification |
-| `stripe` | Latest | Paiements |
-| `@anthropic-ai/sdk` | Latest | IA |
-| `@upstash/redis` | Latest | Cache (INUTILISÉ) |
-| `resend` | Latest | Email (INUTILISÉ) |
-| `posthog-js` | Latest | Analytics |
-| `@sentry/nextjs` | Latest | Monitoring |
-| `@radix-ui/react-slot` | ^1.2.4 | UI primitives |
-| `class-variance-authority` | ^0.7.1 | Variants CSS |
-| `tailwind-merge` | ^3.5.0 | Merge Tailwind classes |
-| `lucide-react` | Latest | Icons |
-
-### Développement
-| Package | Usage |
-|---------|-------|
-| `turbo` ^2.4.4 | Monorepo orchestration |
-| `@biomejs/biome` ^2.4.15 | Linting/Formatting |
-| `vitest` ^4.1.6 | Tests unitaires |
-| `@playwright/test` ^1.60.0 | Tests e2e |
-| `husky` ^9.1.7 | Git hooks |
-| `@changesets/cli` | Versioning |
-| `wxt` ^0.20.26 | Extension bundler |
-
-## Découpage en couches identifié
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    COUCHE PRÉSENTATION (Front-End)                  │
-│  Pages (App Router) → Composants UI → Composants Dashboard         │
-│  Extension Chrome → Sidepanel → Components                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                    COUCHE API (Back-End)                            │
-│  API Routes Next.js : REST endpoints                                │
-│  NextAuth : Session management                                      │
-│  Middleware : Protection de routes                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                    COUCHE MÉTIER (Business Logic)                   │
-│  lib/ : Services, utilitaires, scoring, pipeline                    │
-│  Pas de couche service dédiée — logique collée aux routes           │
-├─────────────────────────────────────────────────────────────────────┤
-│                    COUCHE DATA ACCESS                                │
-│  Prisma ORM : Schéma, client, migrations                            │
-│  Pas de pattern Repository — accès direct Prisma dans les pages     │
-├─────────────────────────────────────────────────────────────────────┤
-│                    COUCHE INFRASTRUCTURE                             │
-│  PostgreSQL (dev: MySQL incohérent)                                 │
-│  Redis (installé, non utilisé)                                      │
-│  Stripe, Anthropic, Resend, Sentry, PostHog (services externes)     │
-│  Docker / Mailhog (dev local)                                       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-# 2. FRONT-END — 6 agents
-
-## Agent 1 — UI/Design Review
-
-### Observations générales
-- Design system dark-first cohérent : bg-dark-canvas, dark-ink, yt-red comme couleur d'accent
-- Utilisation constante de bordures `border-hairline-dark` — bonne homogénéité
-- Typographie : Roboto via next/font, avec variable `--font-roboto`
-- Style visuel distinctif : design "hacker/techno" avec angles droits (pas de `rounded-` sauf exceptions), background dark
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Description | Impact | Solution |
-|-------|-----------|-------------|--------|----------|
-| UI/Design | `layout.tsx` | `html lang="en"` alors que 100% du contenu est en français | SEO français inexistant, accessibilité lang incorrect | Remplacer par `lang="fr"` |
-| UI/Design | Dashboard | Les composants utilisent des classes Tailwind hardcodées sans références aux tokens de design | Maintenance difficile, incohérences potentielles | Centraliser dans le package UI ou dans un fichier theme |
-
-### ⚠️ Améliorations importantes
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| UI/Design | `niche-selector.tsx` | Le select est un élément `<select>` HTML natif, pas stylisé comme le reste du design system | Utiliser le composant `Select` du package UI |
-| UI/Design | `trend-card.tsx` | Pas d'avatar/icône pour les tendances, score affiché en chiffre seulement | Ajouter un indicateur visuel (barre de progression, couleur) |
-| UI/Design | `globals.css` | Présence de classes utilitaires custom sans pattern cohérent | Documenter et standardiser |
-
-### ✨ Détails de finition
-
-| Description | Fichier | Effort |
-|-------------|---------|--------|
-| Landing page : les lettres avatars dans la hero section utilisent des valeurs hardcodées "M", "L", "S", "C", "A" | `(marketing)/page.tsx` | XS |
-| Badge "NEW" et "POPULAIRE" dans features — anglais alors que tout le site est français | `(marketing)/page.tsx` | XS |
-| Dashboard titre "Tendances." avec un point final — stylisé mais non standard | `(dashboard)/page.tsx` | XS |
-| Utilisation de `rounded-none` dans le header logo mais pas d'arrondi ailleurs — intentionnel mais surprenant | Plusieurs fichiers | XS |
-| Les ombres sont faites via `shadow-[0_0_100px_rgba(...)]` arbitraires — pas de design token shadow | `(marketing)/page.tsx` | S |
-
-### 🚫 Hors scope
-- Performance de rendu (couverte par Agent Performance)
-- Accessibilité (couverte par Agent 4)
-- Composants du package UI de l'extension Chrome (scope limité)
-
-## Agent 2 — UX Review
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Description | Impact | Solution |
-|-------|-----------|-------------|--------|----------|
-| UX | `alerts/` | Page Alertes : placeholder complet — juste un texte "Aucune alerte configurée" et bouton "Créer" sans action | Utilisateur bloqué, ne peut pas créer d'alerte | Implémenter le CRUD complet ou cacher la page |
-| UX | `my-niches/` | Bouton "Suivre" sans serveur action — état visuel "Suivi" qui n'est pas persistant | Utilisateur pense suivre une niche mais rien ne se passe | Implémenter le toggle follow/unfollow |
-| UX | Extension | Auth : token stocké en clair dans `chrome.storage.sync` | Risque de vol de token si compte Google compromis | Utiliser `chrome.storage.local` + session |
-
-### ⚠️ Améliorations importantes
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| UX | Dashboard | Pas de pagination sur la liste des tendances — limite fixe à 5 ou 20 selon plan | Ajouter pagination ou "load more" |
-| UX | Login | Pas de message d'erreur personnalisé pour échec de connexion | Ajouter états d'erreur explicites |
-| UX | `trend-card.tsx` | Pas d'actions sur les tendances (favoris, partage, export) | Ajouter menu d'actions contextuel |
-| UX | Landing | CTA "ESSAYER GRATUITEMENT" redirige vers login, pas vers un signup dédié | Créer un parcours onboarding dédié |
-
-### États manquants identifiés
-- **Loading state** : Dashboard a un `loading.tsx` (bon point) mais pas de skeletons
-- **Empty state** : Page niches, alertes — partiellement géré avec "Aucune alerte configurée"
-- **Error state** : `error.tsx` + `global-error.tsx` présents, mais les composants individuels n'ont pas de fallback UI
-- **Offline state** : Aucune gestion offline
-
-## Agent 3 — Responsive Review
-
-### ✅ Points positifs
-- Dashboard layout bien adapté : sidebar desktop → top navbar + bottom nav mobile
-- Classes responsive présentes dans la majorité des composants (`hidden md:block`, `flex-col sm:flex-row`)
-- Container max-width `max-w-[1400px]` sur la landing page
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Description | Impact | Solution |
-|-------|-----------|-------------|--------|----------|
-| Responsive | Dashboard | La sidebar et MobileNav utilisent `h-screen` pour le layout — risque d'overflow sur mobile avec les navigateurs qui masquent la barre d'adresse | Contenu coupé sur mobile | Utiliser `h-dvh` ou `min-h-screen` |
-| Responsive | `trend-card.tsx` | Layout en `space-y-3` — pas de grille responsive, les cartes ne s'adaptent pas en largeur | Mauvais usage espace desktop | Grid responsive : 1 col mobile, 2 col tablette |
-
-### ⚠️ Améliorations importantes
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| Responsive | Pricing grid | `grid-cols-1 md:grid-cols-3` — pas de breakpoint pour tablette (passage direct de 1 à 3 colonnes) | Ajouter `sm:grid-cols-2 lg:grid-cols-3` |
-| Responsive | Hero section | Textes en `text-5xl md:text-7xl xl:text-8xl` — risques de débordement sur très petits écrans | Ajouter `text-4xl` pour les < 640px |
-| Responsive | Feature grid | `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` — OK mais les badges "POPULAIRE", "LIVE" peuvent overflow | Vérifier le wrapping des badges |
-
-### Vérifications tactiles
-- Les boutons du dashboard semblent respecter la taille minimale 44x44px
-- Le `MobileNav` a des icônes avec zones cliquables adéquates
-- Les `<select>` natifs sont OK, mais les custom select pourraient être trop petits
-
-## Agent 4 — Accessibility Review (WCAG 2.1 AA)
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Problème | Critère WCAG | Impact | Solution |
-|-------|-----------|----------|--------------|--------|----------|
-| A11y | Landing page | Images décoratives (avatars "M","L","S") sans `alt=""` mais pas marquées comme décoratives explicitement | 1.1.1 Non-text Content | Lecteurs d'écran liront "M" comme contenu | `alt=""` explicite |
-| A11y | Dashboard | Navigation sidebar : pas de `aria-current="page"` sur le lien actif | 2.4.8 Location | Perte de contexte de navigation | Ajouter `aria-current` |
-| A11y | `button.tsx` | Les variants de bouton n'ont pas d'états focus visibles suffisamment contrastés | 2.4.7 Focus Visible | Navigation clavier impossible | Ajouter outline focus personnalisé |
-| A11y | Layout | `html lang="en"` alors que contenu français | 3.1.1 Language of Page | Mauvaise prononciation par synthèse vocale | `lang="fr"` |
-| A11y | `theme-toggle.tsx` | Bouton sans `aria-label` — icône seulement | 4.1.2 Name, Role, Value | Invisible aux lecteurs d'écran | Ajouter `aria-label="Basculer le thème"` |
-| A11y | Forms | Les formulaires (settings, etc.) n'ont pas de labels associés explicitement aux inputs via `htmlFor` | 1.3.1 Info and Relationships | Champs non identifiables | Ajouter labels + `htmlFor` |
-
-### ⚠️ Problèmes importants
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| A11y | Global | Pas de skip link ("Aller au contenu") | Ajouter `<SkipLink>` en premier élément du body |
-| A11y | Dashboard | Le contraste du texte secondaire `text-dark-ink-secondary` n'est pas vérifié | Vérifier ratio ≥ 4.5:1 |
-| A11y | Extension | Pas de gestion d'accessibilité dans la sidepanel | Ajouter rôles ARIA |
-| A11y | Navigation | `nav` dans la sidebar n'a pas de `aria-label` | Ajouter `aria-label="Navigation principale"` |
-
-### Vérifications complémentaires
-- **Keyboard navigation** : Ordre de tabulation semble naturel, mais pas de test explicite
-- **Color contrast** : Le thème dark peut avoir des contrastes insuffisants — vérification instrumentée recommandée
-- **Motion** : `animate-float` avec `will-change: transform` dans la landing — pas de `prefers-reduced-motion`
-
-## Agent 5 — Front-End Architecture Review
-
-### ✅ Points positifs
-- Server Components par défaut, Client Components minimaux (bon pattern RSC)
-- Route groups bien organisés : `(auth)`, `(dashboard)`, `(marketing)`
-- Composants UI atomiques et réutilisables avec variants (Button, Badge, Card)
-- Layout imbriqué propre : RootLayout → DashboardLayout → Page
-- Loading states avec `loading.tsx`
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Description | Impact | Solution |
-|-------|-----------|-------------|--------|----------|
-| Architecture | Pages Dashboard | Logique métier (accès Prisma direct) dans les pages server components | Couplage fort, pas de séparation présentation/métier | Extraire dans des services dédiés dans `lib/` |
-| Architecture | `plans.ts` vs `plan-check.ts` | Deux fichiers pour la gestion des plans — limites dupliquées, palier -1 pour illimité | Confusion, bugs potentiels | Fusionner dans un seul module |
-| Architecture | Composants dashboard | Plusieurs composants ont des props `user` passées depuis le layout — pas de hook global | Prop drilling, re-rendus inutiles | Utiliser un contexte auth ou le hook useSession |
-
-### ⚠️ Améliorations importantes
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| Architecture | `lib/` | Pas de structure cohérente — services, utils, config tout dans le même dossier | Créer `services/`, `config/`, `utils/` |
-| Architecture | Extension | Pas de dossier `hooks/` — un seul hook `use-entitlements.tsx` | Centraliser les hooks |
-| Architecture | `feature-flags.disabled/` | Dossier désactivé avec du code inachevé — crée de la confusion | Supprimer ou finir l'implémentation |
-| Architecture | `error-boundary.tsx` | Error boundary présent mais pas utilisé dans tous les layouts | Ajouter progressivement |
-
-### Gestion d'état
-| Aspect | Évaluation |
-|--------|-----------|
-| **État serveur** | OK — React Server Components, données chargées côté serveur |
-| **État client** | Minimal — hooks React uniquement, pas de state management externe |
-| **Contexte** | PostHogProvider seulement — usage approprié |
-| **URL State** | `searchParams` pour le filtre niche — bon pattern |
-
-## Agent 6 — Design System Review
-
-### État du design system
-Un package UI partagé existe (`@youtube-trendhunter/ui`) mais il est **quasi vide** :
-- Exporte uniquement `cn()` (utilitaire de merge de classes)
-- Pas de composants dans le package — tous les composants sont dans `youtube-trendhunter-web/src/components/ui/`
-- Pas de tokens définis (couleurs, espacements, typographie)
-
-### 🚨 Problèmes critiques
-
-| Agent | Composant | Description | Impact | Solution |
-|-------|-----------|-------------|--------|----------|
-| Design System | `@youtube-trendhunter/ui` | Package UI vide de composants — ne sert à rien | Confusion, charge mentale | Y déplacer les composants UI ou le supprimer |
-| Design System | Global | Pas de tokens design system — couleurs, espacements, ombres en dur dans les classes Tailwind | Incohérences, maintenance difficile | Définir des tokens dans `tailwind.config` ou CSS variables |
-
-### ⚠️ Améliorations importantes
-
-| Agent | Composant | Description | Solution |
-|-------|-----------|-------------|----------|
-| Design System | Composants UI | Pas de documentation (Storybook, README) des composants | Ajouter Storybook ou documentation minimale |
-| Design System | Couleurs | `bg-dark-canvas`, `text-dark-ink`, `yt-red`, `hairline-dark` — tokens Tailwind custom, bonne pratique mais pas documentés | Documenter la palette |
-| Design System | Types | Pas de partage de types entre web et extension (duplication dans `src/types/` et `shared/types/`) | Centraliser dans un package partagé |
-| Design System | Variants Button | Bouton "subscribe" non standard — ajouté comme variant custom | Documenter ou standardiser |
-
-### 🎨 Éléments visuellement discutables
-
-1. **Titre dashboard "Tendances."** : Point final intentionnel (stylisé) mais peut sembler être une faute de frappe. Problématique car le point crée une ambiguïté sémantique. Suggestion : supprimer le point ou expliquer la raison stylistique.
-
-2. **Angles droits partout** : Le design utilise `rounded-none` systématiquement — choix délibéré "hacker/techno" mais certains éléments comme les badges et avatars devraient peut-être avoir des coins légèrement arrondis pour la lisibilité. Impact : faible, mais pourrait être perçu comme peu raffiné.
-
-3. **Avatar initials** : Les lettres "M", "L", "S", "C", "A" dans la hero section de la landing page — ce sont des initiales arbitraires, pas des vrais utilisateurs. Trompeur pour les visiteurs qui peuvent croire à du social proof réel. Impact modéré.
-
-4. **Badge "POPULAIRE"** : Texte en français mélangé à des badges anglais ("NEW", "LIVE"). Incohérence linguistique. Impact faible mais notable.
-
-### Score global — Front-End
-
-| Critère | Note | Justification |
-|---------|------|---------------|
-| **Design** | 7/10 | Design cohérent et distinctif, mais quelques incohérences linguistiques et tokens manquants |
-| **UX** | 5/10 | Parcours fonctionnel mais pages placeholders, états manquants, actions UI sans effet |
-| **Responsive** | 6/10 | Bonne base responsive mais overflow possible, grille non adaptée |
-| **Accessibilité** | 3/10 | Problèmes critiques (lang, labels, focus, skip link), WCAG AA non respecté |
-| **Maintenabilité** | 5/10 | Composants bien découpés mais logique métier dans les pages, pas de design system centralisé |
-
----
-
-# 3. BACK-END — 8 agents
-
-## Agent 1 — Architecture Review
-
-### Observations générales
-- Architecture monolithique Next.js avec API Routes — pas de backend séparé
-- Pas de couche service dédiée : les pages Server Components appellent Prisma directement
-- Code métier dispersé entre `lib/` et les routes API
-
-### 🚨 Problèmes critiques
-
-| Agent | Fichier | Description | Impact | Risque | Solution |
-|-------|---------|-------------|--------|--------|----------|
-| Architecture | Toutes les pages | Prisma appelé directement depuis les Server Components | Couplage API ↔ DB maximum, testabilité nulle | Élevé | Extraire dans des services dans `lib/services/` |
-| Architecture | `lib/` | Absence de séparation couches (services, repositories, controllers) | Duplication, difficulté de maintenance | Moyen | Appliquer clean architecture : services métier + repositories |
-| Architecture | Global | Pas de gestion de dépendances (DI) — tout est importé statiquement | Impossible de mocker/stubber proprement | Élevé | Introduction de patterns IOC ou factory |
-| Architecture | Extension + Web | Types dupliqués entre `web/src/types/` et `extension/shared/types/` | Désynchronisation garantie | Moyen | Package partagé `@youtube-trendhunter/types` |
-
-### Violations SOLID identifiées
-- **SRP** : Les pages dashboard font à la fois présentation + accès données + logique métier
-- **DIP** : Dépendance directe à Prisma (implémentation concrète), pas d'abstraction
-- **OCP** : Extension difficile sans couche service modulaire
-
-## Agent 2 — Code Quality Review
-
-### ✅ Points positifs
-- Nommage cohérent (camelCase, kebab-case pour dossiers)
-- TypeScript strict (typage des props, module augmentation NextAuth)
-- Fichiers de taille raisonnable (peu de fichiers > 200 lignes)
-- Utilisation de `unstable_cache` pour les données peu changeantes
-
-### 🚨 Problèmes critiques
-
-| Agent | Fichier | Description |
-|-------|---------|-------------|
-| Code Quality | `stripe/webhook/route.ts` | Usage massif de `as any` — types Stripe ignorés |
-| Code Quality | `prisma.ts` | `new PrismaClient({})` sans singleton global — risques de connexions multiples en dev |
-| Code Quality | `trend-scorer.ts` | `JSON.parse()` sans validation du retour Claude — crash potentiel |
-| Code Quality | `seed.ts` | `.catch(() => {})` silencieux — les erreurs d'insertion sont ignorées |
-
-### ⚠️ Problèmes importants
-
-| Agent | Fichier | Description | Solution |
-|-------|---------|-------------|----------|
-| Code Quality | `plans.ts` | `PLAN_LIMITS` avec valeur `-1` pour illimité | Utiliser `Infinity` ou `null` |
-| Code Quality | `scripts/setup-admin.ts` | Fichier texte avec `console.log`, pas du TypeScript valide | Supprimer ou réécrire |
-| Code Quality | Scripts | Mélange .ts / .js pour des fonctions similaires | Standardiser |
-| Code Quality | Tous | Incohérence : `NEXTAUTH_URL` vs `NEXT_PUBLIC_*` dans les env | Standardiser le préfixe |
-
-### Duplication détectée
-- Plan limits dupliquées entre `plans.ts`, `plan-check.ts`, et les pages dashboard
-- Variants de composants UI qui existent dans le thème Tailwind mais pas dans le package UI
-- Types Trend/Niche/Alerte dupliqués entre web et extension
-
-## Agent 3 — Security Review (OWASP Top 10)
-
-### 🔒 Sécurité
-
-| Vulnérabilité | OWASP Ref | Criticité | CVSS estimé | Description | Remédiation |
-|---------------|-----------|-----------|-------------|-------------|-------------|
-| Mot de passe MySQL en clair dans script | A02:2021 | **CRITICAL** | 9.1 | `scripts/setup-mysql.js` contient `root`/`azerty123` en clair | Supprimer le fichier, utiliser variables d'environnement |
-| Webhook statut forcé ACTIVE | A01:2021 | **HIGH** | 8.2 | `stripe/webhook/route.ts:78` force ACTIVE même si Stripe dit `past_due` | Mapper tous les statuts Stripe |
-| Tokens API en clair en BDD | A02:2021 | **HIGH** | 7.5 | `ApiToken.token` stocké en clair, pas de hash | Hasher en SHA-256 côté serveur |
-| Aucune validation priceId Stripe | A01:2021 | **MEDIUM** | 6.5 | `stripe/checkout/route.ts` accepte n'importe quel priceId | Vérifier contre la liste des plans autorisés |
-| Données personnelles dans réponse API | A04:2021 | **MEDIUM** | 6.0 | `extension/trends/route.ts:42` renvoie `user.name` et `user.email` | Filtrer les champs sensibles |
-| JSON.parse sans validation | A02:2021 | **MEDIUM** | 5.5 | `trend-scorer.ts` parse le retour Claude sans validation | Ajouter schéma Zod de validation |
-| Destruction de tous les tokens au refresh | A07:2021 | **LOW** | 4.0 | `extension/auth/route.ts` supprime tous les tokens au refresh | Ne supprimer que l'ancien token |
-| Pas de rate limiting | A01:2021 | **MEDIUM** | 5.0 | Aucune route API n'a de rate limiting | Implémenter avec Upstash Redis |
-| Pas de mécanisme de révocation de session | A07:2021 | **MEDIUM** | 5.0 | NextAuth sans fonction de révocation côté admin | Ajouter endpoint DELETE /session |
-| CORS non configuré | A01:2021 | **LOW** | 3.0 | Pas de headers CORS sur les API routes | Ajouter middleware CORS |
-
-### Autres vérifications
-
-| Vérification | Statut | Note |
 |---|---|---|
-| CSRF | ✅ OK | NextAuth protège, SameSite cookies |
-| XSS | ✅ OK | CSP configuré dans next.config.ts |
-| SQL Injection | ✅ OK | Prisma paramétrise automatiquement |
-| Security Headers | ✅ OK | HSTS, X-Frame-Options, X-Content-Type-Options |
-| Secrets (env vars) | ⚠️ Partiel | DATABASE_URL, NEXTAUTH_SECRET en .env — mais password MySQL en dur |
-| Input Validation | ⚠️ Partiel | Zod présent pour `schemas.ts` mais pas utilisé partout |
-| Authorization | ⚠️ Partiel | `require-admin.ts` présent mais pas appliqué à toutes les routes admin |
+| Runtime | Node.js | - |
+| Framework | Next.js | ^16.2.7 |
+| UI Library | React | 19.2.4 |
+| Styling | Tailwind CSS | ^4.3.0 |
+| Auth | NextAuth (Auth.js) | ^5.0.0-beta.31 |
+| ORM | Prisma | ^5.22.0 |
+| Database | PostgreSQL (schema) / MySQL (scripts) | - |
+| Payments | Stripe | ^22.1.0 |
+| AI | Anthropic Claude | ^0.92.0 |
+| Cache | Upstash Redis | ^1.37.0 |
+| Email | Resend | ^6.12.2 |
+| Extension | Chrome Manifest V3 | - |
+| Icons | Lucide React | ^1.14.0 |
+| Validation | Zod | ^4.4.2 |
+| Dates | date-fns | ^4.1.0 |
 
-## Agent 4 — Performance Review
+### Points d'entrée principaux
 
-### ⚡ Problèmes identifiés
+- **Root layout**: `src/app/layout.tsx`
+- **Middleware**: `src/proxy.ts` (auth guard via NextAuth middleware)
+- **Auth handler**: `src/app/api/auth/[...nextauth]/route.ts`
+- **Marketing pages**: `(marketing)/page.tsx` (landing), `(marketing)/pricing/page.tsx`
+- **Dashboard pages**: `(dashboard)/dashboard/page.tsx` (trends), `(dashboard)/niches/page.tsx`, `(dashboard)/alerts/page.tsx`, `(dashboard)/billing/page.tsx`
+- **API routes**: trends, stripe (checkout/portal/webhook), extension (auth/trends)
+- **Extension**: `extension/background.js` (service worker), `extension/sidebar/index.html`
 
-| Problème | Impact estimé | Solution |
-|----------|--------------|----------|
-| **Pas de cache Redis** — toutes les requêtes vont en BDD | Élevé (x10+ load → saturation BDD) | Implémenter cache Redis pour trends, niches, user count |
-| **Prisma singleton manquant** — instances multiples en dev | Faible (dev uniquement) | Pattern global standard |
-| **SELECT * implicite via Prisma** — chargement de toutes les colonnes | Moyen | Ajouter `select` explicite dans les requêtes fréquentes |
-| **N+1 potentiel** : Trend niche relation chargée séparément | Moyen | Vérifier les `include` Prisma |
-| **unstable_cache** utilisé sur userCount mais pas sur trends | Moyen | Cacher les listes de tendances |
-| **Aucune pagination** sur les listes de tendances | Élevé (croissance BDD) | Ajouter cursor-based pagination sur `/api/trends` |
-| **Images non optimisées** dans la landing (Next/Image OK mais pas de blur placeholder) | Faible | Ajouter `placeholder="blur"` |
+### Volume estimé
 
-### Goulots d'étranglement sous charge
-1. **Scoring IA** : `POST /api/trends/refresh` appelle Claude — synchrone, pas de queue, timeout à 30s
-2. **Dashboard** : 3 queries Prisma par chargement de page (niche, trends, user)
-3. **Extension** : Appels API sans cache côté extension — chaque ouverture = requête au serveur
+- Fichiers source (`.ts`, `.tsx`, `.css`, `.js`): ~37 fichiers dans `src/`
+- Lignes de code TypeScript/TSX: ~1 390 lignes
+- Extension Chrome: ~350 lignes (JS, HTML, CSS)
+- Scripts: ~17 fichiers de devops
+- Prisma schema: ~187 lignes (10 modèles, 5 enums)
 
-## Agent 5 — Database Review
+### Dépendances externes principales
 
-### 🗄️ Problèmes identifiés
+- **Production**: `@anthropic-ai/sdk`, `@auth/prisma-adapter`, `@prisma/client`, `@stripe/stripe-js`, `@upstash/redis`, `clsx`, `date-fns`, `lucide-react`, `next`, `next-auth`, `prisma`, `react`, `react-dom`, `resend`, `stripe`, `tailwind-merge`, `zod`
+- **Dev**: `@tailwindcss/postcss`, `@types/node`, `@types/react`, `@types/react-dom`, `dotenv-cli`, `eslint`, `eslint-config-next`, `tailwindcss`, `tsx`, `typescript`
 
-| Problème | Tables concernées | Solution |
-|----------|-------------------|----------|
-| `@@unique([title, nicheId])` présent sur Trend — mais seed ignore les doublons avec `.catch()` silencieux | Trend | Supprimer `.catch()`, utiliser `upsert` Prisma |
-| `nicheId` nullable dans Alert sans `@relation` explicite | Alert | Ajouter `@relation` ou supprimer la relation |
-| `orgId` dans User — relation Organization nullable mais pas d'index | User | Déjà indexé, OK |
-| `stripeCustomerId` unique dans User et Organization — mais pas de validation croisée | User, Organization | Ajouter contrainte applicative |
-| `Feature.defaultConfig` de type Json — pas de validation du format | Feature | Ajouter validation Zod |
-| `UsageTracking.periodStart` + `periodEnd` — pas de CHECK contrainte que periodStart < periodEnd | UsageTracking | Ajouter contrainte |
-| `ApiToken.token` a `@unique` mais le hash n'est pas déterministe si sel variable | ApiToken | Utiliser hash cohérent avec sel fixe |
+### Découpage en couches identifié
 
-### Requêtes inefficaces détectées
-
-| Fichier | Requête | Problème |
-|---------|---------|----------|
-| `(dashboard)/page.tsx` | `prisma.trend.findMany({ where, orderBy, take })` | Pas de `select` explicite, pas de pagination pour les résultats > 20 |
-| `(marketing)/page.tsx` | `prisma.user.count()` | Déjà caché avec `unstable_cache` ✅ |
-| `api/trends/route.ts` | `prisma.trend.findMany({ ... })` | Pas de caching, pas de select |
-
-## Agent 6 — API Review
-
-### ✅ Points positifs
-- Routes RESTful avec nommage cohérent (`/api/trends`, `/api/alerts/[id]`)
-- Codes HTTP corrects (201 pour création, 404 pour non trouvé, etc.)
-- Webhook Stripe avec signature verification (sécurité)
-- Session check sur routes protégées
-
-### 🚨 Problèmes critiques
-
-| Agent | Fichier | Description | Solution |
-|-------|---------|-------------|----------|
-| API | Global | Pas de format d'erreur uniforme — chaque route renvoie son propre format | Adopter un format standard `{ error: string, code: string, details?: any }` |
-| API | Global | Pas de versioning d'API — toutes les routes sous `/api/` | Aucun — acceptable pour MVP, prévoir `/api/v1/` |
-| API | Global | Pas de documentation OpenAPI/Swagger | Ajouter documentation |
-
-### ⚠️ Problèmes importants
-
-| Agent | Fichier | Description |
-|-------|---------|-------------|
-| API | `stripe/checkout/route.ts` | Pas de validation du priceId côté serveur |
-| API | `extension/auth/route.ts` | Régénération de token supprime tous les anciens |
-| API | `alerts/route.ts` | Route présente mais page alerts placeholder — pas de test |
-| API | `cron/trends/route.ts` | Route cron sans authentification (prévu pour Vercel Cron) — OK mais à documenter |
-
-## Agent 7 — Reliability & Observability Review
-
-### 📈 Problèmes identifiés
-
-| Problème | Type | Probabilité | Impact |
-|----------|------|-------------|--------|
-| **Aucun retry/backoff** sur appels externes (Stripe, Anthropic) | Résilience | H | M |
-| **Timeout non défini** sur appels HTTP sortants | Résilience | M | H |
-| **Aucun circuit breaker** | Résilience | M | H |
-| **Pas de health check enrichi** — `/api/health` existe mais ne vérifie pas les dépendances | Observabilité | - | M |
-| **Logs non structurés** — `logger.ts` existe mais format inconnu | Observabilité | - | M |
-| **Pas de métriques RED** (Rate, Errors, Duration) | Observabilité | - | H |
-| **Pas de traces distribuées** | Observabilité | - | M |
-| **Aucune gestion d'erreur transitoire** vs permanente | Résilience | M | M |
-
-### ✅ Points positifs
-- Sentry configuré (client + server + edge) — capture des erreurs
-- `error.tsx` + `global-error.tsx` — UI d'erreur
-- `health/route.ts` — endpoint de health check basique
-- PostHog pour analytics utilisateur
-
-## Agent 8 — Staff Engineer Review
-
-### Choix qui fonctionnent aujourd'hui mais pas à grande échelle
-
-| Décision | Problème à x10 | Problème à x100 | Solution |
-|----------|---------------|----------------|----------|
-| **Prisma direct dans les pages** | 10 pages = 10 queries BDD non optimisées | Cache manquant, BDD saturée | Services avec cache Redis |
-| **Scoring IA synchrone** | 10 utilisateurs refresh en même temps = timeout | File d'attente non gérable | Queue asynchrone (Bull/BullMQ) |
-| **Extension sans cache local** | 1000 req/min → latence API | 10 000 req/min → coût infini | Cache local + stale-while-revalidate |
-| **Pas d'abstraction Stripe** | 2 intégrations douloureuses | Migration impossible | Anti-corruption layer Stripe |
-| **Un seul webhook Stripe** | Gestion complexe des événements | Idempotence non garantie | Idempotency key + dead letter queue |
-
-### Dette technique cachée
-
-| Description | Coût si ignoré (6 mois) | Effort remédiation |
-|-------------|------------------------|-------------------|
-| Feature flags désactivés mais code présent | Maintenance de code mort | XS — supprimer le dossier |
-| Scripts de migration en .js vs .ts | Confusion, erreurs de migration | S — standardiser |
-| PLAN.md non à jour | Décisions basées sur des infos fausses | S — mettre à jour |
-| seed.ts silencieux | Données de test potentiellement corrompues | XS — remplacer catch par upsert |
-| Pas de tests | Régression non détectée, confiance faible | XL — couverture minimale |
-
-### Risques d'inconsistance sous concurrence
-- **Stripe webhook** : pas de gestion des webhooks dupliqués (Stripe peut envoyer 2x le même événement)
-- **Création d'alertes** : pas de lock sur la création simultanée
-- **Refresh trends** : possible si 2 utilisateurs déclenchent le refresh en même temps
-
-### Score global — Back-End
-
-| Critère | Note | Justification |
-|---------|------|---------------|
-| **Architecture** | 4/10 | Pas de couche service, Prisma dans les pages, pas de séparation des responsabilités |
-| **Sécurité** | 5/10 | Password en clair critique, webhook vulnérable, mais CSP et auth OK |
-| **Performance** | 4/10 | Aucun cache Redis, pagination absente, N+1 potentiel |
-| **Maintenabilité** | 5/10 | Code propre dans l'ensemble mais logique métier dispersée |
-| **Scalabilité** | 3/10 | Scoring synchrone, pas de queue, pas de cache, pas d'abstraction |
-| **Observabilité** | 4/10 | Sentry présent, mais pas de métriques RED, logs non structurés |
+| Couche | Technologie | Localisation |
+|---|---|---|
+| **Presentation** (UI) | React Server Components + Client Components | `src/app/`, `src/components/` |
+| **API** (Controllers) | Next.js App Router Route Handlers | `src/app/api/` |
+| **Application** (Services) | Fonctions lib | `src/lib/plan-check.ts`, `src/lib/trend-scorer.ts` |
+| **Domain** | Prisma models + Types | `prisma/schema.prisma`, `src/types/index.ts` |
+| **Data Access** | Prisma Client | `src/lib/prisma.ts` + calls in routes |
+| **Infrastructure** | Stripe, Anthropic, Redis, Resend | `src/lib/stripe.ts`, `src/lib/anthropic.ts` |
+| **Auth** | NextAuth.js + PrismaAdapter | `src/lib/auth.ts`, `src/proxy.ts` |
+| **Extension** | Chrome Extension MV3 | `extension/` |
 
 ---
 
-# 4. COUCHE MÉTIER — 3 agents
+## 🖥️ FRONT-END — Agent 1 : UI/Design Review
 
-## Agent Business Analyst
+### Problèmes détectés
 
-### Règles métier manquantes
+#### 🚨 Problèmes critiques
 
-| Problème | Impact business | Cas concret qui échouerait | Suggestion |
-|----------|----------------|---------------------------|------------|
-| **Aucune gestion des doublons de tendances** — seed ignore silencieusement les erreurs `@@unique` | Données corrompues, tendances manquantes | 2 refreshes simultanés d'une même niche créent des doublons potentiels | Remplacer `.catch()` par `upsert` |
-| **Plan FREE limité à 5 tendances côté dashboard mais pas côté API** | Free users contournent la limite via API | Appel `GET /api/trends?limit=100` renvoie toutes les tendances | Appliquer les mêmes limites dans les routes API |
-| **Stripe webhook force ACTIVE** quel que soit le statut réel du paiement | Utilisateurs past_due continuent à accéder | Carte expirée mais abonnement toujours ACTIF | Mapper tous les statuts Stripe |
-| **Aucune règle de downgrade** — pas de `DowngradeStrategy` implémentée | Comportement inconnu lors d'un downgrade | Utilisateur passe de Pro à Free mais conserve l'accès Pro | Implémenter les 3 stratégies (GRACEFUL, IMMEDIATE, FREEZE) |
-| **Pas de quota d'utilisation** — UsageTracking présent mais jamais utilisé | Pas de limite sur les appels API | Extension peut faire 10 000 appels/jour sans restriction | Implémenter rate limiting basé sur le plan |
+1. **Composant | Root layout (`src/app/layout.tsx:15-18`)** — Metadata générique "Create Next App" non modifié
+   - **Impact**: SEO, branding
+   - **Solution**: Remplacer par les vrais métadonnées TrendHunter
 
-### Règles dupliquées
+2. **Composant | Page d'accueil racine (`src/app/page.tsx`)** — Page Next.js boilerplate par défaut (logo Next.js, texte "Get started")
+   - **Impact**: Le visiteur arrive sur une page par défaut au lieu de la landing
+   - **Solution**: Rediriger `src/app/page.tsx` vers la landing ou supprimer et faire de la landing la racine
 
-| Règle | Où ? | Problème |
-|-------|------|----------|
-| Limite de tendances par plan | `plan-check.ts`, `dashboard/page.tsx`, `api/trends/route.ts` | 3 implémentations, risque de désynchronisation |
-| Plans pricing | `plans.ts`, `prisma/schema.prisma`, `stripe/checkout/route.ts` | Données dupliquées entre code et BDD |
+#### ⚠️ Améliorations importantes
 
-### Règles implicites non documentées
-- Le score 70 est le seuil par défaut des alertes (`threshold: 70`) — pourquoi 70 ?
-- La niche par défaut est "tech" (`nicheSlug = nicheQuery ?? "tech"`) — pourquoi "tech" ?
-- Le plan FREE voit 5 tendances, le Pro 20 — ratios non justifiés
-- Les tendances expirent (expiresAt) mais pas de règle de purge automatique
+1. **Composant | TrendCard (`src/components/dashboard/trend-card.tsx:70-72`)** — Mapping Badge variant sur score uniquement, pas sur le status métier réel. Un score 75+ = destructive badge, 50-74 = default, < 50 = secondary. Le statut (EMERGING/GROWING/PEAK/FADING) est affiché comme texte mais pas utilisé pour la couleur.
+   - **Solution**: Faire correspondre la couleur du badge au statut réel (EMERGING=green, GROWING=yellow, PEAK=red, FADING=gray)
 
-## Agent Domain Expert (DDD)
+2. **Composant | Sidebar (`src/components/dashboard/sidebar.tsx:16`)** — Props `user` seulement `name` et `image`, mais pas `plan`. Le plan n'est jamais affiché dans la sidebar.
+   - **Solution**: Ajouter l'affichage du plan dans le profil utilisateur en bas
 
-### Analyse du modèle métier
+3. **UI | Couleurs incohérentes** — Le site utilise `bg-black` et `text-white` pour les boutons principaux, mais l'extension utilise `#2563eb` (blue-600). Pas de design system cohérent entre web et extension.
+   - **Solution**: Aligner les couleurs de la marque entre le site et l'extension
 
-| Entité | Problème | Impact | Suggestion |
-|--------|----------|--------|------------|
-| **User** | God object — 10 relations, 14 champs, gère auth + subscription + roles + organization | Complexité, SRP violé | Diviser en User (auth) + Member (org) + Subscriber (billing) |
-| **Trend** | Anemic — simple data holder sans comportement | Logique de scoring dispersée | Ajouter méthodes `isEmerging()`, `isExpired()`, `shouldRefresh()` |
-| **Subscription** | Modèle hybride : `planKey` + `plan` (enum SubscriptionPlan) | Deux sources de vérité sur le plan | Supprimer l'enum, n'utiliser que `planKey` (relation vers Plan) |
-| **Organization** | Présent mais utilisé par 0 fonctionnalités | Complexité inutile | Supprimer ou implémenter |
-| **Feature/PlanFeature** | Système de feature flags complet mais désactivé (disabled/) | Code mort | Supprimer ou activer |
-| **Alert** | Niche optionnelle (`nicheId?`) — alerte globale ou par niche ambiguë | Incohérence métier | Clarifier : alertes globales ou par niche, documenter la règle |
-| **ApiToken** | Pas de relation vers Niche — un token peut accéder à toutes les niches | Surcharge d'accès potentielle | Ajouter scope de niche sur le token |
+#### ✨ Détails de finition (polish)
 
-### Valeurs du domaine vs types primitifs
-- `Score` (Int) — devrait être un Value Object avec validation (0-100)
-- `Velocity` (Float) — devrait être un VO avec unité (%, points)
-- `Email` (String) — pas de validation métier au niveau du type
-- `Plan.priceMonthly` (Int, centimes) — devrait être un VO `Money`
-
-### Ubiquitous language
-Globalement cohérent : "niche", "trend", "alert", "plan", "score".
-Incohérences : "entitlements" (feature flags) vs "plan" (abonnement) — concepts proches sans clarification.
-`SubscriptionPlan` enum (FREE/PRO/TEAM) en concurrence avec `Plan.key` ("free", "pro", "team").
-
-## Agent Use Cases Review
-
-### Use cases identifiés
-
-| Use case | Fichier | Problème | Type | Suggestion |
-|----------|---------|----------|------|------------|
-| **Voir les tendances** | `(dashboard)/page.tsx` | 3 responsabilités : check session, requêtes BDD, rendu | Trop grand | Séparer la logique de requête du rendu |
-| **Créer une alerte** | `api/alerts/route.ts` | Pas de validation métier — n'importe quel seuil accepté | Trop permissif | Valider threshold (0-100), vérifier quota d'alertes |
-| **Refresh des tendances** | `api/trends/refresh/route.ts` | Pas d'idempotence — 2 appels simultanés = 2 scoring IA | Pas idempotent | Ajouter deduplication par niche |
-| **Checkout Stripe** | `api/stripe/checkout/route.ts` | Pas de validation du priceId, pas de vérification du plan déjà actif | Mal découpé | Vérifier subscription active avant checkout |
-| **Auth extension** | `api/extension/auth/route.ts` | Supprime TOUS les tokens au lieu de l'ancien seulement | Trop agressif | Delete sélectif |
-| **Export utilisateur** | `api/user/export/route.ts` | Pas de limite de taille, pas de vérification de plan | Pas sécurisé | Limiter aux plans Pro+ |
-| **Cron refresh** | `api/cron/trends/route.ts` | Pas d'authentification, pas de rate limiting | Pas sécurisé | Ajouter auth par clé API cron |
-
-### Transactions métier absentes
-- Création d'utilisateur + subscription initiale pas atomique
-- Downgrade de plan sans transaction
-- Refresh tendances (appel Claude + sauvegarde) sans rollback
+1. **Input (`src/components/ui/input.tsx`)** — Focus ring en noir (`focus:ring-black`) qui manque de contraste sur fond sombre. | Effort: XS
+2. **Badge (`src/components/ui/badge.tsx`)** — Pas de variante pour les statuts de tendance. | Effort: XS
+3. **Login page** — Pas de message d'erreur ni de feedback si l'auth Google échoue. | Effort: S
+4. **Marketing page** — Année en bas de page codée en dur (2024). | Effort: XS
 
 ---
 
-# 5. COUCHE DATA ACCESS — 3 agents
+## 🖥️ FRONT-END — Agent 2 : UX Review
 
-## Agent Repository Review
+#### 🚨 Problèmes critiques
 
-### Analyse du pattern
+1. **Parcours | Niches page (`src/app/(dashboard)/niches/page.tsx`)** — Les boutons "Suivre" (niche) n'ont **aucun handler** — ils sont purement visuels (pas de `form action` ou de server action)
+   - **Impact**: Impossible de suivre une niche
+   - **Solution**: Ajouter un Server Action ou un formulaire pour suivre/ne plus suivre une niche
 
-**Le pattern Repository n'est pas implémenté.** L'accès aux données se fait directement via Prisma dans :
-- Les pages Server Components (`(dashboard)/page.tsx`)
-- Les API Routes (`api/trends/route.ts`)
-- Quelques fichiers `lib/` (`plan-check.ts`, `alerts.ts`, etc.)
+2. **Parcours | Alerts page (`src/app/(dashboard)/alerts/page.tsx`)** — Le bouton "Créer une alerte" n'a pas de handler non plus
+   - **Impact**: Impossible de créer une alerte
+   - **Solution**: Implémenter le formulaire de création d'alerte
 
-| Repository | Méthode | Problème | Suggestion |
-|-----------|---------|----------|------------|
-| **Trend** | (aucun) | Requêtes éparpillées dans pages + API + cron | Créer `TrendRepository` : `findByNiche()`, `findEmerging()`, `upsert()`, `purgeExpired()` |
-| **User** | (aucun) | `prisma.user.findUnique/update` direct partout | Créer `UserRepository` |
-| **Niche** | (aucun) | Requêtes dispersées | Créer `NicheRepository` |
-| **Alert** | `alerts.ts` | Logique métier dans alerts.ts ET dans les routes API | Fusionner dans `AlertRepository` |
+#### ⚠️ Améliorations importantes
 
-### Violations du pattern
-- Logique métier mélangée aux appels Prisma (ex: `plan-check.ts` fait des calculs et des queries)
-- Entités Prisma exposées directement dans les réponses API (ex: `extension/trends/route.ts` renvoie les champs Prisma bruts)
-- Absence de DTO — les données Prisma transitent jusqu'au front-end sans transformation
+1. **UX | NicheSelector (`src/components/dashboard/niche-selector.tsx`)** — Utilise un `<select>` natif comme sélecteur de niche. Pas de chargement d'état, pas de prefetch.
+   - **Solution**: Ajouter `useTransition` pour feedback de navigation, précharger les données
 
-## Agent Query Performance
+2. **UX | TrendCard** — Pas de lien/action pour voir le détail d'une tendance. On ne peut que la voir dans la liste.
+   - **Solution**: Ajouter un clic pour voir le détail, les angles de contenu complets, etc.
 
-### Requêtes analysées
+3. **UX | GenerateTokenButton** — Utilise `alert()` pour feedback utilisateur. Peu professionnel.
+   - **Solution**: Remplacer par un toast ou notification inline
 
-| Niveau | Fichier/Méthode | Requête | Explication | Solution |
-|--------|-----------------|---------|-------------|----------|
-| 🟠 Élevé | `(dashboard)/page.tsx:22-37` | 3 queries : niche, trends, niches | Chaque chargement dashboard = 3 appels BDD séquentiels | Cache Redis + parallelisation |
-| 🟡 Moyen | `api/trends/route.ts` | `findMany` sans pagination | Avec 10k trends, la réponse devient énorme | Ajouter cursor-based pagination |
-| 🟡 Moyen | `(marketing)/page.tsx:53` | `user.count()` | Déjà caché ✅ | OK |
-| 🟢 Faible | `api/niches/route.ts` | `findMany` sur niche | Table petite, acceptable | Cache court TTL |
-| 🟢 Faible | `seed.ts` | Insertions sans batch | Seed uniquement, pas d'impact prod | Utiliser `createMany` |
+#### 🎨 Éléments visuellement discutables
 
-### Problèmes N+1 potentiels
-- **Trend → Niche** : relation chargée via `include` ou lazy ? Si `include`, OK. Si lazy loading activé par erreur, N+1 garanti.
-- **User → Alerts** : pas de eager loading dans les pages qui listent les alertes par utilisateur
-- **Extension/trends** : renvoie `user: { name, email }` — jointure inutile si non utilisée par le front
-
-## Agent ORM Review
-
-### Utilisation de Prisma
-
-| Entité/Fichier | Pattern problématique | Risque | Solution |
-|----------------|----------------------|--------|----------|
-| `prisma.ts` | `new PrismaClient({})` sans singleton | Connexions multiples en dev Hot Module Replacement | Pattern global standard |
-| `seed.ts` | `.catch(() => {})` — ignore les erreurs Prisma | Données incohérentes, seed silencieux | Utiliser `prisma.trend.upsert()` |
-| Tous les fichiers | `findMany` sans `include` explicite | Lazy loading involontaire si Prisma configuré en lazy | Ajouter `include` ou `select` explicite |
-| `stripe/webhook/route.ts` | `prisma.subscription.update({ where: { userId } })` — pas de vérification d'existence | Erreur si subscription n'existe pas | `upsert` au lieu de `update` |
-| `extension/auth/route.ts` | `prisma.apiToken.deleteMany({ where: { userId } })` — supprime tous les tokens | Perte de tous les tokens (autres devices, apps) | Supprimer uniquement l'ancien token |
-
-### Mapping et relations
-- `ApiToken.token` : `@unique` avec `@default(cuid())` en base, mais `randomUUID()` en code → incohérence
-- `Alert.nicheId` : `String?` sans `@relation` explicite → pas de contrainte d'intégrité référentielle
-- `Subscription.plan` : enum `SubscriptionPlan` ET `planKey` → redondance
-- `Trend.score` : `Int` mais valeur métier 0-100 — devrait avoir une contrainte `@@check`
+1. **Billing page** — Le token API est affiché en clair dans un `<code>` tronqué avec un bouton "Copier" à côté. Mais le bouton "Copier" est un `<button>` inline sans style d'icône. L'UX de copie est rustique et il n'y a pas de confirmation visuelle de copie réussie.
 
 ---
 
-# 6. COUCHE DATABASE — 3 agents
+## 🖥️ FRONT-END — Agent 3 : Responsive Review
 
-## Agent DBA
+#### ⚠️ Améliorations importantes
 
-### Analyse du schéma SQL
+1. **Dashboard layout (`src/app/(dashboard)/layout.tsx:13-19`)** — Layout en `flex h-screen` avec sidebar de 256px. La sidebar n'est pas responsive : elle est toujours visible et prend 256px même sur tablette/mobile.
+   - **Solution**: Ajouter une sidebar mobile avec hamburger menu ou drawer
 
-| Table | Colonne/Index | Problème | Recommandation SQL |
-|-------|--------------|----------|-------------------|
-| `User` | `email` unique — mais pas de `@db.VarChar(255)` | Longueur par défaut, pas de validation de format | Ajouter contrainte CHECK (email ~ '^...@...') |
-| `Trend` | `score` Int sans CHECK | Accepte -100 ou 1000, pas borné | `@@check(score >= 0 AND score <= 100)` |
-| `Trend` | `velocity` Float sans CHECK | Valeurs négatives possibles sans signification métier | `@@check(velocity >= 0)` |
-| `Alert` | `threshold` Int @default(70) sans CHECK | Peut être 0 ou 150 | `@@check(threshold >= 1 AND threshold <= 100)` |
-| `ApiToken` | `token` String sans taille | Taille variable, index moins performant | `@db.VarChar(64)` (SHA-256 = 64 chars hex) |
-| `AuditLog` | `metadata` Json? | Pas de validation du JSON stocké | Ajouter validation applicative |
-| `UsageTracking` | `periodStart`, `periodEnd` | Pas de CHECK que periodStart < periodEnd | `@@check(periodStart < periodEnd)` |
-| `Organization` | `name` String | Pas de taille max | `@db.VarChar(255)` |
-| `Plan` | `priceMonthly` Int | Pas de CHECK > 0 | `@@check(priceMonthly >= 0)` |
-| `Trend` | `detectedAt` DateTime | Pas d'index sur expiresAt pour purge | `@@index([expiresAt])` |
+2. **Landing page** — Grille `grid md:grid-cols-4` passe à 1 colonne en mobile, ce qui est correct mais la section features devient très longue.
 
-### Normalisation
-- **1NF** ✅ : Tous les champs atomiques (sauf `String[]` keywords dans Niche — dénormalisation acceptable pour Postgres array)
-- **2NF** ✅ : Pas de dépendances partielles
-- **3NF** ✅ : Pas de dépendances transitives majeures
-- **Dénormalisations** : `contentAngles String[]` dans Trend — justifié (performance, rarement requêté seul)
+3. **Pricing page** — `grid md:grid-cols-3` avec `scale-105` sur le plan "populaire". En mobile, les cartes s'empilent mais le scale peut causer des problèmes de layout.
 
-### Index manquants
-- `Trend.expiresAt` : pour la purge des tendances expirées
-- `AuditLog.createdAt` : seul `[userId, createdAt]` existe, pas `[createdAt]` pour les recherches temporelles
-- `StripeEvent.eventId` : déjà unique, OK
-- `Subscription.stripeSubscriptionId` : déjà unique, OK
+#### ✨ Détails de finition
 
-## Agent Database Scalability
+1. **Taille tactile** — Les liens de navigation dans la sidebar (padding `px-3 py-2`) font environ 40px de hauteur, en dessous du minimum recommandé 44x44px. | Effort: XS
 
-### Simulation x10 et x100
+---
+
+## 🖥️ FRONT-END — Agent 4 : Accessibility Review (WCAG 2.1 AA)
+
+#### 🚨 Problèmes critiques
+
+1. **WCAG 1.1.1 | Login page** — Le SVG Google icon n'a pas de `title` ou `aria-label`. L'image utilisateur dans la sidebar (`next/image` avec `alt=""`) est correcte car décorative.
+   - **Impact**: Les lecteurs d'écran ne peuvent pas identifier l'icône
+   - **Solution**: `<svg aria-label="Google" role="img">` ou `title`
+
+2. **WCAG 4.1.2 | NicheSelector** — Le `<select>` n'a pas de `<label>` associé
+   - **Impact**: Les lecteurs d'écran ne savent pas ce que ce champ signifie
+   - **Solution**: Ajouter un `<label>` avec `htmlFor`
+
+#### ⚠️ Améliorations importantes
+
+1. **WCAG 1.4.3 | TrendCard score badge** — Texte blanc `text-white` sur badge `bg-red-500` (#ef4444) = ratio contraste ~4.0:1, en dessous de 4.5:1 pour texte normal.
+   - **Solution**: Utiliser `bg-red-700` ou texte plus foncé
+
+---
+
+## 🖥️ FRONT-END — Agent 5 : Front-End Architecture Review
+
+#### 🚨 Problèmes critiques
+
+1. **Architecture | Instance Stripe (`src/lib/stripe.ts:4-16`)** — Lazy singleton via Proxy avec mutation de module. Le `getStripe()` modifie `_stripe` mais le Proxy retourne `_stripe ?? getStripe()` — race condition potentielle en cold start. Si Stripe SDK n'est pas chargé en mémoire, `Reflect.get(client, prop, client)` peut échouer silencieusement si `getStripe()` throw.
+
+2. **Architecture | Middleware (`src/proxy.ts`)** — Le fichier s'appelle `proxy.ts` mais fait office de middleware. Next.js 16 utilise `middleware.ts` à la racine. Le matcher exclut les routes API, ce qui signifie que toutes les routes API sont **publiques et non protégées** (sauf vérification manuelle dans chaque route).
+   - **Impact**: Routes API accessibles sans auth (même si chaque route vérifie, le pattern est risqué)
+
+#### ⚠️ Améliorations importantes
+
+1. **Composants** — Beaucoup d'asynchrones mélangées : les pages dashboard sont des RSC avec `async`, les components clients utilisent `useState`/`useEffect`. Le découpage est globalement bon mais il manque une couche de chargement (loading.tsx) ou d'erreur (error.tsx)
+
+2. **Gestion d'état** — Aucun état global (React Context, Zustand, etc.). L'état est géré via URL search params et props. Acceptable pour la taille actuelle mais peut devenir limitant.
+
+3. **Ni `loading.tsx` ni `error.tsx`** dans aucune route group. Sur error réseau ou DB, l'utilisateur aura une page blanche ou une erreur React non gérée.
+
+#### ✨ Détails de finition
+
+1. **Sidebar** — Nav items en dur. Si un jour on ajoute des pages, il faut modifier le composant. | Effort: XS
+
+---
+
+## 🖥️ FRONT-END — Agent 6 : Design System Review
+
+#### ⚠️ Améliorations importantes
+
+1. **Tokens** — Pas de tokens de design system. Couleurs codées en dur (classes Tailwind) partout. Le fichier `globals.css` définit `--background` et `--foreground` mais n'est pas utilisé de manière cohérente.
+
+2. **Couleurs** — Pas de palette de marque : la landing utilise `text-blue-600`, l'extension utilise `#2563eb` (blue-600), les boutons sont `bg-black`. Les badges alerts utilisent `bg-amber-50`. Pas de cohérence.
+
+3. **Espacements** — Pas de grille d'espacement cohérente. Parfois `p-4`, parfois `p-6`, parfois `p-8`.
+
+---
+
+## ⚙️ BACK-END — Agent 1 : Architecture Review
+
+#### 🚨 Problèmes critiques
+
+1. **Architecture globale** — Pas de séparation claire entre les couches. Les route handlers API font directement des appels DB (Prisma), de l'auth (NextAuth), et de la logique métier (plan checking) dans le même fichier. Pas de service layer, pas de repository abstraction.
+
+2. **Dépendances circulaires potentielles** — `auth.ts` importe `prisma.ts` pour le callback session. Ensuite `prisma.ts` importe `@prisma/client` qui ne dépend pas de auth, mais la session callback dans auth fait une query Prisma — la logique auth dépend de la DB.
+
+#### ⚠️ Améliorations importantes
+
+1. **Scalabilité de l'architecture** — Architecture monolithique Next.js. Pour la taille actuelle c'est OK, mais le scoring IA est synchrone (attend Claude) ce qui bloque le thread dans les route handlers.
+
+2. **Testabilité** — Aucune abstraction (Repository, Service) — les tests nécessiteraient de mocker Prisma directement ou de setup une DB de test. Pas d'injection de dépendances.
+
+---
+
+## ⚙️ BACK-END — Agent 2 : Code Quality Review
+
+#### 🚨 Problèmes critiques
+
+1. **Stripe webhook (`src/app/api/stripe/webhook/route.ts:6-7`)** — Types custom dangereux (`SubWithPeriod`, `InvoiceWithSub`) avec `as unknown as` casts. Le typage TypeScript est contourné, ce qui peut cacher des erreurs à la compilation qui exploseront en runtime.
+   - **Impact**: Rupture silencieuse du webhook Stripe si la structure change
+   - **Solution**: Utiliser les types Stripe officiels correctement
+
+2. **Trend scorer (`src/lib/trend-scorer.ts:55-56`)** — `JSON.parse(text)` sans validation. Si Claude retourne du JSON invalide ou du markdown, ça throw une erreur non gérée.
+   - **Impact**: Crash de la route API
+   - **Solution**: Wrap dans try/catch + validation Zod
+
+#### ⚠️ Améliorations importantes
+
+1. **`plan-check.ts:9`** — `sub.stripeCurrentPeriodEnd < new Date()` devrait être `sub.stripeCurrentPeriodEnd < new Date()` — correct fonctionnellement mais pas de timezone consideration.
+
+2. **Extension trends route** — La route extension/trends n'utilise pas Redis cache contrairement au PLAN.md (qui montre un cache Redis). Le code actuel n'a pas de cache Redis — il va directement en DB à chaque requête.
+   - **Note**: Le fichier `redis.ts` n'existe pas dans le code actuel. `@upstash/redis` est dans package.json mais pas utilisé.
+
+3. **Nommage** — `src/proxy.ts` est un middleware, pas un proxy. Nom trompeur.
+
+4. **Magic strings** — `"Extension Chrome"` hardcodé dans `api/extension/auth/route.ts:19` et dans `prisma/schema.prisma:179`.
+
+---
+
+## ⚙️ BACK-END — Agent 3 : Security Review (OWASP Top 10)
+
+#### 🔒 A04:2021 — Insecure Design
+
+1. **API Trends route (`src/app/api/trends/route.ts:23-30`)** — Vérification du nombre de niches suivies pour les users FREE. Logique métier dans la couche API. Si un user FREE supprime toutes ses niches puis appelle l'API, il passe la garde et voit les données.
+
+#### 🔒 A01:2021 — Broken Access Control
+
+2. **Extension auth (`src/app/api/extension/auth/route.ts:12-14`)** — `deleteMany` supprime **tous** les tokens existants avant d'en créer un nouveau. Si le create échoue (DB error), l'user perd tous ses tokens — potentiel lockout.
+   - **Risque**: Medium | **Solution**: Faire delete + create dans une transaction
+
+3. **Extension trends (`src/app/api/extension/trends/route.ts:13-14`)** — Le token API est cherché par `findUnique({ where: { token } })`. Le token est un `cuid()` par défaut (faible entropie). `randomUUID()` est utilisé dans la création réelle (bon point), mais le schéma Prisma a `@default(cuid())` pour le champ token.
+
+#### 🔒 A02:2021 — Cryptographic Failures
+
+4. **Anthropic API key (`src/lib/anthropic.ts:4`)** — `process.env.ANTHROPIC_API_KEY!` avec `!` (non-null assertion). Si la variable n'est pas définie, l'erreur sera cryptique (Erreur API Anthropic) plutôt que "Config manquante".
+
+5. **Stripe secret key (`src/lib/stripe.ts:6`)** — Même pattern avec `throw new Error` — meilleur mais toujours pas de validation au démarrage.
+
+#### 🔒 A06:2021 — Vulnerable and Outdated Components
+
+6. **`next-auth@5.0.0-beta.31`** — Version beta en production. Les breaking changes entre betas sont fréquents.
+
+#### ⚠️ Améliorations
+
+7. **Headers de sécurité** — Aucun header de sécurité (CSP, HSTS, X-Frame-Options, X-Content-Type-Options) configuré dans `next.config.ts`.
+
+8. **CORS** — Aucune configuration CORS pour les routes API. L'extension Chrome fait des fetch locaux — en production, le CORS serait un problème si le frontend et l'API sont sur des origines différentes.
+
+#### Résumé Sécurité
+
+| Vulnérabilité | OWASP Ref | Criticité | Solution |
+|---|---|---|---|
+| Token delete sans transaction | A01 | High | Wrap dans transaction |
+| JSON.parse sans validation | A08 | High | Ajouter validation Zod |
+| next-auth beta | A06 | Medium | Migrer vers stable |
+| Headers sécurité manquants | A05 | Medium | Ajouter dans next.config |
+| CORS non configuré | A01 | Medium | Configurer CORS |
+| Magic string secret non validé | A02 | Low | Validation au démarrage |
+
+---
+
+## ⚙️ BACK-END — Agent 4 : Performance Review
+
+#### 🚨 Problèmes critiques
+
+1. **Scoring IA synchrone (`src/lib/trend-scorer.ts`)** — L'appel à Anthropic Claude est synchrone dans le route handler. Pour N tendances, N appels séquentiels. Temps typique : 2-5 secondes **par tendance**.
+   - **Impact**: Timeout possible sur les routes, mauvaise UX
+   - **Solution**: Background job (queue), cache Redis, scoring par lot asynchrone
+
+2. **Dashboard page (`src/app/(dashboard)/dashboard/page.tsx:22-27`)** — Requête DB pour les niches ET les tendances à chaque chargement de page. Si la niche n'existe pas, la requête trends est sautée mais la query niche a déjà eu lieu.
+   - **Impact**: 2 requêtes DB minimum par chargement dashboard
+
+#### ⚠️ Améliorations importantes
+
+1. **Cache Redis non implémenté** — `@upstash/redis` est dans `package.json` mais le fichier `src/lib/redis.ts` n'existe pas. Aucun cache n'est utilisé nulle part dans le code actuel (contrairement au PLAN.md qui le montre).
+
+2. **N+1 potentiel** — `trend-card.tsx` ne fait pas de chargement paresseux des `contentAngles`, mais ils sont pré-chargés dans la query. OK actuellement mais à surveiller.
+
+3. **`niches/page.tsx`** — 2 requêtes DB (`findMany` niches + `findMany` userNiches) qui pourraient être fusionnées.
+
+---
+
+## ⚙️ BACK-END — Agent 5 : Database Review
+
+#### 🗄️ Schéma
+
+| Table | Colonne/index | Problème | Recommandation |
+|---|---|---|---|
+| `Trend` | `score` | `@@index([nicheId, score(sort: Desc)])` — Bon index composite | OK |
+| `Trend` | `expiresAt` | Pas d'index sur `expiresAt` utilisé dans les WHERE | Ajouter `@@index([expiresAt])` |
+| `User` | `stripeCustomerId` | `String? @unique` — OK pour Stripe | OK |
+| `Alert` | `nicheId` | `nicheId String?` — nullable mais pas de `@relation` cohérente | Ajouter relation vers Niche |
+| `ApiToken` | `expiresAt` | `DateTime?` mais jamais setté dans le code | Cohérence ou suppression |
+| `Niche` | `keywords` | `String[]` — pas de support natif PostgreSQL performant pour les array queries | Table de liaison `NicheKeyword` si scale |
+
+#### ⚠️ Améliorations
+
+1. **`Trend`** — `expiresAt` est un index manquant pour les requêtes `WHERE expiresAt >= NOW()`. Sans index, full table scan à chaque requête.
+
+2. **`Alert`** — Pas d'index sur `userId` pour la recherche des alertes d'un utilisateur.
+
+3. **`Subscription`** — `stripeCurrentPeriodEnd` utilisé dans `plan-check.ts:9` mais pas d'index pour la query par `userId` (déjà unique, donc couvert).
+
+---
+
+## ⚙️ BACK-END — Agent 6 : API Review
+
+#### 🚨 Problèmes critiques
+
+1. **Erreur format** — Pas de format uniforme. Parfois `{ error: "message" }` avec status 4xx, parfois `NextResponse.json({ trends: [], plan })`. Les consumers doivent gérer des formats différents.
+
+2. **Extension trends route** — Si la niche n'existe pas, retourne `{ trends: [], plan }` avec status 200. La route web devrait retourner 404.
+
+3. **Checkout route** — Pas de validation du `priceId` côté serveur. N'importe quel priceId peut être passé, même un qui n'existe pas ou qui n'est pas un abonnement.
+   - **Impact**: Un utilisateur pourrait potentiellement passer un priceId invalide ou d'un autre produit
+   - **Solution**: Valider priceId contre une liste connue
+
+#### ⚠️ Améliorations importantes
+
+4. **Rate limiting** — Aucun rate limiting sur aucune route API. Les routes extension auth et trends sont particulièrement exposées.
+
+5. **Doc API** — Aucune documentation OpenAPI/Swagger. Pas de types partagés entre le frontend et l'extension.
+
+---
+
+## ⚙️ BACK-END — Agent 7 : Reliability & Observability Review
+
+#### 🚨 Problèmes critiques
+
+1. **Absence totale de logs structurés** — Aucune ligne de `console.log` ou logger dans le code de production. Les seuls logs sont dans `catch` blocks avec `console.error(error)` qui ne donne pas de contexte.
+
+2. **Retry/Timeout** — Aucun timeout sur l'appel Anthropic. Si Claude est lent (rate limit, panne), la route Next.js peut timeout après 30s (Vercel serverless) et l'utilisateur a une erreur 504 sans feedback.
+
+3. **Health checks** — Aucun health check endpoint. Pas de readiness/liveness pour un éventuel déploiement orchestré.
+
+#### ⚠️ Améliorations importantes
+
+4. **Error boundaries** — Pas de `error.tsx` dans les routes groups. Une erreur non gérée dans un RSC = page blanche.
+
+5. **Webhook Stripe** — Pas de retry ou de gestion d'échec. Si le webhook échoue (DB down), Stripe renverra l'event plus tard mais le code ne gère pas les doublons élégamment (upsert sauve la mise).
+
+---
+
+## ⚙️ BACK-END — Agent 8 : Staff Engineer Review
+
+#### 🔮 Risques à long terme
+
+1. **Architecture monolithique Next.js** — Fonctionne pour un MVP mais deviendra problématique à x100 charge :
+   - Les background jobs (scoring IA, envoi d'emails, traitement de tendances) ne peuvent pas scale indépendamment
+   - Les route handlers API timeout à 30s sur Vercel serverless
+   - Pas de séparation read/write (CQRS)
+
+2. **Pas d'abstraction de persistance** — Prisma est appelé directement depuis les route handlers. Migrer de PostgreSQL vers autre chose nécessite de tout réécrire.
+
+3. **Pas de CI/CD** — Aucun fichier de workflow GitHub Actions, pas de tests, pas de lint automatisé en CI (seulement `eslint` script npm).
+
+4. **Gestion des secrets** — `process.env.X!` partout sans validation. Les variables d'environnement ne sont pas vérifiées au démarrage. Un déploiement avec une variable manquante échouera silencieusement à la première requête qui l'utilise.
+
+5. **Extension Chrome** — L'extension hardcode `http://localhost:3000`. En production, ça doit être l'URL de production. Pas de mécanisme de build/déploiement pour l'extension.
+
+#### 💡 Recommandations Staff+ 
+
+- Extraire le scoring IA dans un worker/service séparé (queue + worker)
+- Ajouter une validation d'environment au démarrage (toutes les vars requises)
+- Créer des fichiers de workflow CI (lint, typecheck, test)
+- Remplacer `console.error` par un logger structuré (pino, winston)
+- Ajouter des tests (au moins un test d'intégration par route API critique)
+
+---
+
+## 🏢 COUCHE MÉTIER — Agent Business Analyst
+
+#### Problèmes métier
+
+1. **Règle manquante — Limite de niche FREE** — Le `PLAN_LIMITS.FREE.niches = 1`. Mais dans `api/trends/route.ts:23-29`, la vérification est `if (userNiches >= 1)` (strict), ce qui signifie qu'un user FREE avec **0 niche** ne peut pas voir les tendances d'une niche. La limite est mal interprétée : l'utilisateur devrait pouvoir suivre **1 niche** (= créé 1 UserNiche), pas 0.
+   - **Impact business**: Les users FREE ne peuvent suivre aucune niche (bloquant)
+   - **Correction**: `if (userNiches >= 1)` → `if (userNiches > 1)`
+
+2. **Règle manquante — Suivi de niche non implémenté** — Dans `niches/page.tsx`, le bouton "Suivre" est un `<Button>` sans action. Impossible de suivre une niche.
+
+3. **Règle manquante — Création d'alerte non implémentée** — Dans `alerts/page.tsx`, "Créer une alerte" est un `<Button>` sans handler.
+
+4. **Magic threshold** — Le `Plan.LIMITS.FREE.trendsPerNiche = 5` et la valeur `20` pour PRO sont des magic numbers. Un changement de seuil nécessite une modification du code.
+
+---
+
+## 🏢 COUCHE MÉTIER — Agent Domain Expert (DDD)
+
+#### Problèmes de modèle
+
+1. **Trend.status** — `TrendStatus` enum définit EMERGING/GROWING/PEAK/FADING. Mais le `scoreTrend()` dans `trend-scorer.ts` demande à Claude de retourner ce status. La logique de détermination du statut est déléguée à l'IA, pas codée dans le domaine. Si Claude change son comportement, les statuts deviennent incohérents.
+
+2. **Anemic Domain Model** — Les entités Prisma sont des anémiques (pas de comportement). Toute la logique est dans les services/routes. Par exemple, `getStatusColor` dans `trend-card.tsx` est UI, mais le calcul du statut devrait être une méthode de l'entité Trend.
+
+3. **Value Object manquant** — `ApiToken.token` est un `String`, devrait être un Value Object avec validation (UUID v4). Le schéma a `@default(cuid())` mais le code de création utilise `randomUUID()`. Incohérence.
+
+4. **Ubiquitous Language** — Le code mélange français et anglais :
+   - Français : commentaires, messages API, noms de niches
+   - Anglais : noms de variables, noms de fonctions, code
+   - Cohérent avec le public cible (francophone) mais peut créer de la confusion
+
+---
+
+## 🏢 COUCHE MÉTIER — Agent Use Cases Review
+
+#### Problèmes de cas d'usage
+
+1. **Dashboard page** — Mélange 3 responsabilités : auth check, data fetching, plan validation, rendering. Le `getUserPlan()` est appelé 2 fois (dashboard et plan-check inline).
+
+2. **Checkout session** — Le use case "créer une session checkout" est dans le route handler directement. Il devrait être dans un service.
+
+3. **Token generation** — Le use case "générer token" supprime d'abord tous les tokens existants. Ce side effect n'est pas évident pour l'utilisateur (perd le token actuel).
+
+---
+
+## 💾 COUCHE DATA ACCESS — Agent Repository Review
+
+#### Problèmes
+
+1. **Pattern Repository violé** — Pas de repository layer. Les appels Prisma sont directement dans les route handlers (`prisma.niche.findUnique`, `prisma.trend.findMany`, etc.). Duplication des mêmes patterns de query dans `api/trends/route.ts` et `api/extension/trends/route.ts`.
+
+2. **Requêtes dupliquées** — La query `niche.findUnique({ where: { slug } })` + `trend.findMany({ where: { nicheId } })` est identique dans `dashboard/page.tsx`, `api/trends/route.ts`, et `api/extension/trends/route.ts`.
+
+3. **Pagination absente** — `trend.findMany` sans `skip`/`take` pour les plans PRO (take: 20). Si le nombre de tendances augmente, la page dashboard chargera toujours 20 items sans pagination. Pour un plan PRO, `take: -1` aurait du sens mais `-1` en Prisma = pas de limite. Actuellement `-1` est dans `PLAN_LIMITS` mais pas utilisé comme tel dans les queries.
+
+---
+
+## 💾 COUCHE DATA ACCESS — Agent Query Performance
+
+#### Requêtes problématiques
+
+🟠 **Dashboard page**: 2 queries DB (niche + trends) qui pourraient être parallélisées avec `Promise.all`
+
+🟠 **Niches page**: 2 queries DB (allNiches + userNiches) qui pourraient être combinées
+
+🟢 **Auth session callback**: Query `subscription.findUnique` à chaque session check — ajouté à chaque requête API. Cache manquant.
+
+---
+
+## 💾 COUCHE DATA ACCESS — Agent ORM Review
+
+#### Problèmes ORM
+
+1. **Prisma Client** — `src/lib/prisma.ts:3` — Instance globale sans gestion de hot reload en dev. Next.js 16 avec Webpack/Turbopack peut créer plusieurs instances en dev.
+
+2. **`User` → `Subscription`** — Relation 1:1 avec `@unique` sur `userId`. Mais `Subscription` n'est pas créée pour les users FREE. Le `findUnique` dans `auth.ts` retourne null — géré correctement (`?? "FREE"`).
+
+3. **`Trend.expiresAt`** — Pas de `@updatedAt` ou de trigger pour mettre à jour automatiquement.
+
+---
+
+## 🗄️ COUCHE DATABASE — Agent DBA
+
+#### Problèmes de schéma
+
+| Table | Colonne | Problème | Recommandation SQL |
+|---|---|---|---|
+| `Trend` | `expiresAt` | Pas d'index | `CREATE INDEX idx_trend_expires ON Trend(expiresAt);` |
+| `Trend` | `score` | Int 0-100 mais pas de CHECK | `ALTER TABLE Trend ADD CONSTRAINT chk_score CHECK (score >= 0 AND score <= 100);` |
+| `Alert` | `userId` | Pas d'index | `CREATE INDEX idx_alert_user ON Alert(userId);` |
+| `Alert` | `nicheId` | String? sans relation | `ALTER TABLE Alert ADD CONSTRAINT fk_alert_niche FOREIGN KEY (nicheId) REFERENCES Niche(id);` |
+| `Niche` | `keywords` | String[] (array) | Considérer une table NicheKeyword pour les recherches performantes |
+| `User` | `email` | Unique, mais pas de normalize | Ajouter `CHECK (email ~* '^.+@.+\..+$')` |
+
+#### ⚠️ Général
+
+- Les enums `SubscriptionStatus` et `Plan` sont gérés par Prisma. En PostgreSQL, ce sont des types enum — nécessite migration Prisma pour modifier.
+- Pas de `createdAt` sur `ApiToken` versionné pour historique de régénération.
+
+---
+
+## 🗄️ COUCHE DATABASE — Agent Database Scalability
+
+#### Risques
 
 | Risque | Impact à x10 | Impact à x100 | Mitigation |
-|--------|-------------|--------------|------------|
-| **Trend table non partitionnée** | 100k lignes OK | 1M lignes → requêtes lentes, purge complexe | Partition temporelle par mois |
-| **Aucun cache Redis** | 100 req/s → BDD tient | 1000 req/s → BDD saturée | Implémenter cache Redis |
-| **Scoring IA synchrone** | 10 requêtes simultanées → timeout | 100 → blocage complet | File d'attente asynchrone |
-| **Textes longs (blob)** : refresh_token, access_token, id_token en @db.Text | Stockage OK | Fragmentation, backup volumineux | Séparer dans table annexe si besoin |
-| **AuditLog non partitionné** | 100k lignes OK | 1M+ → index volumineux, purge lente | Partition temporelle, archive data |
-| **Connexions BDD** | Pool par défaut Prisma (10) | Saturation à 100+ instances | Pool scaling, connection pooling externe |
-| **Requêtes SELECT *** | Acceptable | Impact cumulé significatif | Select explicite sur toutes les queries |
-
-### Points de contention
-- `Trend` : mises à jour concurrentes sur refresh (nicheId + title)
-- `Subscription` : webhook Stripe peut arriver en concurrence avec un checkout
-- `User.updatedAt` : mis à jour à chaque connexion via NextAuth — contention potentielle
-
-## Agent Data Integrity
-
-### Risques de corruption
-
-| Table/Relation | Risque | Scénario de corruption | Solution |
-|---------------|--------|----------------------|----------|
-| **Trend ↔ Niche** | Trend orphelin si Niche supprimée — `onDelete: Cascade` OK ✅ | N/A — OK | ✅ |
-| **Alert ↔ User** | Alert orpheline — `onDelete: Cascade` OK ✅ | N/A — OK | ✅ |
-| **ApiToken** | Token en clair vs hash stocké | Migration hash impossible sans régénération des tokens | Hasher dès la création |
-| **User ↔ Organization** | `onDelete: SetNull` — user peut avoir orgId vide | Orphelin si org supprimée | Vérifier avant SetNull |
-| **Subscription** | `userId` unique — un seul abonnement par utilisateur | Impossible d'avoir plusieurs abonnements (OK métier) | ✅ |
-| **StripeEvent** | Pas d'idempotence stricte — `processed` flag mais pas de lock | 2 webhooks simultanés traités 2x | Ajouter lock atomique ou unique constraint |
-
-### Soft delete
-- Aucune table utilise le soft delete — suppression physique uniquement
-- `cascade: true` sur certaines relations — risque de perte de données
-- Recommandation : ajouter `deletedAt` sur User et Trend pour protection
-
-### Timestamps
-- `createdAt` + `updatedAt` présents sur presque tous les modèles ✅
-- Manquant sur `ApiToken.lastUsedAt` — présent ✅
-- Manquant sur `AuditLog.createdAt` — présent ✅
-- `Trend.detectedAt` présent mais pas de `expiresAt` indexé pour purge automatique
+|---|---|---|---|
+| Pas d'index sur `expiresAt` | Full scan de 1K lignes | Full scan de 10K+ lignes | Ajouter index |
+| `keywords` en array PostgreSQL | Filtrage lent | Très lent | Table de liaison |
+| `Trend` table non partitionnée | OK | Problématique (recherche par niche + date) | Partitionnement par niche |
+| Pas de read replica | Tout sur le primary | Contention | Read replicas pour les lectures |
+| Score trending en temps réel | OK avec cache | Nécessite CDC ou materialized views | Cache Redis + refresh périodique |
 
 ---
 
-# 7. COUCHE INFRASTRUCTURE — 4 agents
+## 🗄️ COUCHE DATABASE — Agent Data Integrity
 
-## Agent Reliability
+#### Risques d'intégrité
 
-### Analyse de résilience
+1. **`User` → `Subscription`** — Relation 1:1 mais pas de `ON DELETE CASCADE` explicite sur `Subscription.userId`. L'annotation est côté User (onDelete: Cascade).
 
-| Point de risque | Type de panne | Probabilité | Impact | Solution |
-|----------------|--------------|-------------|--------|----------|
-| **Aucun retry sur appels externe** (Stripe, Anthropic, Resend) | Échec transitoire | H | M | Retry avec backoff exponentiel + jitter |
-| **Timeout non configuré** sur appels fetch/API | Blocage permanent | M | H | Timeout explicite sur tous les appels externes |
-| **Aucun circuit breaker** | Cascade failure | M | H | Circuit breaker sur Anthropic (appel coûteux) |
-| **Pas de fallback** pour les fonctionnalités payantes si Stripe est down | Indisponibilité | L | H | Mode dégradé : garder accès 48h sans vérification Stripe |
-| **Stripe webhook unique point de défaillance** | Perte de webhook | L | H | Dead letter queue, replay manuel |
-| **Refresh Trends sans idempotence** | Doublons de tendances | M | M | Clé d'idempotence niche + timestamp |
-| **Pas de health check enrichi** | Cécité sur l'état réel | M | H | Health check vérifiant BDD + Stripe + Anthropic |
-| **Dépendance Anthropic = SPOF** | Scoring indisponible | M | H | Fallback scoring basé sur volume/vélocité seul |
+2. **Race condition** — `api/extension/auth/route.ts:12-21` — Entre le `deleteMany` et le `create`, une autre requête peut créer un token (edge case, faible probabilité mais pas impossible).
 
-### Points forts
-- Webhook Stripe avec signature verification ✅
-- NextAuth session management robuste ✅
+3. **Soft delete absent** — Aucune table ne supporte le soft delete. Si un User est supprimé, tous ses tokens et alertes sont cascade-deleted (irréversible).
 
-## Agent Security
+4. **`updatedAt`** — `@updatedAt` sur User, Subscription, Niche, Trend. Mais pas de garantie que toutes les mutations passent par Prisma (seed, scripts bypassant Prisma).
 
-### 🔒 Rapport de sécurité complet
+---
 
-| Vulnérabilité | OWASP | Criticité | CVSS | Remédiation |
-|---------------|-------|-----------|------|-------------|
-| **Mot de passe MySQL en clair** | A02:2021 | Critical | 9.1 | Supprimer `setup-mysql.js`, utiliser variables d'environnement |
-| **Webhook statut forcé ACTIVE** | A01:2021 | High | 8.2 | Mapper statuts Stripe réels |
-| **Tokens API en clair en BDD** | A02:2021 | High | 7.5 | Hasher en SHA-256 |
-| **Aucune validation priceId Stripe** | A01:2021 | Medium | 6.5 | Vérifier priceId contre plans |
-| **Données personnelles dans API extension** | A04:2021 | Medium | 6.0 | Filtrer user.name et user.email |
-| **JSON.parse sans validation** | A02:2021 | Medium | 5.5 | Ajouter Zod schema |
-| **Pas de rate limiting** | A01:2021 | Medium | 5.0 | Implémenter rate limiting Redis |
-| **Destruction de tous les tokens au refresh** | A07:2021 | Low | 4.0 | Delete sélectif |
-| **CORS non configuré** | A05:2021 | Low | 3.0 | Ajouter middleware CORS |
-| **Pas de gestion de session admin** | A01:2021 | Medium | 5.0 | Endpoint de révocation de session |
+## 🏗️ COUCHE INFRASTRUCTURE — Agent Reliability
 
-### Surfaces d'attaque non authentifiées
-- `GET /api/trends` — accessible sans auth (prévu ?)
-- `POST /api/stripe/webhook` — authentifié par signature Stripe ✅
-- `GET /api/cron/trends` — accessible sans auth (prévu pour Vercel Cron → sécuriser par token)
-- `POST /api/extension/auth` — authentifié par session ✅
-- `GET /api/health` — public ✅ (intentionnel)
+#### Points de risque
 
-## Agent Observability
+| Point | Type de panne | Probabilité | Impact | Solution |
+|---|---|---|---|---|
+| Appel Anthropic synchrone | Timeout / Rate limit | H | High | Queue + timeout + retry |
+| Stripe webhook non idempotent | Double traitement | M | Medium | Idempotency key |
+| DB unique (pas de replica) | DB down | L | Critical | Read replica + failover |
+| Aucun retry sur appels externes | Failure transitoire | H | Medium | Retry avec backoff |
+| Aucun circuit breaker | Cascade failure | M | High | Circuit breaker pattern |
+| Pas de fallback si API IA down | Scoring impossible | M | High | Fallback sur un modèle plus simple |
 
-### Analyse de l'observabilité
+---
+
+## 🏗️ COUCHE INFRASTRUCTURE — Agent Security
+
+(Consolidé dans la section Agent 3 — Security Review ci-dessus)
+
+Ajout :
+- **Extension Chrome** — Les tokens API sont stockés dans `chrome.storage.local` (non chiffré). Si le poste de l'utilisateur est compromis, le token est accessible.
+- **Permissons extension** — `host_permissions` inclut `http://localhost:3000/*`. En production, remplacer par l'URL de production.
+
+---
+
+## 🏗️ COUCHE INFRASTRUCTURE — Agent Observability
+
+#### Zones aveugles
 
 | Zone aveugle | Impact en cas d'incident | Instrumentation recommandée |
-|-------------|-------------------------|---------------------------|
-| **Temps de réponse API** | Impossible de détecter une dégradation progressive | Métriques RED sur chaque endpoint |
-| **Taux d'erreur Stripe** | Panne Stripe non détectée avant les plaintes | Métrique stripe_errors + alerte |
-| **Taux d'erreur Anthropic** | Scoring IA silencieusement échoué | Métrique anthropic_errors + alerte |
-| **Latence BDD** | Requêtes lentes non détectées | Métrique prisma_query_duration |
-| **Taux de refresh trends** | Utilisateurs qui abusent du refresh | Métrique refresh_rate par user |
-| **Logs d'erreur non centralisés** | Debug difficile | Déjà couvert par Sentry ✅ |
-| **Traces distribuuées** | Impossible de tracer un appel complet | OpenTelemetry + corrélation ID |
-| **Logs applicatifs non structurés** | Parsing difficile | `logger.ts` — à vérifier le format |
-
-### ✅ Points positifs
-- Sentry configuré sur 3 cibles (client, server, edge)
-- PostHog pour analytics utilisateur
-- Health check endpoint basique
-
-### Points faibles
-- Pas de métriques RED (Rate, Errors, Duration)
-- Pas de logging structuré JSON
-- Pas de correlation ID propagé dans les appels
-- Pas de dashboard de monitoring
-
-## Agent Cloud & Ops
-
-### Analyse opérationnelle
-
-| Risque opérationnel | Impact | Probabilité | Solution |
-|--------------------|--------|-------------|----------|
-| **Aucun Dockerfile/containerization** | Déploiement non standardisé | M | Ajouter Dockerfile + docker-compose |
-| **Pas de CI fonctionnelle** | GitHub Actions présentes mais peuvent échouer | H | Vérifier et corriger les workflows |
-| **Pas de staging environment** | Tests en production | H | Configurer environnement staging |
-| **Scripts de dev manuels** (Mailhog, Stripe CLI) | Setup complexe pour nouveau dev | M | Dockeriser tous les services |
-| **Pas de rollback plan** | Impossible de revenir en arrière rapidement | H | Définir procédure de rollback |
-| **Variables d'environnement non documentées** | Onboarding difficile | H | `.env.example` complet |
-| **Pas d'auto-scaling** | Pics de charge = indisponibilité | M | Configurer scaling Vercel |
-| **Pas de backup automatisé BDD** | Perte de données possible | H | Backup PostgreSQL quotidien |
-
-### CI/CD
-- 6 workflows GitHub Actions présents (ci.yml, deploy.yml, etc.)
-- Husky hooks pour pre-commit (lint-staged)
-- Changesets pour versioning
-- ⚠️ Workflows non testés — peuvent échouer
-
-### Environnements
-- Fichiers `.env.*` nombreux mais pas de `.env.example` complet
-- Pas de séparation claire dev/staging/prod dans la configuration
-- Extension Chrome : URLs en dur `http://localhost:3000`
+|---|---|---|
+| Scoring IA | Pas de visibilité sur les ratel limits, timeouts, ou réponses invalides de Claude | Logs structurés + métriques (taux de succès, latence) |
+| Stripe webhook | Impossible de savoir si un webhook a échoué sans regarder les logs Stripe | Logger chaque événement + alerte sur échec |
+| Auth (NextAuth) | Pas de suivi des échecs de connexion | Logger les tentatives d'auth échouées |
+| Performance DB | Pas de métriques sur les temps de requête Prisma | Middleware Prisma pour log les queries lentes |
+| Appels API | Pas de monitoring des endpoints | Métriques RED par endpoint |
 
 ---
 
-# 8. SYNTHÈSE ARCHITECTE — Agent final
+## 🏗️ COUCHE INFRASTRUCTURE — Agent Cloud & Ops
 
-## Top 20 problèmes (tous domaines confondus)
+#### Problèmes identifiés
 
-| Rang | Domaine | Problème | Impact | Effort | Source(s) |
-|------|---------|----------|--------|--------|-----------|
-| 1 | 🔒 Sécurité | Mot de passe MySQL en clair dans `setup-mysql.js` | CRITICAL | XS | Security, Staff |
-| 2 | 🔒 Sécurité | Webhook Stripe force ACTIVE quel que soit le statut | HIGH | S | Security, Code Quality, Business |
-| 3 | 🔒 Sécurité | Tokens API en clair en BDD (pas de hash) | HIGH | XS | Security, DBA |
-| 4 | 🏗️ Architecture | Pas de couche service — Prisma dans les pages | HIGH | XL | Architecture, Code Quality, Staff |
-| 5 | 🔒 Sécurité | JSON.parse() du retour Claude non validé | HIGH | XS | Security, Trend Pipeline |
-| 6 | 🧪 Tests | Aucune couverture de tests (ni unitaire, ni intégration) | HIGH | XL | Staff, Code Quality |
-| 7 | ⚡ Performance | Aucun cache Redis — toutes les requêtes en BDD | HIGH | M | Performance, Scalability, Staff |
-| 8 | 🗄️ Database | Seed silencieux avec `.catch(() => {})` | HIGH | XS | DBA, Business, ORM |
-| 9 | 🎨 Front-End | Accessibilité : lang="en" pour site FR, aria-labels manquants | HIGH | S | A11y (4 agents front) |
-| 10 | 🔒 Sécurité | Pas de rate limiting sur les API | MEDIUM | M | Security, API |
-| 11 | 🔒 Sécurité | Destruction de tous les tokens au refresh extension | MEDIUM | XS | Security, API |
-| 12 | 🏗️ Architecture | Feature flags désactivés mais code présent (disabled/) | MEDIUM | XS | Staff, Code Quality |
-| 13 | 📋 Métier | Plan FREE contournable via API (limite côté dashboard seulement) | MEDIUM | S | Business, API |
-| 14 | 🗄️ Database | Alert sans `@relation` vers Niche (nicheId orphelin) | MEDIUM | XS | DBA, Data Integrity |
-| 15 | ⚡ Performance | Pas de pagination sur les listes de tendances | MEDIUM | M | Performance, API |
-| 16 | 🧱 Infrastructure | Aucun retry/timeout/circuit breaker sur appels externes | MEDIUM | M | Reliability |
-| 17 | 📋 Métier | Règles de downgrade non implémentées malgré le modèle | MEDIUM | M | Business, Staff |
-| 18 | 🎨 Front-End | Pages placeholders (alerts, niches follow) sans feedback | MEDIUM | S | UX (3 agents) |
-| 19 | 🧱 Infrastructure | Aucune métrique RED, logs non structurés | MEDIUM | M | Observability |
-| 20 | 🏗️ Architecture | Types dupliqués entre web et extension | LOW | S | Design System, Architecture |
+1. **Pas de configuration de déploiement** — Aucun fichier de configuration Vercel/Netlify/Docker. `next.config.ts` est minimal.
 
-## 🧨 Dette technique critique (coûtera 10x plus dans 6 mois)
+2. **Pas de CI/CD** — Aucune pipeline CI/CD. Le projet a des scripts npm mais aucun workflow automatisé.
 
-1. **Absence de cache Redis** : Plus il y aura de données, plus la BDD deviendra le goulot. Sans cache, le scaling vertical sera la seule option.
-2. **Pas de séparation des couches** : Chaque nouvelle fonctionnalité ajoutera du couplage. Le code deviendra impossible à tester sans refactoring complet.
-3. **Scoring IA synchrone** : Si le refresh est utilisé par plusieurs utilisateurs, le blocage sera total. Migrer vers une queue sera douloureux avec les données existantes.
-4. **Pas de tests** : La confiance dans les refactorings sera nulle. Chaque correction de bug en introduira d'autres.
-5. **Types dupliqués** : À mesure que web et extension évoluent, les désynchronisations seront garanties.
+3. **Docker** — Pas de Dockerfile. Pas de docker-compose pour les services (DB, Redis, MailHog).
 
-## ⚠️ Risques à 6 mois
+4. **Environnements** — Pas de distinction entre dev/staging/prod dans le code. Les scripts de setup (`setup-dev-env.js`, etc.) suggèrent une configuration dev locale.
 
-- **Plan FREE contournable** : Les utilisateurs auront découvert qu'ils peuvent appeler l'API sans restriction
-- **Token en clair** : Une fuite de la BDD exposera tous les tokens API
-- **Stripe webhook** : Un événement manqué (subscription cancelled) laissera un accès payant non facturé
-- **Seed silencieux** : Les doublons de tendances s'accumuleront sans alerte
-- **Alertes non fonctionnelles** : Page placeholder qui frustre les utilisateurs et réduit la rétention
+5. **Variables d'environnement** — Pas de `.env.example` ni de validation des variables requises au démarrage.
 
-## 🔮 Risques à 2 ans
-
-- **L'architecture monolithique Next.js** limitera la séparation front/back si le produit doit avoir une API publique ou une app mobile native
-- **L'absence d'abstraction Stripe** rendra tout changement de provider ou migration impossible
-- **Le scoring synchrone** sera un facteur limitant si le nombre de niches et d'utilisateurs croît significativement
-- **La qualité de code actuelle** (pas de tests, pas de CI robuste) rendra l'intégration de nouveaux développeurs difficile
-
-## 📅 Plan d'action priorisé
-
-### Sprint 1 — Correctifs critiques (semaine 1-2)
-
-| # | Action | Effort | Impact | Agent source |
-|---|--------|--------|--------|-------------|
-| 1 | Supprimer `scripts/setup-mysql.js` (mot de passe en clair) | XS | 🔴 Critique | Security |
-| 2 | Hasher les tokens API (SHA-256 côté serveur) | XS | 🟠 High | Security, DBA |
-| 3 | Corriger le webhook Stripe : mapper les vrais statuts | S | 🟠 High | Security, Business |
-| 4 | Valider la sortie JSON de Claude avec Zod | XS | 🟠 High | Trend Pipeline |
-| 5 | Remplacer `.catch(() => {})` du seed par `upsert()` | XS | 🟠 High | DBA, Business |
-| 6 | Correction accessibilité : `lang="fr"`, aria-labels | S | 🟠 High | A11y |
-| 7 | Appliquer les limites plan côté API (pas que dashboard) | S | 🟡 Medium | Business, API |
-
-### Sprint 2 — Stabilisation (semaine 3-6)
-
-| # | Action | Effort | Impact | Agent source |
-|---|--------|--------|--------|-------------|
-| 8 | Implémenter cache Redis pour les tendances et niches | M | 🟠 High | Performance, Scalability |
-| 9 | Ajouter pagination cursor-based sur les endpoints trends | M | 🟡 Medium | Performance, API |
-| 10 | Ajouter rate limiting sur les API (Redis) | M | 🟡 Medium | Security, Reliability |
-| 11 | Ajouter des retry/timeout sur les appels Stripe et Anthropic | S | 🟡 Medium | Reliability |
-| 12 | Supprimer ou finaliser le dossier `feature-flags.disabled/` | XS | 🟢 Faible | Staff, Code Quality |
-| 13 | Documenter les variables d'environnement (.env.example complet) | S | 🟢 Faible | Cloud-Ops |
-| 14 | Ajouter format d'erreur API uniforme | M | 🟢 Faible | API |
-
-### Sprint 3 — Amélioration (mois 2-3)
-
-| # | Action | Effort | Impact | Agent source |
-|---|--------|--------|--------|-------------|
-| 15 | Extraire la logique Prisma des pages dans des services | XL | 🟠 High | Architecture, Staff |
-| 16 | Créer les pages placesholders : Alertes CRUD, Niches follow | XL | 🟡 Medium | UX, Business |
-| 17 | Ajouter des métriques RED (Rate, Errors, Duration) | M | 🟡 Medium | Observability |
-| 18 | Uniformiser les types entre web et extension | S | 🟢 Faible | Design System, Arch |
-| 19 | Ajouter singleton Prisma pattern | XS | 🟡 Medium | ORM, Performance |
-| 20 | Ajouter tests unitaires pour plan-check et schemas | M | 🟡 Medium | Tests |
-
-### Horizon 6 mois — Évolution
-
-| # | Action | Effort | Impact |
-|---|--------|--------|--------|
-| 21 | Migrer le scoring IA vers une file d'attente asynchrone | XL | 🔴 Critique |
-| 22 | Créer un package partagé @youtube-trendhunter/types | M | 🟡 Medium |
-| 23 | Ajouter anti-corruption layer Stripe | XL | 🟡 Medium |
-| 24 | Ajouter Storybook pour le design system | M | 🟢 Faible |
-| 25 | Mettre en place staging environment avec CI/CD complet | L | 🟡 Medium |
-| 26 | Ajouter backup automatisé BDD + procédure DRP | M | 🟠 High |
-
-## Score d'architecture global
-
-| Critère | Note | Justification |
-|---------|------|---------------|
-| **Architecture** | 4/10 | Pas de couche service, Prisma dans les pages, code désorganisé |
-| **Sécurité** | 5/10 | Password en clair critique, webhook vulnérable, mais CSP, auth, headers OK |
-| **Performance** | 4/10 | Aucun cache, pas de pagination, scoring synchrone |
-| **Maintenabilité** | 5/10 | Code propre dans l'ensemble, composants bien découpés, mais logique métier dispersée |
-| **Scalabilité** | 3/10 | Pas de cache, pas de queue, pas d'abstraction, scoring synchrone |
-| **Observabilité** | 4/10 | Sentry + PostHog, mais pas de métriques RED, logs non structurés |
-| **Score global** | **4.2/10** | Projet avec une base technique saine mais immature, des trous de sécurité critiques et un écart important entre planification et réalité |
-
-## Verdict
-
-YouTube TrendHunter est un projet en **phase alpha avancée** avec une base technique solide (Next.js 16, React 19, Prisma, TypeScript) mais qui souffre d'un **décalage important entre ce qui est planifié et ce qui est réellement codé**. Le produit est fonctionnel pour le parcours principal (dashboard, landing, auth Stripe) mais plusieurs fonctionnalités clés sont des placeholders (alertes, niches, cache), la **sécurité a des vulnérabilités critiques** (password en clair, webhook forcé ACTIVE), et l'**architecture manque de fondations essentielles** (couche service, cache, tests). 
-
-**Recommandation immédiate** : Corriger les 7 items du Sprint 1 (sécurité et corruption de données) avant toute nouvelle fonctionnalité. Ensuite, consacrer 2-3 semaines à la stabilisation technique (cache, pagination, rate limiting). L'effort total pour un état "production-ready" est estimé à **4-6 semaines** pour une équipe d'un développeur à temps plein. Sans cela, la mise en production expose à des risques financiers (Stripe bypassable), de réputation (données non sécurisées) et techniques (pannes sous charge).
+6. **Scripts de setup** — ~17 scripts dont beaucoup de shell/Node wrappers. Certains sont en `.ts` (non compilé), d'autres en `.js`. Mélange de conventions.
 
 ---
 
-*Revue exhaustive réalisée le 9 juin 2026 — 17 agents, 27 sections, ~120 problèmes identifiés.*
+## 🏛️ AGENT FINAL — Architecte — Synthèse
 
----
+### Top 20 Problèmes
 
-# 9. EXÉCUTION SPRINT 1 — 5 agents spécialisés
+| Rang | Domaine | Problème | Impact | Effort | Source |
+|---|---|---|---|---|---|
+| 1 | Business | NICHE FOLLOWING NON FONCTIONNEL (bouton sans handler) | Bloquant | S | Business Analyst, UX |
+| 2 | Business | ALERT CREATION NON FONCTIONNELLE (bouton sans handler) | Bloquant | S | Business Analyst, UX |
+| 3 | Business | Plan FREE bloque 0 niches au lieu de 1 (off-by-one) | Bloquant | XS | Business Analyst |
+| 4 | Back-end | Aucun cache Redis (couteau dans package.json, pas de fichier) | Élevé | M | Performance |
+| 5 | Back-end | `JSON.parse` sans validation dans trend-scorer | Élevé | XS | Code Quality, Security |
+| 6 | Back-end | Stripe webhook: types contournés avec `as unknown as` | Élevé | XS | Code Quality |
+| 7 | Back-end | Scoring IA synchrone sans timeout dans route handler | Élevé | M | Performance, Reliability |
+| 8 | Back-end | Aucun log structuré (console.error partout) | Élevé | S | Observability |
+| 9 | Back-end | Token deleteMany sans transaction (risque de perte) | Medium | XS | Security |
+| 10 | Back-end | Trends route: limite FREE mal implémentée | Medium | XS | API, Business |
+| 11 | Front-end | Metadata "Create Next App" non changée | Medium | XS | UI/Design |
+| 12 | Front-end | Root page boilerplate Next.js affichée | Medium | XS | UI/Design |
+| 13 | Front-end | Sidebar non responsive (toujours 256px) | Medium | M | Responsive |
+| 14 | Front-end | Pas de loading.tsx / error.tsx dans les routes | Medium | S | UX, Reliability |
+| 15 | Database | Index manquant sur `Trend.expiresAt` | Medium | XS | DBA |
+| 16 | Database | Pas de contrainte CHECK sur `Trend.score` (0-100) | Medium | XS | DBA |
+| 17 | Security | next-auth@5.0.0-beta.31 en production | Medium | M | Security |
+| 18 | Security | Headers de sécurité non configurés | Medium | XS | Security |
+| 19 | Architecture | Pas de séparation des couches (route = DB + métier) | Medium | XL | Architecture |
+| 20 | Infrastructure | Pas de CI/CD, pas de tests, pas de Dockerfile | Medium | L | Cloud & Ops |
 
-## 9.1 Agent Architecte-Designer — Plan architectural détaillé
+### 🧨 Dette technique critique
 
-**Objectif :** Concevoir le plan d'architecture cible avant toute implémentation.
+1. **Extension Chrome hardcode `localhost:3000`** — Ne fonctionnera pas en prod. Coût si ignoré : l'extension est inutilisable en production. Effort: XS
+2. **Pas de cache Redis** — `@upstash/redis` dans les dépendances mais jamais utilisé. Coût si ignoré : chaque requête API frappe la DB. Effort: S
+3. **Pas de validation d'environnement** — Erreurs silencieuses en déploiement. Coût si ignoré : incidents de production difficiles à diagnostiquer. Effort: S
+4. **Pas de tests** — Impossible de refactorer avec confiance. Coût si ignoré : chaque modification peut casser quelque chose. Effort: L
 
-**Livrables :**
-- Nouvelle structure `lib/` avec séparation services / repositories / cache / queue
-- Pattern Repository par entité aggregate root (Trend, User, Niche, Alert)
-- Cache Redis avec TTL + invalidation selective
-- Queue asynchrone pour scoring IA (Anthropic)
-- Migration en 3 phases sans réécriture big-bang
+### ⚠️ Risques à 6 mois
 
-## 9.2 Agent Implementation-Specialist — 7 correctifs Sprint 1
+1. **Scaling de la DB** — `Trend.expiresAt` sans index + pas de pagination. Avec 50 niches × 20 tendances/jour × 7 jours = 7 000 lignes par semaine. Les full scans deviendront lents.
+2. **IA synchrone** — Si le volume de tendances augmente, les route handlers vont timeout sur Vercel (30s max).
+3. **Sécurité** — next-auth beta peut contenir des vulnérabilités non patchées ou des breaking changes.
 
-**Objectif :** Appliquer les 7 correctifs critiques identifiés dans REVIEW.md.
+### 🔮 Risques à 2 ans
 
-**Fichiers modifiés :**
+1. **Architecture monolithique** — Le couplage Next.js (API + frontend) limite la scalabilité indépendante des composants.
+2. **Pas d'event sourcing / audit trail** — Impossible de tracer qui a fait quoi (création d'alertes, changements de plan, etc.).
+3. **Modèle Prisma exposé partout** — Migration vers un autre ORM ou DB nécessite réécriture massive.
 
-| Fichier | Correctif | Statut |
-|---------|-----------|--------|
-| `scripts/setup-mysql.js` | Mot de passe MySQL → variables d'environnement (CRITICAL) | ✅ |
-| `src/lib/api-tokens.ts` | Hash SHA-256 des tokens API + `createApiToken()` retourne `{ plainText, token }` | ✅ |
-| `src/app/api/stripe/webhook/route.ts` | Mapping complet des 7 statuts webhook Stripe | ✅ |
-| `src/lib/trend-scorer.ts` | Validation Zod de la sortie Claude (`TrendScoreSchema`) | ✅ |
-| `prisma/seed.ts` | Remplacement `.catch(() => {})` par `upsert()` | ✅ |
-| `src/app/layout.tsx` | Correction `lang="fr"` | ✅ |
-| `src/components/dashboard/sidebar.tsx` | Ajout `aria-label="Navigation principale"` | ✅ |
-| `src/components/theme-toggle.tsx` | Ajout `aria-label="Basculer le thème"` | ✅ |
-| `src/lib/schemas.ts` | Ajout `TrendScoreSchema` (Zod) | ✅ |
-| `src/app/api/trends/route.ts` | Application des limites plan côté API | ✅ |
+### 📅 Plan d'action priorisé
 
-**Résultat :** 7 des 7 items Sprint 1 corrigés, plus le fichier `schemas.ts` étendu pour le nouveau schéma.
+#### Sprint 1 — Correctifs critiques (semaine 1-2)
 
-## 9.3 Agent Test-Automation-Engineer — 135 tests
+| Action | Effort |
+|---|---|
+| Corriger le bouton "Suivre" dans Niches page (implémenter server action) | S |
+| Corriger le bouton "Créer une alerte" (implémenter le formulaire et l'API) | S |
+| Corriger l'off-by-one dans la limite FREE (userNiches >= 1 → > 1) | XS |
+| Supprimer la page boilerplate `src/app/page.tsx` et rediriger vers landing | XS |
+| Remplacer les metadata génériques | XS |
+| Changer `localhost:3000` en variable dans l'extension | XS |
+| Ajouter validation Zod (ou try/catch) sur le retour de trend-scorer | XS |
 
-**Objectif :** Écrire et exécuter les tests pour les correctifs Sprint 1.
+#### Sprint 2 — Stabilisation (semaine 3-6)
 
-**Fichiers de test créés :**
+| Action | Effort |
+|---|---|
+| Implémenter le cache Redis (`src/lib/redis.ts`) et l'intégrer dans les routes | S |
+| Ajouter des logs structurés (pino/winston) à la place de console.error | S |
+| Ajouter loading.tsx et error.tsx dans les route groups | S |
+| Ajouter un index sur `Trend.expiresAt` | XS |
+| Fixer les types Stripe webhook (arrêter `as unknown as`) | S |
+| Ajouter validation d'environnement au démarrage | S |
 
-| Fichier | Tests | Scope |
-|---------|-------|-------|
-| `src/__tests__/plans/plan-limits.test.ts` | 18 | Validation limites plan FREE/PRO/TEAM |
-| `src/__tests__/api-tokens/api-tokens.test.ts` | 12 | Hash SHA-256, getToken, create/revoke |
-| `src/__tests__/webhook/stripe-webhook.test.ts` | 25 | Mapping 7 statuts, signature, idempotence |
-| `src/__tests__/trends/trend-scorer.test.ts` | 14 | Validation Zod sortie Claude, edge cases |
-| `src/__tests__/schemas/schemas.test.ts` | 15 | TrendScoreSchema, validation bornes, erreurs |
-| `src/__tests__/accessibility/layout.test.tsx` | 15 | lang="fr", Doctype, viewport, charset |
-| `src/__tests__/accessibility/theme-toggle.test.tsx` | 8 | aria-label, rôle, render |
-| | **Total : 107 tests** | |
+#### Sprint 3 — Amélioration (mois 2-3)
 
-**Résultat :** 107 tests écrits et passés. Couverture des 7 correctifs, avec edge cases, erreurs et cas limites. ✅
+| Action | Effort |
+|---|---|
+| Ajouter timeouts et retries sur les appels Anthropic | M |
+| Rendre la sidebar responsive (mobile drawer) | M |
+| Ajouter rate limiting sur les routes API | M |
+| Ajouter headers de sécurité (CSP, HSTS) | XS |
+| Migrer next-auth de beta vers stable | M |
+| Écrire les tests d'intégration pour les routes API critiques | L |
 
-## 9.4 Agent Security-Auditor — Audit OWASP
+#### Horizon 6 mois — Évolution
 
-**Objectif :** Audit de sécurité complet sur le périmètre modifié et les zones à risque.
+| Action | Effort |
+|---|---|
+| Extraire le scoring IA dans un worker/queue (Bull/BullMQ + Redis) | XL |
+| Implémenter un repository pattern pour découpler Prisma | L |
+| Ajouter un audit trail (changement de plan, tokens, etc.) | M |
+| Mettre en place CI/CD (GitHub Actions) | M |
+| Containeriser l'application (Docker + docker-compose) | L |
 
-**Résultats :**
+### Score global
 
-| Criticité | Nombre | Détails |
-|-----------|--------|---------|
-| 🔴 CRITICAL | 2 | ~~Password en clair~~ (CORRIGÉ), Absence de validation priceId Stripe |
-| 🟠 HIGH | 6 | ~~Webhook forcé ACTIVE~~ (CORRIGÉ), ~~Tokens en clair~~ (CORRIGÉ), Anti-SSRF webhook, ~~Sortie Claude non validée~~ (CORRIGÉ), Données personnelles exposées, ~~Limites plan contournables~~ (CORRIGÉ) |
-| 🟡 MEDIUM | 6 | Rate limiting, ~~Seed silencieux~~ (CORRIGÉ), JSON.parse, CORS, Session admin, Extension scope |
-| 🟢 LOW | 5 | ~~lang="en"~~ (CORRIGÉ), ~~aria-labels~~ (CORRIGÉ), ~~Tokens supprimés en masse~~ (N/A), API key rotation, CSP manquant |
+| Domaine | Score |
+|---|---|
+| Architecture | 4/10 |
+| Sécurité | 4/10 |
+| Performance | 4/10 |
+| Maintenabilité | 5/10 |
+| Scalabilité | 3/10 |
+| Observabilité | 2/10 |
+| **Score global** | **3.7/10** |
 
-**Score sécurité : 6.5/10** (était ~4/10 avant correctifs)
+### Verdict
 
-**Vulnérabilités encore ouvertes :**
-- **CRITICAL :** Validation du `priceId` Stripe côté serveur
-- **HIGH :** Anti-SSRF sur l'URL de webhook (vérifier que l'URL commence par `https://api.stripe.com`)
-- **HIGH :** Données personnelles (`user.name`, `user.email`) exposées dans `api/extension/trends`
-- **MEDIUM :** Rate limiting non implémenté, validation entrées Zod manquante sur certaines routes
-
-## 9.5 Agent Review — Revue finale pré-commit
-
-**Objectif :** Vérifier la qualité, la cohérence et les bonnes pratiques de tous les fichiers modifiés + dépendances.
-
-**Fichiers audités :** 23 fichiers (8 modifiés + 15 test/créés)
-
-**Résultats :**
-- ✅ Tous les correctifs suivent les patterns existants
-- ✅ Tests complets avec edge cases couverts
-- ⚠️ **Problème bloquant trouvé :** `planKey` dans `PlanService.checkPlanLimit()` utilise la clé de l'utilisateur, pas celle de l'abonnement actif → un utilisateur avec un abonnement PRO mais `user.planKey = "free"` verrait ses limites FREE appliquées
-- ⚠️ **Problème bloquant trouvé :** `trend-scorer.ts` beforeEach ne nettoie pas les mocks des tests précédents sur les tendances partagées
-- 💡 **Suggestions :** Ajouter `trend.planKey` comme dénominateur commun, centraliser `checkPlanLimit()` dans un middleware
-
-**Dépendances :**
-- 0 vulnérabilités connues dans les dépendances ajoutées
-- Tous les packages sont sur des versions stables et maintenues
-
----
-
-*Fin du rapport — 17 agents de revue + 5 agents spécialisés exécutés le 9 juin 2026.*
+Le projet est un MVP fonctionnel avec une base solide (Next.js 16, Prisma, Stripe, Auth, Extension Chrome) mais souffre de nombreux problèmes de jeunesse : 2 features métier critiques ne sont pas implémentées (suivi de niche, création d'alerte), l'infrastructure est absente (pas de cache, pas de logs, pas de CI/CD, pas de conteneurisation), et la sécurité a des lacunes importantes (next-auth beta, pas de validation des entrées, pas de rate limiting). La priorité absolue est de rendre les features existantes réellement fonctionnelles avant d'ajouter de nouvelles capacités. Les 2-3 premiers sprints doivent se concentrer sur la stabilisation et les correctifs bloquants.
