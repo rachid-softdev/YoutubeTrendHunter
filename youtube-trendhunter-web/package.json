@@ -39,7 +39,7 @@
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.3",
+    "eslint-config-next": "16.2.9",
     "prisma": "^6.4.1",
     "typescript": "^5",
     "vitest": "^4.1.6"
