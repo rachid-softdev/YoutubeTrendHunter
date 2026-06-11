@@ -36,6 +36,7 @@
     "resend": "^4.8.0"
   },
   "devDependencies": {
+    "@playwright/cli": "^0.1.14",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
     "eslint": "^9",
