@@ -14,15 +14,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GET_TRENDS") {
-    chrome.storage.local.get(["apiToken", "selectedNiche"], async ({ apiToken, selectedNiche }) => {
+    chrome.storage.local.get(["apiToken", "selectedNiche", "apiBaseUrl"], async ({ apiToken, selectedNiche, apiBaseUrl }) => {
       if (!apiToken) {
         sendResponse({ error: "NOT_AUTHENTICATED" })
         return
       }
 
+      const baseUrl = apiBaseUrl || API_BASE
+
       try {
         const res = await fetch(
-          `${API_BASE}/api/extension/trends?niche=${selectedNiche ?? "tech"}`,
+          `${baseUrl}/api/extension/trends?niche=${selectedNiche ?? "tech"}`,
           {
             headers: { Authorization: `Bearer ${apiToken}` },
           }

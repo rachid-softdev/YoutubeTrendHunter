@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getUserPlan } from "@/lib/plan-check"
 import { ManageSubscriptionButton } from "@/components/dashboard/manage-subscription-button"
 import { GenerateTokenButton } from "@/components/dashboard/generate-token-button"
+import { CopyTokenButton } from "@/components/dashboard/copy-token-button"
 
 export default async function BillingPage() {
   const session = await auth()
@@ -44,12 +45,7 @@ export default async function BillingPage() {
             <code className="flex-1 p-2 bg-gray-100 rounded text-sm font-mono text-gray-800 truncate">
               {apiToken.token}
             </code>
-            <button
-              onClick={() => navigator.clipboard.writeText(apiToken.token)}
-              className="px-3 py-2 border rounded text-sm"
-            >
-              Copier
-            </button>
+            <CopyTokenButton token={apiToken.token} />
           </div>
         )}
         <GenerateTokenButton />

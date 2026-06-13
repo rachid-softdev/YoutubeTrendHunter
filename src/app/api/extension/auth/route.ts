@@ -9,15 +9,12 @@ export async function POST() {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
   }
 
-  await prisma.apiToken.deleteMany({
-    where: { userId: session.user.id },
-  })
-
   const token = await prisma.apiToken.create({
     data: {
       userId: session.user.id,
       token: randomUUID(),
       name: "Extension Chrome",
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     },
   })
 

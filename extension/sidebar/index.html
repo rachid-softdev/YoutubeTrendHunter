@@ -16,7 +16,7 @@
       <p class="subtitle">Connectez votre compte pour accéder aux tendances</p>
       <input type="text" id="token-input" placeholder="Collez votre token API" />
       <button id="btn-connect" class="btn-primary">Connecter</button>
-      <a href="http://localhost:3000/billing" target="_blank" class="link">
+      <a href="#" id="get-token-link" class="link">
         Obtenir un token →
       </a>
     </div>
@@ -41,7 +41,7 @@
 
       <div id="upgrade-banner" class="hidden">
         <p>Passez Pro pour voir toutes les tendances</p>
-        <a href="http://localhost:3000/pricing" target="_blank" class="btn-upgrade">
+        <a href="#" id="upgrade-link" class="btn-upgrade">
           Passer Pro →
         </a>
       </div>
@@ -55,5 +55,15 @@
   </div>
 
   <script src="app.js"></script>
+  <script>
+    document.getElementById("get-token-link").addEventListener("click", function(e) {
+      e.preventDefault()
+      chrome.tabs.create({ url: "https://trendhunter.app/billing" })
+    })
+    document.getElementById("upgrade-link").addEventListener("click", function(e) {
+      e.preventDefault()
+      chrome.tabs.create({ url: "https://trendhunter.app/pricing" })
+    })
+  </script>
 </body>
 </html>

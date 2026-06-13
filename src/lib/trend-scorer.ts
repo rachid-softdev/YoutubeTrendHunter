@@ -1,4 +1,12 @@
 import { anthropic } from "@/lib/anthropic"
+import { z } from "zod"
+
+const trendScoreSchema = z.object({
+  score: z.number().int().min(0).max(100),
+  status: z.enum(["EMERGING", "GROWING", "PEAK", "FADING"]),
+  contentAngles: z.array(z.string()).length(3),
+  reasoning: z.string(),
+})
 
 interface TrendInput {
   title: string
@@ -28,13 +36,15 @@ export async function scoreTrend(input: TrendInput): Promise<TrendScore> {
 
 Évalue cette tendance émergente et retourne UNIQUEMENT un JSON valide, sans markdown.
 
-Tendance : "${input.title}"
+---BEGIN DATA---
+Tendance : "${input.title.replace(/["\\]/g, "\\$&")}"
 Niche : ${input.niche}
 Langue cible : ${input.language}
 Volume de recherche mensuel : ${input.searchVolume}
 Nombre de vidéos existantes : ${input.videoCount}
 Vues moyennes par vidéo : ${input.avgViews}
 Croissance sur 48h : +${input.velocityPercent}%
+---END DATA---
 
 Retourne ce JSON exact :
 {
@@ -52,6 +62,16 @@ Critères de score :
     ],
   })
 
-  const text = message.content[0].type === "text" ? message.content[0].text : ""
-  return JSON.parse(text) as TrendScore
+  const text =
+    message.content.length > 0 && message.content[0].type === "text"
+      ? message.content[0].text
+      : ""
+
+  if (!text) {
+    throw new Error("Claude a retourné une réponse vide")
+  }
+
+  const cleaned = text.replace(/```json|```/g, "").trim()
+  const parsed = JSON.parse(cleaned)
+  return trendScoreSchema.parse(parsed)
 }

@@ -10,7 +10,7 @@ export default async function AlertsPage() {
   const plan = await getUserPlan(session.user.id)
   const limits = PLAN_LIMITS[plan]
 
-  const canCreateAlert = plan !== "FREE" || limits.alerts
+  const canCreateAlert = limits.alerts
 
   return (
     <div className="max-w-4xl">

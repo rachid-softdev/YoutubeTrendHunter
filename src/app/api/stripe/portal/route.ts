@@ -1,12 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import { validateOrigin } from "@/lib/csrf"
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+  }
+
+  if (!validateOrigin(req)) {
+    return NextResponse.json({ error: "Origine interdite" }, { status: 403 })
   }
 
   const user = await prisma.user.findUnique({

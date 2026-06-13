@@ -20,10 +20,7 @@ export default async function NichesPage() {
     },
   })
 
-  const userNiches = await prisma.userNiche.findMany({
-    where: { userId: session.user.id },
-    include: { niche: true },
-  })
+  const userNiches = allNiches.filter((n) => n.userNiches.length > 0).map((n) => ({ niche: n }))
 
   return (
     <div className="max-w-4xl">

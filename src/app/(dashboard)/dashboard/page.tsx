@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getUserPlan } from "@/lib/plan-check"
+import { getUserPlan, getTrendsTake } from "@/lib/plan-check"
 import { TrendCard } from "@/components/dashboard/trend-card"
 import { NicheSelector } from "@/components/dashboard/niche-selector"
 
@@ -23,7 +23,7 @@ export default async function DashboardPage({
     ? await prisma.trend.findMany({
         where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
         orderBy: { score: "desc" },
-        take: plan === "FREE" ? 5 : 20,
+        take: getTrendsTake(plan),
       })
     : []
 

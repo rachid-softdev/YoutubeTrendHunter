@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getUserPlan, PLAN_LIMITS } from "@/lib/plan-check"
+import { getUserPlan, PLAN_LIMITS, getTrendsTake } from "@/lib/plan-check"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const userNiches = await prisma.userNiche.count({
       where: { userId: session.user.id },
     })
-    if (userNiches >= 1) {
+    if (userNiches > limits.niches) {
       return NextResponse.json({ error: "Limite plan Free atteinte" }, { status: 403 })
     }
   }
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       expiresAt: { gte: new Date() },
     },
     orderBy: { score: "desc" },
-    take: plan === "FREE" ? limits.trendsPerNiche : 20,
+    take: getTrendsTake(plan),
   })
 
   return NextResponse.json({ trends, plan })
