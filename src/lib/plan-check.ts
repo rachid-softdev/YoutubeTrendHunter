@@ -15,4 +15,11 @@ export const PLAN_LIMITS = {
   FREE: { niches: 1, trendsPerNiche: 5, alerts: false, export: false },
   PRO:  { niches: -1, trendsPerNiche: -1, alerts: true, export: true },
   TEAM: { niches: -1, trendsPerNiche: -1, alerts: true, export: true },
+} as const
+
+export type PlanTier = keyof typeof PLAN_LIMITS
+
+export function getTrendsTake(plan: PlanTier): number | undefined {
+  const limit = PLAN_LIMITS[plan].trendsPerNiche
+  return limit === -1 ? undefined : limit
 }

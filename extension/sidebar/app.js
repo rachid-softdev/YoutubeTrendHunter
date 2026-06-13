@@ -59,15 +59,32 @@ function renderTrends(trends, plan) {
   upgradeBanner.classList.toggle("hidden", plan !== "FREE")
 
   const list = document.getElementById("trends-list")
-  list.innerHTML = trends.map(function(t) {
-    return '<div class="trend-card ' + (t.score >= 75 ? "trend-hot" : "") + '">' +
-      '<div class="trend-score ' + scoreClass(t.score) + '">' + t.score + '</div>' +
-      '<div class="trend-content">' +
-        '<div class="trend-title">' + t.title + '</div>' +
-        '<div class="trend-meta">' + (t.videoCount || "?") + ' vidéos · +' + Math.round(t.velocity) + '%</div>' +
-      '</div>' +
-    '</div>'
-  }).join("")
+  list.textContent = ""
+  trends.forEach(function(t) {
+    const card = document.createElement("div")
+    card.className = "trend-card" + (t.score >= 75 ? " trend-hot" : "")
+
+    const score = document.createElement("div")
+    score.className = "trend-score " + scoreClass(t.score)
+    score.textContent = t.score
+    card.appendChild(score)
+
+    const content = document.createElement("div")
+    content.className = "trend-content"
+
+    const title = document.createElement("div")
+    title.className = "trend-title"
+    title.textContent = t.title
+    content.appendChild(title)
+
+    const meta = document.createElement("div")
+    meta.className = "trend-meta"
+    meta.textContent = (t.videoCount || "?") + " vidéos · +" + Math.round(t.velocity) + "%"
+    content.appendChild(meta)
+
+    card.appendChild(content)
+    list.appendChild(card)
+  })
 }
 
 function scoreClass(score) {
@@ -83,7 +100,12 @@ function showScreen(name) {
 
 function showError(msg) {
   showScreen("main")
-  document.getElementById("trends-list").innerHTML = '<div class="error">' + msg + '</div>'
+  const list = document.getElementById("trends-list")
+  list.textContent = ""
+  const error = document.createElement("div")
+  error.className = "error"
+  error.textContent = msg
+  list.appendChild(error)
 }
 
 init()

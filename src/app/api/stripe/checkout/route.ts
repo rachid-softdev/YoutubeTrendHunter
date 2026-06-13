@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import { validateOrigin } from "@/lib/csrf"
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -9,7 +10,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
   }
 
+  if (!validateOrigin(req)) {
+    return NextResponse.json({ error: "Origine interdite" }, { status: 403 })
+  }
+
   const { priceId } = await req.json()
+
+  const allowedPriceIds = [
+    process.env.STRIPE_PRO_PRICE_ID,
+    process.env.STRIPE_TEAM_PRICE_ID,
+  ]
+  if (!allowedPriceIds.includes(priceId)) {
+    return NextResponse.json({ error: "Price ID invalide" }, { status: 400 })
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
