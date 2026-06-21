@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PLANS } from "@/lib/plans";
 import { Check, Play, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
@@ -67,13 +67,13 @@ export default function PricingPage() {
                   </Badge>
                 )}
                 <CardTitle className="text-3xl font-black italic">{plan.name}</CardTitle>
-                <CardDescription className="pt-2">
+                <div className="pt-2">
                   <div className="flex items-baseline gap-1">
                     <span className="text-5xl font-black text-dark-ink">{plan.price}</span>
                     <span className="text-dark-ink-secondary font-bold text-lg">{plan.period}</span>
                   </div>
                   <p className="mt-4 text-dark-ink-secondary font-medium">{plan.description}</p>
-                </CardDescription>
+                </div>
               </CardHeader>
               <CardContent className="p-8 pt-0">
                 <Separator className="mb-8 opacity-20" />
