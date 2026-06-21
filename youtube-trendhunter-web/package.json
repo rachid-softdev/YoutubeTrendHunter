@@ -39,6 +39,7 @@
     "@playwright/cli": "^0.1.14",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
+    "critters": "^0.0.25",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "prisma": "^6.4.1",
