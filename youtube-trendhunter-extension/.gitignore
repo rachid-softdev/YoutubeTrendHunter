@@ -19,3 +19,8 @@
 # wxt build output
 .output/
 .wxt/
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
