@@ -54,3 +54,10 @@ next-env.d.ts
 
 # turbo build cache
 .turbo/
+
+# playwright-cli session artifacts
+.playwright-cli/
+
+# QA report artifacts
+qa-report/
+qa-*/

@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: blob: https:",
               "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' https://api.stripe.com https://www.googleapis.com https://*.upstash.io https://o*.ingest.sentry.io https://app.posthog.com",
+              "connect-src 'self' https://api.stripe.com https://www.googleapis.com https://*.upstash.io https://*.ingest.sentry.io https://app.posthog.com",
               "frame-src 'self' https://js.stripe.com",
               "object-src 'none'",
               "base-uri 'self'",

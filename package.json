@@ -28,6 +28,7 @@
     "web:typecheck": "pnpm --filter @youtube-trendhunter/web typecheck",
     "web:test": "pnpm --filter @youtube-trendhunter/web test",
     "web:test:e2e": "pnpm --filter @youtube-trendhunter/web test:e2e",
+    "web:qa": "pnpm --filter @youtube-trendhunter/web qa",
     "ext:dev": "pnpm --filter @youtube-trendhunter/extension dev",
     "ext:build": "pnpm --filter @youtube-trendhunter/extension build",
     "ext:zip": "pnpm --filter @youtube-trendhunter/extension zip",

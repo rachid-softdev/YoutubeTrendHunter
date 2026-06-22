@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "qa": "node scripts/qa-web.js",
     "dev:complete": "node scripts/start-dev-complete.js",
     "dev:mailhog": "node scripts/start-dev-with-mailhog.js",
     "dev:services": "node scripts/setup-mailhog.js",
@@ -36,8 +37,11 @@
     "resend": "^4.8.0"
   },
   "devDependencies": {
+    "@playwright/cli": "^0.1.14",
     "@playwright/test": "^1.60.0",
     "@testing-library/jest-dom": "^6.9.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "critters": "^0.0.25",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "prisma": "^6.4.1",

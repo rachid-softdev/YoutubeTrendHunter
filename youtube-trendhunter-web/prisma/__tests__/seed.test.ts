@@ -116,7 +116,7 @@ describe("Seed — Upsert et gestion des doublons", () => {
 
       // Vérifie que create n'est jamais appelé pour les niches
       expect(mockPrismaClient.niche.upsert).toHaveBeenCalledTimes(1);
-      expect(mockPrismaClient.niche.create).toBeUndefined(); // create n'existe pas sur le mock niche
+      expect(mockPrismaClient.niche.create).not.toHaveBeenCalled(); // create n'est pas appelé (seed utilise upsert)
     });
 
     it("gère l'ajout d'une nouvelle niche sans crash", async () => {
