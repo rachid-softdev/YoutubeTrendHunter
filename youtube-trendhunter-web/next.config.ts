@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
     ];
   },
   async redirects() {
-    return [{ source: "/features", destination: "/pricing", permanent: true }];
+    return [];
   },
   experimental: {
     optimizeCss: true,
