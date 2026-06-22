@@ -757,3 +757,446 @@ test.describe("Blog Article — Intégrité de la page", () => {
     await expect(page.locator("h1")).toContainText("Blog TrendHunter");
   });
 });
+
+/* ========================================================================== */
+/*  NEW TESTS — Blog Layout, Listing & Article extensions                     */
+/* ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/*  Additional constants for new tests                                        */
+/* -------------------------------------------------------------------------- */
+
+const SECOND_ARTICLE_SLUG = ALL_ARTICLE_SLUGS[1];
+const FOURTH_ARTICLE_SLUG = ALL_ARTICLE_SLUGS[3];
+const FIFTH_ARTICLE_SLUG = ALL_ARTICLE_SLUGS[4];
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Layout — Header, Breadcrumb & Footer (shared layout.tsx)             */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Layout — En-tête, fil d'Ariane et pied de page", () => {
+  test("affiche l'en-tête du layout : logo TrendHunter, navigation Fonctionnalités/Tarifs/Blog, ThemeToggle et ESSAYER", async ({
+    page,
+  }) => {
+    await page.goto("/blog");
+
+    // The layout header is the first <header> on the page
+    const layoutHeader = page.locator("header").first();
+
+    // Logo with Play icon + "TrendHunter" brand name
+    await expect(layoutHeader.getByText("TrendHunter")).toBeVisible();
+
+    // Nav link unique to layout: Fonctionnalités (only in layout, not in page header)
+    await expect(
+      layoutHeader.getByRole("link", { name: "Fonctionnalités", exact: true }),
+    ).toBeVisible();
+
+    // ThemeToggle button renders in dark SSR mode → "Passer en mode clair"
+    await expect(layoutHeader.locator('button[aria-label="Passer en mode clair"]')).toBeVisible();
+
+    // ESSAYER Gratuitement CTA button
+    await expect(layoutHeader.getByText("ESSAYER Gratuitement")).toBeVisible();
+  });
+
+  test("le lien Blog dans la navigation du layout a la classe active text-yt-red", async ({
+    page,
+  }) => {
+    await page.goto("/blog");
+
+    // Layout nav Blog link has text-yt-red (active state)
+    const layoutBlogLink = page.locator("header").first().locator('nav a[href="/blog"]');
+    await expect(layoutBlogLink).toHaveClass(/text-yt-red/);
+  });
+
+  test("affiche le fil d'Ariane du layout : Accueil > Blog > Actualités", async ({ page }) => {
+    await page.goto("/blog");
+
+    // Layout breadcrumb contains "Actualités" as the last segment
+    const breadcrumb = page.locator("nav").filter({ hasText: "Actualités" }).first();
+    await expect(breadcrumb).toBeVisible();
+
+    // Three text segments
+    await expect(breadcrumb.getByText("Accueil")).toBeVisible();
+    await expect(breadcrumb.getByText("Blog")).toBeVisible();
+    await expect(breadcrumb.getByText("Actualités")).toBeVisible();
+
+    // Two slash separators
+    await expect(breadcrumb.locator("span.text-dark-ink-tertiary")).toHaveCount(2);
+  });
+
+  test("le pied de page du layout contient 4 liens : Blog, Tarifs, Confidentialité, CGU", async ({
+    page,
+  }) => {
+    await page.goto("/blog");
+
+    // Layout footer is the last <footer> (page footer comes first inside <main>)
+    const layoutFooter = page.locator("footer").last();
+
+    // "Blog" link exists only in the layout footer, not in the page footer
+    await expect(layoutFooter.getByRole("link", { name: "Blog", exact: true })).toBeVisible();
+    await expect(layoutFooter.getByRole("link", { name: "Tarifs", exact: true })).toBeVisible();
+    await expect(
+      layoutFooter.getByRole("link", { name: "Confidentialité", exact: true }),
+    ).toBeVisible();
+    await expect(layoutFooter.getByRole("link", { name: "CGU", exact: true })).toBeVisible();
+  });
+
+  test("le pied de page affiche le copyright avec l'année en cours", async ({ page }) => {
+    await page.goto("/blog");
+
+    const currentYear = new Date().getFullYear().toString();
+    // Both footers show it; pick the layout footer (last)
+    const copyright = page
+      .locator("footer")
+      .last()
+      .getByText(new RegExp(`© ${currentYear}`));
+    await expect(copyright).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Listing — Contenu supplémentaire                                     */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Listing — Contenu supplémentaire", () => {
+  test("affiche le badge « 5 Articles » dans la section hero", async ({ page }) => {
+    await page.goto("/blog");
+
+    // Hero badge with Sparkles icon + article count from JSON meta
+    await expect(page.getByText("5 Articles")).toBeVisible();
+  });
+
+  test("affiche le texte de description sous le titre H1", async ({ page }) => {
+    await page.goto("/blog");
+
+    await expect(
+      page.getByText("Conseils, analyses et stratégies pour développer votre chaîne YouTube."),
+    ).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Listing — Navigation                                                 */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Listing — Navigation", () => {
+  test("cliquer sur la carte « À la une » navigue vers l'article correspondant", async ({
+    page,
+  }) => {
+    await page.goto("/blog");
+
+    // Use the existing getFeaturedCard helper to find the featured link
+    const featuredLink = getFeaturedCard(page);
+    await featuredLink.click();
+
+    await page.waitForURL(`/blog/${FIRST_ARTICLE_SLUG}`);
+    await expect(page.locator("h1")).toContainText("IA & Productivité");
+  });
+
+  test("cliquer sur le logo TrendHunter dans l'en-tête redirige vers /", async ({ page }) => {
+    await page.goto("/blog");
+
+    // Click the first logo link (layout header)
+    await page.locator('header a[href="/"]').first().click();
+    await page.waitForURL("/");
+
+    await expect(page.locator("h1")).toBeVisible();
+    expect(page.url()).toBe("http://localhost:3000/");
+  });
+
+  test("le lien « Niches » dans l'en-tête de la page redirige vers /niches", async ({ page }) => {
+    await page.goto("/blog");
+
+    // "Niches" link is in the page's own header (second header), not in the layout
+    const nichesLink = page.locator('header a[href="/niches"]');
+    await expect(nichesLink).toBeVisible();
+
+    await nichesLink.click();
+    await page.waitForURL("/niches");
+    await expect(page.locator("h1")).toContainText("Explorez les niches");
+  });
+
+  test("le bouton ThemeToggle est visible dans l'en-tête du layout", async ({ page }) => {
+    await page.goto("/blog");
+
+    // ThemeToggle renders a button with an aria-label
+    const themeButton = page.locator('button[aria-label="Passer en mode clair"]');
+    await expect(themeButton).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Listing — SEO                                                        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Listing — SEO", () => {
+  test("le <title> contient « Blog - Conseils et Analyses YouTube »", async ({ page }) => {
+    await page.goto("/blog");
+
+    const title = await page.title();
+    expect(title).toContain("Blog - Conseils et Analyses YouTube");
+  });
+
+  test("la balise meta description est présente avec le bon contenu", async ({ page }) => {
+    await page.goto("/blog");
+
+    const metaDescription = page.locator('meta[name="description"]');
+    await expect(metaDescription).toHaveAttribute(
+      "content",
+      /Découvrez nos guides, analyses et stratégies/,
+    );
+  });
+
+  test("les balises OG (title, description) sont présentes", async ({ page }) => {
+    await page.goto("/blog");
+
+    const ogTitle = page.locator('meta[property="og:title"]');
+    await expect(ogTitle).toHaveAttribute("content", /Blog TrendHunter/);
+
+    const ogDescription = page.locator('meta[property="og:description"]');
+    await expect(ogDescription).toHaveAttribute("content", /Conseils, analyses et stratégies/);
+  });
+
+  test("la balise lien canonical est présente", async ({ page }) => {
+    await page.goto("/blog");
+
+    const canonical = page.locator('link[rel="canonical"]');
+    await expect(canonical).toHaveAttribute("href", "/blog");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Listing — Cas supplémentaires                                        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Listing — Cas supplémentaires", () => {
+  test("la page se charge sans erreur console", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(`Console ${msg.type()}: ${msg.text()}`);
+    });
+
+    await page.goto("/blog");
+    await expect(page.locator("h1")).toBeVisible();
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("la description de la catégorie filtrée est affichée quand une catégorie est sélectionnée", async ({
+    page,
+  }) => {
+    await page.goto("/blog");
+
+    // Click "Analyses" filter
+    const filterSection = page
+      .locator("section")
+      .filter({ has: page.getByText("Tous") })
+      .first();
+    await filterSection.getByRole("link", { name: "Analyses", exact: true }).click();
+    await page.waitForURL(/category=analyses/);
+
+    // Category description from JSON: "Analyses approfondies des tendances YouTube"
+    await expect(page.getByText("Analyses approfondies des tendances YouTube")).toBeVisible();
+  });
+
+  test("les titres des cartes d'article ont la classe line-clamp-2", async ({ page }) => {
+    await page.goto("/blog");
+
+    // Each h3 inside an article card link should carry line-clamp-2
+    const cardTitles = page.locator('main a[href^="/blog/"] h3');
+    const count = await cardTitles.count();
+
+    for (let i = 0; i < count; i++) {
+      await expect(cardTitles.nth(i)).toHaveClass(/line-clamp-2/);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Article — Contenu manquant                                           */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Article — Contenu manquant", () => {
+  test("affiche le sous-titre de l'article (subtitle)", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    // Article 1 subtitle from JSON
+    await expect(
+      page.getByText("Comment l'explosion de l'IA génère des opportunités massives"),
+    ).toBeVisible();
+  });
+
+  test("affiche deux fils d'Ariane : celui du layout et celui de l'article", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    // Layout breadcrumb with "Actualités" label
+    const layoutBreadcrumb = page.locator("nav").filter({ hasText: "Actualités" }).first();
+    await expect(layoutBreadcrumb).toBeVisible();
+
+    // Article breadcrumb with the article title
+    const articleBreadcrumb = page
+      .locator("nav")
+      .filter({ hasText: "IA & Productivité : La niche YouTube à surveiller en 2026" });
+    await expect(articleBreadcrumb).toBeVisible();
+  });
+
+  test("affiche les 4 icônes dans l'en-tête de l'article (User, Calendar, Clock, Tag)", async ({
+    page,
+  }) => {
+    await page.goto(`/blog/${FOURTH_ARTICLE_SLUG}`);
+
+    // Article 4 has tags → all 4 icons rendered
+    await expect(page.locator("article header svg.lucide-user")).toBeVisible();
+    await expect(page.locator("article header svg.lucide-calendar")).toBeVisible();
+    await expect(page.locator("article header svg.lucide-clock")).toBeVisible();
+    await expect(page.locator("article header svg.lucide-tag")).toBeVisible();
+  });
+
+  // Data-driven tests for article 2, 4, 5
+  const ARTICLE_RENDER_TESTS = [
+    {
+      slug: SECOND_ARTICLE_SLUG,
+      title: "Comment créer une chaîne YouTube rentable",
+      difficulty: "débutant",
+    },
+    {
+      slug: FOURTH_ARTICLE_SLUG,
+      title: "Les 5 niches YouTube à croissance rapide",
+      difficulty: "débutant",
+    },
+    {
+      slug: FIFTH_ARTICLE_SLUG,
+      title: "YouTube Shorts vs Long Form",
+      difficulty: "intermédiaire",
+    },
+  ];
+
+  for (const { slug, title, difficulty } of ARTICLE_RENDER_TESTS) {
+    test(`l'article « ${title} » se rend correctement`, async ({ page }) => {
+      await page.goto(`/blog/${slug}`);
+
+      // Title renders as h1
+      await expect(page.locator("h1")).toContainText(title);
+
+      // Difficulty badge visible
+      await expect(page.locator("article header")).toContainText(difficulty);
+    });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Article — SEO supplémentaire                                         */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Article — SEO supplémentaire", () => {
+  test("la balise OG:type est « article »", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    const ogType = page.locator('meta[property="og:type"]');
+    await expect(ogType).toHaveAttribute("content", "article");
+  });
+
+  test("la balise OG:locale est « fr_FR »", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    const ogLocale = page.locator('meta[property="og:locale"]');
+    await expect(ogLocale).toHaveAttribute("content", "fr_FR");
+  });
+
+  test("la balise OG:published_time est présente", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    // Article 1 published: 2026-05-10T08:00:00Z
+    const ogPublished = page.locator('meta[property="article:published_time"]');
+    await expect(ogPublished).toHaveAttribute("content", /^2026/);
+  });
+
+  test("la balise OG:author est présente avec le nom de l'auteur", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    const ogAuthor = page.locator('meta[property="article:author"]');
+    await expect(ogAuthor).toHaveAttribute("content", "TrendHunter AI");
+  });
+
+  test("les balises OG:tag sont présentes pour les tags de l'article", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    // Article 1 has 6 tags → multiple og:tag meta elements
+    const ogTags = page.locator('meta[property="article:tag"]');
+    await expect(ogTags.first()).toBeAttached();
+
+    const tagCount = await ogTags.count();
+    expect(tagCount).toBeGreaterThan(1);
+  });
+
+  test("le lien canonical est correct pour l'article", async ({ page }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    const canonical = page.locator('link[rel="canonical"]');
+    await expect(canonical).toHaveAttribute(
+      "href",
+      `https://trendhunter.app/blog/${FIRST_ARTICLE_SLUG}`,
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Blog Article — Cas supplémentaires                                        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Blog Article — Cas supplémentaires", () => {
+  test("un article avec 1 seul article similaire affiche quand même la section", async ({
+    page,
+  }) => {
+    await page.goto(`/blog/${SECOND_ARTICLE_SLUG}`);
+
+    // Article 2 has relatedArticles: ["1"] → only 1 related card
+    const relatedSection = page
+      .locator("section")
+      .filter({ has: page.getByText("Articles similaires") });
+    await expect(relatedSection).toBeVisible();
+
+    const relatedCards = relatedSection.locator('a[href^="/blog/"]');
+    await expect(relatedCards).toHaveCount(1);
+  });
+
+  test("le temps de lecture est formaté en français : « X min de lecture »", async ({ page }) => {
+    await page.goto(`/blog/${FIFTH_ARTICLE_SLUG}`);
+
+    // Article 5 has 6 min read time → "6 min de lecture"
+    await expect(page.locator("article header").getByText("6 min de lecture")).toBeVisible();
+  });
+
+  test("la date est formatée en français (ex: « 1 mai 2026 »)", async ({ page }) => {
+    await page.goto(`/blog/${FOURTH_ARTICLE_SLUG}`);
+
+    // Article 4 published: 2026-05-01 → "1 mai 2026"
+    await expect(page.locator("article header").getByText("1 mai 2026")).toBeVisible();
+  });
+
+  test("le titre dans le fil d'Ariane de l'article est tronqué (max-w-[200px])", async ({
+    page,
+  }) => {
+    await page.goto(`/blog/${FIRST_ARTICLE_SLUG}`);
+
+    // The article page breadcrumb truncates long titles with max-w-[200px]
+    const titleSpan = page
+      .locator("nav span")
+      .filter({ hasText: "IA & Productivité : La niche YouTube à surveiller en 2026" });
+    await expect(titleSpan).toHaveClass(/max-w-\[200px\]/);
+  });
+
+  test("le deuxième article (slug 2) se charge sans erreur console", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(`Console ${msg.type()}: ${msg.text()}`);
+    });
+
+    await page.goto(`/blog/${SECOND_ARTICLE_SLUG}`);
+    await expect(page.locator("h1")).toBeVisible();
+
+    expect(errors).toHaveLength(0);
+  });
+});

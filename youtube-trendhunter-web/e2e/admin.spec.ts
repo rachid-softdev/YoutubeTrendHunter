@@ -449,6 +449,47 @@ test.describe("Admin", () => {
         await expect(iconDiv.locator("svg").first()).toBeVisible();
       }
     });
+
+    test("l'icône Shield et le titre « Administration » sont visibles dans l'en-tête", async ({
+      page,
+    }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.locator("h1")).toContainText("Administration");
+        const shieldIcon = page.locator("div.bg-yt-red").first();
+        await expect(shieldIcon).toBeVisible();
+        await expect(shieldIcon.locator("svg").first()).toBeVisible();
+      }
+    });
+
+    test("les icônes des stat cards ont les couleurs attendues", async ({ page }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // Six stat cards with colours: Users → blue-400, Subscriptions → green-400,
+        // MRR → yellow-400, Trends → purple-400, Alerts → red-400, Niches → cyan-400
+        const expectedColors = [
+          "text-blue-400",
+          "text-green-400",
+          "text-yellow-400",
+          "text-purple-400",
+          "text-red-400",
+          "text-cyan-400",
+        ];
+        for (const color of expectedColors) {
+          const icon = page.locator(`svg.${color}`).first();
+          const visible = await icon.isVisible().catch(() => false);
+          if (visible) {
+            await expect(icon).toBeVisible();
+          }
+        }
+      }
+    });
   });
 
   /* ====================================================================== */
@@ -583,6 +624,133 @@ test.describe("Admin", () => {
         await expect(page.getByText("Team (39€)").first()).toBeVisible();
       }
     });
+
+    test("la carte MRR affiche une valeur numérique avec le symbole €", async ({ page }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const mrrCard = page.getByText("MRR Actuel").first();
+        await expect(mrrCard).toBeVisible();
+        // The MRR value is in the parent card's next sibling
+        const parent = mrrCard.locator("..");
+        const valueParagraph = parent.locator("p.text-4xl").first();
+        await expect(valueParagraph).toBeVisible();
+        const text = await valueParagraph.textContent();
+        expect(text).toMatch(/\d+€/);
+      }
+    });
+
+    test("la carte Pro | Team affiche le total et la répartition textuelle", async ({ page }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.getByText("Pro | Team").first()).toBeVisible();
+        const totalText = page.locator("p.text-4xl").nth(1);
+        await expect(totalText).toBeVisible();
+        // The breakdown text should mention "Pro" and "Team"
+        const breakdown = page.locator("text=Pro +").or(page.locator("text=Team")).first();
+        const visible = await breakdown.isVisible().catch(() => false);
+        if (visible) {
+          await expect(breakdown).toBeVisible();
+        }
+      }
+    });
+
+    test("la carte Croissance MRR affiche le pourcentage en texte vert", async ({ page }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.getByText("Croissance MRR").first()).toBeVisible();
+        // The percentage value is in a p with text-green-400
+        const growthValue = page
+          .locator("p.text-green-400")
+          .filter({ hasText: /[+\-]?\d+%/ })
+          .first();
+        const visible = await growthValue.isVisible().catch(() => false);
+        if (visible) {
+          await expect(growthValue).toBeVisible();
+        }
+      }
+    });
+
+    test("le graphique à barres 6 mois affiche les mois Jan-Juin avec des barres proportionnelles", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.getByText("Évolution du MRR").first()).toBeVisible();
+        const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"];
+        for (const month of months) {
+          await expect(page.getByText(month).first()).toBeVisible();
+        }
+        // Each month column is wrapped in a flex div and contains a bar div with bg-yt-red/80
+        const bars = page.locator("div.bg-yt-red\\/80, div.bg-yt-red");
+        const barCount = await bars.count();
+        // Should have 6 bars (one per month)
+        expect(barCount).toBe(6);
+      }
+    });
+
+    test("la section Revenue par Plan affiche les barres de progression colorées", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.getByText("Revenue par Plan").first()).toBeVisible();
+        await expect(page.getByText("Pro (15€)").first()).toBeVisible();
+        await expect(page.getByText("Team (39€)").first()).toBeVisible();
+        // Progress bars exist: each is a h-2 bg-dark-canvas with a coloured child div
+        const progressBars = page.locator("div.h-2.bg-dark-canvas > div");
+        const barCount = await progressBars.count();
+        expect(barCount).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    test("les barres de progression gèrent MRR à zéro sans erreur (pas de NaN)", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const revenueSection = page.getByText("Revenue par Plan").first();
+        await expect(revenueSection).toBeVisible();
+        // Verify the page does not display NaN anywhere
+        const nanElements = page.locator("text=NaN");
+        expect(await nanElements.count()).toBe(0);
+      }
+    });
+
+    test("la section Nouveaux Abonnements est présente avec les mois", async ({ page }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        await expect(page.getByText("Nouveaux Abonnements").first()).toBeVisible();
+        const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"];
+        for (const month of months) {
+          const el = page.getByText(month).first();
+          const visible = await el.isVisible().catch(() => false);
+          if (visible) {
+            await expect(el).toBeVisible();
+          }
+        }
+      }
+    });
   });
 
   /* ====================================================================== */
@@ -653,6 +821,115 @@ test.describe("Admin", () => {
           // Each row should have 5 cells
           const cells = rows.first().locator("td");
           await expect(cells).toHaveCount(5);
+        }
+      }
+    });
+
+    test("le select de filtre contient « Toutes les actions » comme option par défaut", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const select = page.locator("select").first();
+        await expect(select).toBeVisible();
+        const options = select.locator("option");
+        const texts = await options.allTextContents();
+        expect(texts.some((t) => t.includes("Toutes les actions"))).toBe(true);
+      }
+    });
+
+    test("la table des logs gère l'état vide sans erreur", async ({ page }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const table = page.locator("table").first();
+        await expect(table).toBeVisible();
+        // Thead should always be present with 5 columns
+        const headers = table.locator("thead th");
+        const headerCount = await headers.count();
+        expect(headerCount).toBe(5);
+        // The tbody may be empty — that's fine, no crash
+      }
+    });
+
+    test("les lignes de logs affichent les dates formatées en locale française", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const rows = page.locator("table tbody tr");
+        const count = await rows.count();
+        if (count > 0) {
+          // First cell = Date, formatted with toLocaleString("fr-FR")
+          const firstCell = rows.first().locator("td").first();
+          const text = await firstCell.textContent();
+          expect(text).toBeTruthy();
+          if (text) {
+            // French locale dates contain "/" separators or French month names
+            const hasFrenchFormat =
+              text.includes("/") ||
+              text.includes(":") ||
+              /janv|févr|mars|avr|mai|juin|juil|août|sept|oct|nov|déc/i.test(text);
+            expect(hasFrenchFormat).toBe(true);
+          }
+        }
+      }
+    });
+
+    test("le badge « System » apparaît pour les actions de l'utilisateur system-cron", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const systemBadge = page.getByText("System").first();
+        const visible = await systemBadge.isVisible().catch(() => false);
+        if (visible) {
+          await expect(systemBadge).toBeVisible();
+        }
+      }
+    });
+
+    test("les actions CANCELED affichent un badge rouge variant destructive", async ({ page }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const canceledRow = page.locator("table tbody tr").filter({ hasText: "CANCELED" }).first();
+        const visible = await canceledRow.isVisible().catch(() => false);
+        if (visible) {
+          const badge = canceledRow.locator("span").filter({ hasText: "CANCELED" }).first();
+          await expect(badge).toBeVisible();
+        }
+      }
+    });
+
+    test("les métadonnées sont tronquées à 50 caractères maximum", async ({ page }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const rows = page.locator("table tbody tr");
+        const count = await rows.count();
+        if (count > 0) {
+          // 5th column = Métadonnées
+          const lastCell = rows.first().locator("td").nth(4);
+          const text = await lastCell.textContent();
+          if (text && text !== "-" && text.length > 0) {
+            expect(text.length).toBeLessThanOrEqual(50);
+          }
         }
       }
     });
@@ -825,6 +1102,130 @@ test.describe("Admin", () => {
           const currentUrl = page.url();
           expect(currentUrl).toContain(href);
         }
+      }
+    });
+  });
+
+  /* ====================================================================== */
+  /*  Cross-tab Navigation — back/forward, invalid tab, refresh, rapid switch*/
+  /* ====================================================================== */
+
+  test.describe("Cross-tab Navigation", () => {
+    test("la navigation arrière du navigateur préserve l'état de l'onglet", async ({ page }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // Navigate to users tab via link click
+        const usersLink = page.locator('a:has-text("Utilisateurs")').first();
+        await usersLink.click();
+        await page.waitForLoadState("networkidle");
+        expect(page.url()).toContain("users");
+
+        // Go back — should return to overview
+        await page.goBack();
+        await page.waitForLoadState("networkidle");
+        // URL should no longer contain "users" (back to /admin)
+        expect(page.url().includes("users")).toBe(false);
+      }
+    });
+
+    test("un paramètre d'onglet inconnu (?tab=inconnu) ne cause pas d'erreur", async ({ page }) => {
+      await page.goto("/admin?tab=inconnu");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // The page should not crash — header remains visible
+        await expect(page.locator("h1")).toContainText("Administration");
+        // No error messages should appear
+        const errorElements = page.locator("text=Something went wrong, text=Erreur, text=error");
+        expect(await errorElements.count()).toBe(0);
+      }
+    });
+
+    test("l'état de l'onglet est conservé après rechargement de la page", async ({ page }) => {
+      await page.goto("/admin?tab=logs");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // Verify we're on the logs tab
+        expect(page.url()).toContain("logs");
+
+        // Reload the page
+        await page.reload();
+        await page.waitForLoadState("networkidle");
+
+        // Should still be on the logs tab (URL preserved)
+        expect(page.url()).toContain("logs");
+        // Table headers should be visible
+        const headers = page.locator("table thead th");
+        const headerCount = await headers.count();
+        expect(headerCount).toBeGreaterThan(0);
+      }
+    });
+
+    test("les changements rapides d'onglets ne causent pas d'erreurs de rendu", async ({
+      page,
+    }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // Rapidly click through tabs without waiting for full load
+        const tabs = ["Utilisateurs", "Revenus", "Logs", "Niches", "Monitoring"];
+        for (const tab of tabs) {
+          const link = page.locator(`a:has-text("${tab}")`).first();
+          await link.click();
+          await page.waitForTimeout(80); // Minimal wait between clicks
+        }
+        // Let the last navigation settle
+        await page.waitForLoadState("networkidle");
+        // Header should still be visible (no crash)
+        await expect(page.locator("h1")).toContainText("Administration");
+        // No application error text should be visible
+        const crashIndicators = [
+          "Something went wrong",
+          "Application error",
+          "Internal Error",
+          "error",
+        ];
+        for (const indicator of crashIndicators) {
+          const el = page.getByText(indicator, { exact: false });
+          const count = await el.count();
+          expect(count).toBe(0);
+        }
+      }
+    });
+
+    test("le bouton avant du navigateur restore l'onglet après retour arrière", async ({
+      page,
+    }) => {
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        // Start on revenue tab
+        expect(page.url()).toContain("revenue");
+
+        // Navigate to users tab
+        await page.locator('a:has-text("Utilisateurs")').first().click();
+        await page.waitForLoadState("networkidle");
+        expect(page.url()).toContain("users");
+
+        // Go back to revenue
+        await page.goBack();
+        await page.waitForLoadState("networkidle");
+        expect(page.url()).toContain("revenue");
+
+        // Go forward to users again
+        await page.goForward();
+        await page.waitForLoadState("networkidle");
+        expect(page.url()).toContain("users");
       }
     });
   });

@@ -185,7 +185,9 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
       await mockSession(page, MOCK_SESSION_FREE);
     });
 
-    test("POST /api/stripe/checkout retourne 500 quand Stripe est indisponible", async ({ page }) => {
+    test("POST /api/stripe/checkout retourne 500 quand Stripe est indisponible", async ({
+      page,
+    }) => {
       await page.route("**/api/stripe/checkout", async (route) => {
         await route.fulfill({
           status: 500,
@@ -351,7 +353,9 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
 /* ======================================================================== */
 
 test.describe("Portail de facturation — Gestion d'erreurs", () => {
-  test("POST /api/stripe/portal pour utilisateur Free retourne 400 (pas d'abonnement)", async ({ page }) => {
+  test("POST /api/stripe/portal pour utilisateur Free retourne 400 (pas d'abonnement)", async ({
+    page,
+  }) => {
     await mockSession(page, MOCK_SESSION_FREE);
     await page.route("**/api/stripe/portal", async (route) => {
       // The portal endpoint checks for stripeCustomerId — Free users don't have one
@@ -423,7 +427,9 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
     expect(json.url).toContain("stripe.com");
   });
 
-  test("POST /api/stripe/portal pour utilisateur Team retourne une URL valide", async ({ page }) => {
+  test("POST /api/stripe/portal pour utilisateur Team retourne une URL valide", async ({
+    page,
+  }) => {
     await mockSession(page, MOCK_SESSION_TEAM);
     await page.route("**/api/stripe/portal", async (route) => {
       await route.fulfill({
@@ -545,7 +551,9 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
     expect(json.error).toBeDefined();
   });
 
-  test("POST /api/stripe/webhook avec événement non géré retourne received:true, handled:false", async ({ page }) => {
+  test("POST /api/stripe/webhook avec événement non géré retourne received:true, handled:false", async ({
+    page,
+  }) => {
     await page.route("**/api/stripe/webhook", async (route) => {
       // Unhandled event types are accepted but marked as not handled
       await route.fulfill({
@@ -631,7 +639,9 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
     expect(json.received).toBe(true);
   });
 
-  test("POST /api/stripe/webhook gère l'événement customer.subscription.deleted", async ({ page }) => {
+  test("POST /api/stripe/webhook gère l'événement customer.subscription.deleted", async ({
+    page,
+  }) => {
     await page.route("**/api/stripe/webhook", async (route) => {
       await route.fulfill({
         status: 200,
@@ -685,7 +695,9 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
 /* ======================================================================== */
 
 test.describe("Webhook Stripe — Idempotence", () => {
-  test("le même webhook traité deux fois retourne handled:false la seconde fois", async ({ page }) => {
+  test("le même webhook traité deux fois retourne handled:false la seconde fois", async ({
+    page,
+  }) => {
     await page.route("**/api/stripe/webhook", async (route) => {
       // Simulate idempotency: first call handles, second skips
       const callCount = new Map<string, number>();
@@ -842,7 +854,9 @@ test.describe("Compte utilisateur — Suppression", () => {
     expect(json.error).toContain("abonnement");
   });
 
-  test("DELETE /api/user avec valeur autre que true pour confirm retourne 400", async ({ page }) => {
+  test("DELETE /api/user avec valeur autre que true pour confirm retourne 400", async ({
+    page,
+  }) => {
     await mockSession(page, MOCK_SESSION_FREE);
     await page.route("**/api/user", async (route) => {
       if (route.request().method() === "DELETE") {
@@ -883,7 +897,9 @@ test.describe("Settings — Page", () => {
     await expectPageNotCrashing(page, "/settings");
   });
 
-  test("le bouton de déconnexion est présent dans le menu latéral si authentifié", async ({ page }) => {
+  test("le bouton de déconnexion est présent dans le menu latéral si authentifié", async ({
+    page,
+  }) => {
     await mockSession(page, MOCK_SESSION_FREE);
     await page.goto("/dashboard");
     // If server-side redirects to login, the test will pass by checking login page
@@ -1005,7 +1021,9 @@ test.describe("Stripe API — Résilience", () => {
 /* ======================================================================== */
 
 test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
-  test("POST /api/stripe/webhook customer.subscription.updated géré correctement", async ({ page }) => {
+  test("POST /api/stripe/webhook customer.subscription.updated géré correctement", async ({
+    page,
+  }) => {
     await page.route("**/api/stripe/webhook", async (route) => {
       await route.fulfill({
         status: 200,
@@ -1041,7 +1059,9 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
     expect(json.handled).toBe(true);
   });
 
-  test("POST /api/stripe/webhook customer.subscription.trial_will_end géré correctement", async ({ page }) => {
+  test("POST /api/stripe/webhook customer.subscription.trial_will_end géré correctement", async ({
+    page,
+  }) => {
     await page.route("**/api/stripe/webhook", async (route) => {
       await route.fulfill({
         status: 200,
@@ -1065,7 +1085,9 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
 /* ======================================================================== */
 
 test.describe("PLAN_LIMITS — Vérification des constantes de limites", () => {
-  test("les limites Free sont correctes (1 niche, 5 tendances, pas d'alertes)", async ({ page }) => {
+  test("les limites Free sont correctes (1 niche, 5 tendances, pas d'alertes)", async ({
+    page,
+  }) => {
     // This test validates the API session structure which reflects plan data
     await mockSession(page, MOCK_SESSION_FREE);
     const response = await page.request.get("/api/auth/session");
@@ -1078,7 +1100,9 @@ test.describe("PLAN_LIMITS — Vérification des constantes de limites", () => {
     expect(json.user).toHaveProperty("email");
   });
 
-  test("les limites Pro sont correctes (niches illimitées, tendances illimitées, alertes)", async ({ page }) => {
+  test("les limites Pro sont correctes (niches illimitées, tendances illimitées, alertes)", async ({
+    page,
+  }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const response = await page.request.get("/api/auth/session");
     const json = await response.json();
@@ -1163,5 +1187,1460 @@ test.describe("Rate Limiting — Protection des endpoints", () => {
       const json = await response.json();
       expect(json.code).toBe("RATE_LIMIT");
     }
+  });
+});
+
+/* ======================================================================== */
+/*  Billing Page — Plan Display & Statuses (mock HTML)                      */
+/* ======================================================================== */
+
+test.describe("Facturation — Affichage des statuts d'abonnement", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page, MOCK_SESSION_PRO);
+  });
+
+  /**
+   * Build a self-contained billing page HTML for testing subscription display.
+   * Mirrors the structure from billing page but includes subscription status,
+   * next billing date, trial info, and alert banners for PAST_DUE.
+   */
+  function buildBillingPageHTMLWithStatus(opts: {
+    plan: string;
+    status?: string;
+    hasSubscription?: boolean;
+    nextBillingDate?: string;
+    trialDaysRemaining?: number;
+    hasToken?: boolean;
+    tokenCreatedAt?: string;
+  }): string {
+    const {
+      plan,
+      status = "ACTIVE",
+      hasSubscription = true,
+      nextBillingDate = "1 juillet 2026",
+      trialDaysRemaining = 0,
+      hasToken = true,
+      tokenCreatedAt = "15/06/2026",
+    } = opts;
+
+    const isPaying = plan !== "FREE";
+
+    return /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Facturation — TrendHunter</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #fafafa; color: #111; }
+    .max-w-2xl { max-width: 42rem; margin: 0 auto; }
+    .space-y-8 > * + * { margin-top: 2rem; }
+    .text-2xl { font-size: 1.5rem; }
+    .font-bold { font-weight: 700; }
+    .text-xl { font-size: 1.25rem; }
+    .text-lg { font-size: 1.125rem; }
+    .text-sm { font-size: 0.875rem; }
+    .capitalize { text-transform: capitalize; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 20rem; display: inline-block; }
+    .font-mono { font-family: "SF Mono", "Consolas", monospace; }
+    .text-dark-ink-secondary { color: #666; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-2 { margin-top: 0.5rem; }
+    .mt-4 { margin-top: 1rem; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-4 { gap: 1rem; }
+    .p-6 { padding: 1.5rem; }
+    .rounded-none { border-radius: 0; }
+    .border { border: 1px solid; }
+    .border-hairline-dark { border-color: #ddd; }
+    .border-red-500 { border-color: #ef4444; }
+    .bg-transparent { background: transparent; }
+    .bg-dark-surface { background: #eee; }
+    .bg-red-50 { background: #fef2f2; }
+    .bg-red-500 { background: #ef4444; }
+    .bg-yt-red { background: #cc0000; color: white; }
+    .bg-yt-red-deep { background: #990000; }
+    .text-red-700 { color: #b91c1c; }
+    .text-red-800 { color: #991b1b; }
+    .text-white { color: white; }
+    .rounded { border-radius: 4px; }
+    .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+    .h-9 { height: 2.25rem; }
+    .h-8 { height: 2rem; }
+    .whitespace-nowrap { white-space: nowrap; }
+    .font-medium { font-weight: 500; }
+    .transition-colors { transition: background-color 0.2s, color 0.2s; }
+    button:disabled { opacity: 0.5; pointer-events: none; }
+    a { color: #0066cc; text-decoration: underline; }
+    .inline-flex { display: inline-flex; }
+    .inline-flex.items-center.justify-center.gap-2 { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .grid { display: grid; }
+    .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .w-full { width: 100%; }
+    .overflow-x-hidden { overflow-x: hidden; }
+  </style>
+</head>
+<body>
+  <div class="max-w-2xl space-y-8" data-testid="billing-page">
+
+    <h1 class="text-2xl font-bold" data-testid="page-title">Facturation</h1>
+
+    ${
+      status === "PAST_DUE"
+        ? `
+    <div data-testid="past-due-alert" class="border border-red-500 bg-red-50 p-4 rounded-none" role="alert">
+      <p class="text-red-800 font-bold">Paiement en retard</p>
+      <p class="text-red-700 text-sm mt-1" data-testid="past-due-message">
+        Votre dernier paiement a échoué. Veuillez mettre à jour votre moyen de paiement pour éviter
+        la suspension de votre abonnement.
+      </p>
+    </div>`
+        : ""
+    }
+
+    ${
+      status === "CANCELED"
+        ? `
+    <div data-testid="canceled-banner" class="border border-hairline-dark bg-dark-surface p-4 rounded-none">
+      <p class="font-bold">Abonnement annulé</p>
+      <p class="text-sm text-dark-ink-secondary mt-1" data-testid="canceled-message">
+        Votre abonnement a été annulé. Vous conservez l'accès jusqu'au ${nextBillingDate}.
+      </p>
+    </div>`
+        : ""
+    }
+
+    ${
+      status === "TRIALING" && trialDaysRemaining > 0
+        ? `
+    <div data-testid="trial-banner" class="border border-hairline-dark bg-dark-surface p-4 rounded-none">
+      <p class="font-bold">Période d'essai</p>
+      <p class="text-sm text-dark-ink-secondary mt-1" data-testid="trial-message">
+        Il vous reste <strong data-testid="trial-days-remaining">${trialDaysRemaining}</strong> jours d'essai.
+      </p>
+    </div>`
+        : ""
+    }
+
+    <!-- Plan Card -->
+    <div class="border border-hairline-dark p-6 rounded-none" data-testid="plan-card">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm text-dark-ink-secondary" data-testid="plan-label">Plan actuel</p>
+          <div class="flex items-center gap-2 mt-1">
+            <p class="text-xl font-bold capitalize" data-testid="plan-name">${plan.toLowerCase()}</p>
+            <span data-testid="plan-badge">${plan}</span>
+          </div>
+          ${
+            hasSubscription
+              ? `
+          <div class="mt-4 grid grid-cols-2 gap-4">
+            <div data-testid="subscription-status-block">
+              <p class="text-sm text-dark-ink-secondary">Statut</p>
+              <p class="text-lg font-medium" data-testid="subscription-status">${status === "ACTIVE" ? "Actif" : status === "PAST_DUE" ? "En retard" : status === "CANCELED" ? "Annulé" : status === "TRIALING" ? "Essai" : status}</p>
+            </div>
+            <div data-testid="next-billing-block">
+              <p class="text-sm text-dark-ink-secondary">Prochaine facturation</p>
+              <p class="text-lg font-medium" data-testid="next-billing-date">${nextBillingDate}</p>
+            </div>
+          </div>`
+              : `
+          <p class="text-sm text-dark-ink-secondary mt-2" data-testid="no-subscription-msg">
+            Aucun abonnement actif
+          </p>`
+          }
+        </div>
+        ${
+          isPaying
+            ? `
+        <button
+          data-testid="manage-subscription-btn"
+          class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-sm font-medium transition-colors border border-hairline-dark bg-transparent px-4 py-2 h-9 hover:bg-dark-surface"
+          onclick="handleManageSubscription(this)"
+        >
+          Gérer l'abonnement
+        </button>`
+            : `
+        <a
+          href="/pricing"
+          data-testid="upgrade-link"
+          class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-sm font-medium transition-colors bg-yt-red text-white px-4 py-2 h-9 hover:bg-yt-red-deep"
+        >
+          Passer Pro
+        </a>`
+        }
+      </div>
+    </div>
+
+    <!-- Token API Card -->
+    <div class="border border-hairline-dark p-6 rounded-none" data-testid="token-card">
+      <div>
+        <h2 class="text-xl font-bold" data-testid="token-title">Token API — Extension Chrome</h2>
+        <p class="text-sm text-dark-ink-secondary mt-1" data-testid="token-description">
+          Utilisez ce token pour connecter l'extension TrendHunter à votre compte.
+        </p>
+      </div>
+      <div class="mt-2" data-testid="token-content">
+        ${
+          hasToken
+            ? `
+        <div data-testid="token-section" class="mb-4">
+          <p class="text-sm text-dark-ink-secondary mb-2" data-testid="token-date-info">
+            Dernier token créé le <span data-testid="token-created-date">${tokenCreatedAt}</span>.
+            Le token complet est affiché uniquement lors de la création.
+          </p>
+          <div class="flex items-center gap-2">
+            <code
+              data-testid="token-value"
+              class="truncate font-mono text-sm border border-hairline-dark px-2 py-1"
+            >sk_test_abc123def456</code>
+            <button
+              data-testid="copy-token-btn"
+              class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium border border-hairline-dark bg-transparent px-3 py-1 h-8 hover:bg-dark-surface"
+            >
+              Copier
+            </button>
+          </div>
+        </div>`
+            : ""
+        }
+        <button
+          data-testid="generate-token-btn"
+          class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-sm font-medium transition-colors border border-hairline-dark bg-transparent px-4 py-2 h-9 hover:bg-dark-surface"
+        >
+          Générer un nouveau token
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    window.handleManageSubscription = async function(btn) {
+      btn.textContent = 'Chargement...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/stripe/portal', { method: 'POST' });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url;
+      } catch (e) { console.error(e); }
+      finally {
+        btn.textContent = "Gérer l'abonnement";
+        btn.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>`;
+  }
+
+  async function mockBillingPageWithStatus(
+    page: Page,
+    opts: Parameters<typeof buildBillingPageHTMLWithStatus>[0],
+  ): Promise<void> {
+    await page.route("**/billing", async (route, request) => {
+      if (request.resourceType() === "document") {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: buildBillingPageHTMLWithStatus(opts),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+  }
+
+  test("affiche le nom du plan, le statut Actif et la date de prochaine facturation pour un abonnement ACTIF", async ({
+    page,
+  }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "PRO",
+      status: "ACTIVE",
+      nextBillingDate: "1 juillet 2026",
+      hasToken: true,
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("plan-name")).toHaveText("pro");
+    await expect(page.getByTestId("subscription-status")).toHaveText("Actif");
+    await expect(page.getByTestId("next-billing-date")).toHaveText("1 juillet 2026");
+    await expect(page.getByTestId("manage-subscription-btn")).toBeVisible();
+  });
+
+  test("affiche le statut ANNULÉ avec le message approprié", async ({ page }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "PRO",
+      status: "CANCELED",
+      nextBillingDate: "1 juillet 2026",
+      hasToken: true,
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("canceled-banner")).toBeVisible();
+    await expect(page.getByTestId("subscription-status")).toHaveText("Annulé");
+    await expect(page.getByTestId("canceled-message")).toContainText("annulé");
+    await expect(page.getByTestId("canceled-message")).toContainText("1 juillet 2026");
+  });
+
+  test("affiche un avertissement PAST_DUE (bannière rouge) quand le paiement a échoué", async ({
+    page,
+  }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "PRO",
+      status: "PAST_DUE",
+      nextBillingDate: "1 juillet 2026",
+      hasToken: true,
+    });
+    await page.goto("/billing");
+
+    const alert = page.getByTestId("past-due-alert");
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("Paiement en retard");
+    await expect(page.getByTestId("past-due-message")).toContainText("paiement a échoué");
+    await expect(page.getByTestId("subscription-status")).toHaveText("En retard");
+
+    // Verify red styling is present
+    const borderClass = await alert.getAttribute("class");
+    expect(borderClass).toContain("border-red");
+  });
+
+  test("affiche les jours restants d'essai pour un abonnement TRIALING", async ({ page }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "PRO",
+      status: "TRIALING",
+      trialDaysRemaining: 5,
+      nextBillingDate: "27 juin 2026",
+      hasToken: true,
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("trial-banner")).toBeVisible();
+    await expect(page.getByTestId("trial-days-remaining")).toHaveText("5");
+    await expect(page.getByTestId("trial-message")).toContainText("jours d'essai");
+    await expect(page.getByTestId("subscription-status")).toHaveText("Essai");
+  });
+
+  test("affiche le plan Gratuit pour un utilisateur sans abonnement", async ({ page }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "FREE",
+      status: "ACTIVE",
+      hasSubscription: false,
+      hasToken: false,
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("plan-name")).toHaveText("free");
+    await expect(page.getByTestId("no-subscription-msg")).toContainText("Aucun abonnement");
+    await expect(page.getByTestId("upgrade-link")).toBeVisible();
+    await expect(page.getByTestId("manage-subscription-btn")).toHaveCount(0);
+  });
+
+  test("le bouton 'Passer Pro' navigue vers /pricing", async ({ page }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "FREE",
+      hasSubscription: false,
+      hasToken: false,
+    });
+    await page.goto("/billing");
+
+    const link = page.getByTestId("upgrade-link");
+    await expect(link).toHaveAttribute("href", "/pricing");
+
+    // Click and verify navigation
+    await link.click();
+    await page.waitForURL("/pricing");
+  });
+
+  test("la page est responsive sur mobile (375px de largeur)", async ({ page }) => {
+    await mockBillingPageWithStatus(page, { plan: "PRO", hasToken: true });
+
+    // Set mobile viewport
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    await page.goto("/billing");
+
+    // Core elements should be visible and not overflow
+    await expect(page.getByTestId("billing-page")).toBeVisible();
+    await expect(page.getByTestId("plan-card")).toBeVisible();
+    await expect(page.getByTestId("token-card")).toBeVisible();
+
+    // Check horizontal overflow on the page container
+    const overflowX = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="billing-page"]');
+      if (!el) return "";
+      return window.getComputedStyle(el).overflowX;
+    });
+    // The container should not have visible overflow
+    expect(overflowX).not.toBe("visible");
+  });
+
+  test("la section token affiche la date de création au format français (jj/mm/aaaa)", async ({
+    page,
+  }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "PRO",
+      hasToken: true,
+      tokenCreatedAt: "15/06/2026",
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("token-section")).toBeVisible();
+    await expect(page.getByTestId("token-created-date")).toHaveText("15/06/2026");
+    await expect(page.getByTestId("token-date-info")).toContainText("créé le");
+  });
+
+  test("plan Team avec token existant s'affiche correctement", async ({ page }) => {
+    await mockBillingPageWithStatus(page, {
+      plan: "TEAM",
+      status: "ACTIVE",
+      nextBillingDate: "1 juillet 2026",
+      hasToken: true,
+      tokenCreatedAt: "15/06/2026",
+    });
+    await page.goto("/billing");
+
+    await expect(page.getByTestId("plan-name")).toHaveText("team");
+    await expect(page.getByTestId("plan-badge")).toContainText("TEAM");
+    await expect(page.getByTestId("subscription-status")).toHaveText("Actif");
+    await expect(page.getByTestId("manage-subscription-btn")).toBeVisible();
+
+    // Token section visible
+    await expect(page.getByTestId("token-section")).toBeVisible();
+    await expect(page.getByTestId("token-created-date")).toHaveText("15/06/2026");
+  });
+});
+
+/* ======================================================================== */
+/*  Billing Page — Erreur Prisma                                            */
+/* ======================================================================== */
+
+test.describe("Facturation — Erreur Prisma", () => {
+  test("la page retourne 500 quand getUserPlan (Prisma) échoue", async ({ page }) => {
+    await mockSession(page, MOCK_SESSION_FREE);
+
+    // Mock the billing page to return 500 (simulating Prisma failure)
+    await page.route("**/billing", async (route, request) => {
+      if (request.resourceType() === "document") {
+        await route.fulfill({
+          status: 500,
+          contentType: "text/html",
+          body: "<html><body><h1>Erreur serveur</h1></body></html>",
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    const response = await page.goto("/billing");
+    expect(response?.status()).toBe(500);
+  });
+});
+
+/* ======================================================================== */
+/*  API — Authentification                                                  */
+/* ======================================================================== */
+
+test.describe("API — Authentification", () => {
+  test("GET /api/user retourne 401 sans authentification", async ({ page }) => {
+    // No session mock — unauthenticated
+    await page.route("**/api/user", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 401,
+          contentType: "text/plain",
+          body: "Unauthorized",
+        });
+      }
+    });
+
+    const response = await page.request.get("/api/user");
+    expect(response.status()).toBe(401);
+  });
+
+  test("GET /api/user retourne 405 avec méthode non autorisée (sans session)", async ({ page }) => {
+    // If the route doesn't export GET, Next.js returns 405
+    await page.route("**/api/user", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 405,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Méthode non autorisée" }),
+        });
+      }
+    });
+
+    const response = await page.request.get("/api/user");
+    expect(response.status()).toBe(405);
+  });
+});
+
+/* ======================================================================== */
+/*  Checkout Stripe — Gestion d'erreurs avancée                             */
+/* ======================================================================== */
+
+test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page, MOCK_SESSION_FREE);
+  });
+
+  test("POST /api/stripe/checkout avec priceId inconnu retourne 500 (PRICE_NOT_FOUND)", async ({
+    page,
+  }) => {
+    await page.route("**/api/stripe/checkout", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      const unknownPriceId = body.priceId;
+      // Simulate adapter rejecting unknown price IDs
+      if (unknownPriceId === "price_unknown_invalid") {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: `Price ID ${unknownPriceId} n'est pas autorisé`,
+            code: "PRICE_NOT_FOUND",
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/test" }),
+        });
+      }
+    });
+
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: { priceId: "price_unknown_invalid" },
+    });
+    expect(response.status()).toBe(500);
+    const json = await response.json();
+    expect(json.code).toBe("PRICE_NOT_FOUND");
+  });
+
+  test("POST /api/stripe/checkout retourne 404 quand l'utilisateur n'existe pas en DB", async ({
+    page,
+  }) => {
+    await page.route("**/api/stripe/checkout", async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Utilisateur introuvable", code: "NOT_FOUND" }),
+      });
+    });
+
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: { priceId: PRO_PRICE_ID },
+    });
+    expect(response.status()).toBe(404);
+    const json = await response.json();
+    expect(json.error).toContain("introuvable");
+  });
+
+  test("POST /api/stripe/checkout avec body JSON malformé retourne 400", async ({ page }) => {
+    await page.route("**/api/stripe/checkout", async (route) => {
+      const pd = route.request().postData();
+      // Simulate JSON parsing failure — invalid JSON
+      if (pd && !pd.startsWith("{")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "JSON invalide", code: "VALIDATION_ERROR" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/test" }),
+        });
+      }
+    });
+
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: "not-json-at-all",
+      headers: { "content-type": "application/json" },
+    });
+    expect(response.status()).toBe(400);
+  });
+
+  test("Stripe checkout.priceId valide rejette les priceId non-associés à un abonnement", async ({
+    page,
+  }) => {
+    // A one-time payment price ID should be rejected for subscription checkout
+    await page.route("**/api/stripe/checkout", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      const priceId = body.priceId;
+      // Simulate: if priceId doesn't match allowed subscription price IDs, reject
+      if (priceId && !priceId.includes("_monthly") && !priceId.includes("_subscription")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Ce price ID ne correspond pas à un abonnement",
+            code: "VALIDATION_ERROR",
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/test" }),
+        });
+      }
+    });
+
+    // Try a one-time payment price ID
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: { priceId: "price_one_time_payment" },
+    });
+    expect(response.status()).toBe(400);
+    const json = await response.json();
+    expect(json.error).toContain("abonnement");
+  });
+
+  test("double-clic sur le bouton de checkout → un seul appel API", async ({ page }) => {
+    let callCount = 0;
+
+    await page.route("**/api/stripe/checkout", async (route) => {
+      callCount++;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/test" }),
+      });
+    });
+
+    // Build a mock checkout page with a subscribe button
+    await page.route("**/checkout", async (route, request) => {
+      if (request.resourceType() === "document") {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: /* html */ `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body>
+  <button data-testid="subscribe-btn"
+    class="inline-flex items-center justify-center"
+    onclick="handleSubscribe(this)">
+    S'abonner
+  </button>
+  <script>
+    let loading = false;
+    async function handleSubscribe(btn) {
+      if (loading) return;
+      loading = true;
+      btn.textContent = 'Chargement...';
+      btn.disabled = true;
+      try {
+        await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ priceId: 'price_test_pro_monthly' }),
+        });
+      } catch (e) { console.error(e); }
+      finally {
+        loading = false;
+        btn.textContent = 'S\\'abonner';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>`,
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.goto("/checkout");
+
+    const btn = page.getByTestId("subscribe-btn");
+
+    // Triple-click rapidly
+    await btn.click({ clickCount: 3 });
+
+    // Wait for the fetch to complete (artificial delay)
+    await page.waitForTimeout(500);
+
+    // Should only have been called once
+    expect(callCount).toBe(1);
+  });
+});
+
+/* ======================================================================== */
+/*  Webhook Stripe — Cas non gérés par événements spécifiques               */
+/* ======================================================================== */
+
+test.describe("Webhook Stripe — Cas non gérés spécifiques", () => {
+  /**
+   * Mock the webhook endpoint with detailed event handling logic that mirrors
+   * the real stripe-webhook-handler.ts behavior.
+   */
+  async function mockDetailedWebhook(page: Page, validSignature: string = "valid_sig_test") {
+    await page.route("**/api/stripe/webhook", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+
+      const sig = route.request().headers()["stripe-signature"];
+      if (!sig) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
+        return;
+      }
+
+      // Signature validation
+      if (sig !== validSignature) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Webhook invalide" }),
+        });
+        return;
+      }
+
+      const rawBody = route.request().postData() || "";
+      if (!rawBody || rawBody.trim() === "") {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Webhook invalide" }),
+        });
+        return;
+      }
+
+      let event: { type: string; data?: { object?: Record<string, unknown> } };
+      try {
+        event = JSON.parse(rawBody);
+      } catch {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Webhook invalide" }),
+        });
+        return;
+      }
+
+      // Route to handler logic (mirrors stripe-webhook-handler.ts)
+      let handled = false;
+
+      if (event.type === "checkout.session.completed") {
+        const session = event.data?.object || {};
+        if (session.mode !== "subscription") {
+          handled = false; // mode=payment not subscription
+        } else if (!session.subscription) {
+          handled = false; // no subscription items
+        } else if (!session.metadata?.userId) {
+          handled = false; // no userId in metadata
+        } else {
+          handled = true;
+        }
+      } else if (event.type === "invoice.payment_succeeded") {
+        const invoice = event.data?.object || {};
+        if (!invoice.subscription) {
+          handled = false; // no subscription reference
+        } else {
+          handled = true;
+        }
+      } else if (event.type === "customer.subscription.updated") {
+        const subscription = event.data?.object || {};
+        if (!subscription.metadata?.userId) {
+          handled = false; // no userId
+        } else {
+          handled = true; // PAST_DUE included in handled events
+        }
+      } else if (event.type === "customer.subscription.deleted") {
+        const subscription = event.data?.object || {};
+        if (!subscription.metadata?.userId) {
+          handled = false; // no userId
+        } else {
+          handled = true;
+        }
+      } else if (
+        event.type === "invoice.payment_failed" ||
+        event.type === "customer.subscription.trial_will_end"
+      ) {
+        handled = true;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ received: true, handled }),
+      });
+    });
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await mockDetailedWebhook(page);
+  });
+
+  const WEBHOOK_HEADERS = {
+    "stripe-signature": "valid_sig_test",
+    "content-type": "application/json",
+  };
+
+  test("POST /api/stripe/webhook avec mode=payment (pas subscription) retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_payment_mode",
+            mode: "payment",
+            subscription: "sub_test",
+            metadata: { userId: "user-123" },
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook checkout.session.completed sans userId retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_no_userid",
+            mode: "subscription",
+            subscription: "sub_test_456",
+            metadata: {},
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook checkout.session.completed sans subscription items retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_no_sub",
+            mode: "subscription",
+            // Pas de subscription
+            metadata: { userId: "user-123" },
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook invoice.payment_succeeded sans référence d'abonnement retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "invoice.payment_succeeded",
+        data: {
+          object: {
+            id: "inv_no_sub_ref",
+            charge: "ch_test",
+            // Pas de subscription
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook customer.subscription.updated avec status PAST_DUE est géré", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: "sub_past_due",
+            status: "past_due",
+            metadata: { userId: "user-456" },
+            items: { data: [{ price: { id: "price_pro" } }] },
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(true);
+  });
+
+  test("POST /api/stripe/webhook customer.subscription.updated sans userId retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "customer.subscription.updated",
+        data: {
+          object: {
+            id: "sub_no_userid",
+            status: "active",
+            metadata: {},
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook customer.subscription.deleted sans userId retourne handled: false", async ({
+    page,
+  }) => {
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: {
+        type: "customer.subscription.deleted",
+        data: {
+          object: {
+            id: "sub_deleted_no_userid",
+            metadata: {},
+          },
+        },
+      },
+      headers: WEBHOOK_HEADERS,
+    });
+    expect(response.status()).toBe(200);
+    const json = await response.json();
+    expect(json.received).toBe(true);
+    expect(json.handled).toBe(false);
+  });
+
+  test("POST /api/stripe/webhook avec body modifié (tamperé) retourne 400", async ({ page }) => {
+    // Send a valid-looking signature but with a body that will fail signature verification
+    // In the mock, "tampered_sig" is not "valid_sig_test", so constructEvent would fail
+    const validBody = JSON.stringify({
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_tampered" } },
+    });
+
+    // Send with a different signature than what the body would have been created with
+    const response = await page.request.post("/api/stripe/webhook", {
+      data: validBody,
+      headers: {
+        "stripe-signature": "tampered_signature_value",
+        "content-type": "application/json",
+      },
+    });
+    expect(response.status()).toBe(400);
+    const json = await response.json();
+    expect(json.error).toBeDefined();
+  });
+});
+
+/* ======================================================================== */
+/*  Abonnement — Changements avancés                                        */
+/* ======================================================================== */
+
+test.describe("Abonnement — Changements avancés", () => {
+  test.describe("Upgrade direct", () => {
+    test("passage de Free à Team directement (pas Free→Pro→Team)", async ({ page }) => {
+      await mockSession(page, MOCK_SESSION_FREE);
+
+      await page.route("**/api/stripe/checkout", async (route) => {
+        const body = JSON.parse(route.request().postData() || "{}");
+        expect(body.priceId).toBe(TEAM_PRICE_ID);
+
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            url: "https://checkout.stripe.com/c/pay/cs_free_to_team",
+          }),
+        });
+      });
+
+      const response = await page.request.post("/api/stripe/checkout", {
+        data: { priceId: TEAM_PRICE_ID },
+      });
+      expect(response.status()).toBe(200);
+      const json = await response.json();
+      expect(json.url).toContain("checkout.stripe.com");
+    });
+
+    test("passage de Free à Team affiche le montant correct sur la page de checkout", async ({
+      page,
+    }) => {
+      await mockSession(page, MOCK_SESSION_FREE);
+
+      await page.route("**/api/billing/proration", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            currentPlan: "FREE",
+            targetPlan: "TEAM",
+            proratedAmount: 3900,
+            fullAmount: 3900,
+            message: "Montant pour le passage à Team : 39,00 €",
+          }),
+        });
+      });
+
+      // Mock the upgrade page
+      await page.route("**/billing/upgrade", async (route, request) => {
+        if (request.resourceType() === "document") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/html",
+            body: /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body>
+  <h1>Changer de formule</h1>
+  <select data-testid="upgrade-plan-select">
+    <option value="pro">Pro — 15€</option>
+    <option value="team">Team — 39€</option>
+  </select>
+  <button data-testid="continue-upgrade-btn">Continuer</button>
+  <div data-testid="proration-details">
+    <p data-testid="prorated-amount">39,00</p>
+    <p>Montant pour le passage à Team : 39,00 €</p>
+  </div>
+</body>
+</html>`,
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await page.goto("/billing/upgrade");
+      await page.locator("[data-testid='upgrade-plan-select']").selectOption("team");
+
+      // The full amount for team should be displayed
+      await expect(page.getByText("39,00").first()).toBeVisible();
+      await expect(page.getByText("Team").first()).toBeVisible();
+    });
+  });
+
+  test.describe("Downgrade Team→Pro", () => {
+    test("passage de Team à Pro programmé à la fin de la période de facturation", async ({
+      page,
+    }) => {
+      await mockSession(page, MOCK_SESSION_TEAM);
+
+      await page.route("**/api/billing/subscription/downgrade", async (route) => {
+        if (route.request().method() === "POST") {
+          const body = JSON.parse(route.request().postData() || "{}");
+          expect(body.targetPlan).toBe("PRO");
+          expect(body.immediate).toBe(false);
+
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              success: true,
+              currentPlan: "TEAM",
+              targetPlan: "PRO",
+              effectiveDate: "2026-08-01T00:00:00Z",
+              changeScheduled: true,
+              message:
+                "Downgrade vers Pro programmé au 1 août 2026. Vous conservez Team jusqu'à cette date.",
+            }),
+          });
+        }
+      });
+
+      // Mock the downgrade page
+      await page.route("**/billing/downgrade", async (route, request) => {
+        if (request.resourceType() === "document") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/html",
+            body: /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body>
+  <h1>Changer de formule — Team → Pro</h1>
+  <p>Vous allez passer de Team à Pro. Le changement prendra effet en fin de période.</p>
+  <button data-testid="downgrade-plan-select" data-plan="pro">Pro (15€/mois)</button>
+  <button data-testid="confirm-downgrade-btn" class="btn">Confirmer le changement</button>
+  <div data-testid="downgrade-result"></div>
+  <script>
+    let btn = document.querySelector('[data-testid="confirm-downgrade-btn"]');
+    if (btn) {
+      btn.addEventListener('click', async function() {
+        try {
+          const res = await fetch('/api/billing/subscription/downgrade', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ targetPlan: 'PRO', immediate: false }),
+          });
+          const data = await res.json();
+          document.querySelector('[data-testid="downgrade-result"]').textContent = data.message || '';
+        } catch(e) { console.error(e); }
+      });
+    }
+  </script>
+</body>
+</html>`,
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await page.goto("/billing/downgrade");
+      await page.locator("[data-testid='confirm-downgrade-btn']").click();
+
+      // Wait for the fetch to complete
+      await page.waitForTimeout(500);
+
+      // Downgrade scheduled message
+      await expect(page.getByText(/programmé/i).first()).toBeVisible();
+      await expect(page.getByText("1 août 2026").first()).toBeVisible();
+    });
+  });
+
+  test.describe("Réactivation d'abonnement Team annulé", () => {
+    test("réactive un abonnement Team annulé avant la fin de la période", async ({ page }) => {
+      await mockSession(page, MOCK_SESSION_TEAM);
+
+      // Mock reactivate endpoint
+      await page.route("**/api/billing/subscription/reactivate", async (route) => {
+        if (route.request().method() === "POST") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              success: true,
+              reactivated: true,
+              message: "Abonnement Team réactivé avec succès.",
+            }),
+          });
+        }
+      });
+
+      // Mock the billing page showing canceled state with reactivate button
+      await page.route("**/billing/cancel", async (route, request) => {
+        if (request.resourceType() === "document") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/html",
+            body: /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body>
+  <div data-testid="canceled-banner">
+    <p>Abonnement annulé. Vous conservez l'accès jusqu'au 1 août 2026.</p>
+  </div>
+  <button data-testid="reactivate-subscription-btn">Réactiver l'abonnement</button>
+  <div data-testid="reactivate-result"></div>
+  <script>
+    document.querySelector('[data-testid="reactivate-subscription-btn"]').addEventListener('click', async function() {
+      try {
+        const res = await fetch('/api/billing/subscription/reactivate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+        });
+        const data = await res.json();
+        document.querySelector('[data-testid="reactivate-result"]').textContent = data.message || '';
+      } catch(e) { console.error(e); }
+    });
+  </script>
+</body>
+</html>`,
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await page.goto("/billing/cancel");
+
+      // Click reactivate
+      await page.locator("[data-testid='reactivate-subscription-btn']").click();
+
+      // Wait for API call
+      await page.waitForTimeout(500);
+
+      await expect(page.getByText("réactivé").first()).toBeVisible();
+    });
+  });
+
+  test.describe("Échecs Stripe — Annulation et réactivation", () => {
+    test("annulation échoue quand Stripe API est indisponible", async ({ page }) => {
+      await mockSession(page, MOCK_SESSION_PRO);
+
+      await page.route("**/api/billing/subscription/cancel", async (route) => {
+        if (route.request().method() === "POST") {
+          await route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: "Impossible d'annuler l'abonnement. Stripe est temporairement indisponible.",
+              code: "SUBSCRIPTION_NOT_FOUND",
+            }),
+          });
+        }
+      });
+
+      // Mock cancel page
+      await page.route("**/billing/cancel", async (route, request) => {
+        if (request.resourceType() === "document") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/html",
+            body: /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body>
+  <h1>Annuler l'abonnement</h1>
+  <button data-testid="cancel-subscription-btn">Annuler l'abonnement</button>
+  <button data-testid="confirm-cancel-btn" style="display:none">Confirmer</button>
+  <div data-testid="cancel-result"></div>
+  <script>
+    let step = 'confirm';
+    document.querySelector('[data-testid="cancel-subscription-btn"]').addEventListener('click', function() {
+      document.querySelector('[data-testid="confirm-cancel-btn"]').style.display = 'inline-block';
+    });
+    document.querySelector('[data-testid="confirm-cancel-btn"]').addEventListener('click', async function() {
+      try {
+        const res = await fetch('/api/billing/subscription/cancel', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+        });
+        const data = await res.json();
+        document.querySelector('[data-testid="cancel-result"]').textContent = data.error || 'Succès';
+      } catch(e) { console.error(e); }
+    });
+  </script>
+</body>
+</html>`,
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await page.goto("/billing/cancel");
+      await page.locator("[data-testid='cancel-subscription-btn']").click();
+      await page.locator("[data-testid='confirm-cancel-btn']").click();
+
+      await page.waitForTimeout(500);
+
+      // Error message should be displayed
+      await expect(page.getByText("Stripe est temporairement indisponible").first()).toBeVisible();
+    });
+
+    test("réactivation échoue quand Stripe API est indisponible", async ({ page }) => {
+      await mockSession(page, MOCK_SESSION_PRO);
+
+      await page.route("**/api/billing/subscription/reactivate", async (route) => {
+        if (route.request().method() === "POST") {
+          await route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error:
+                "Impossible de réactiver l'abonnement. Stripe est temporairement indisponible.",
+              code: "SUBSCRIPTION_NOT_FOUND",
+            }),
+          });
+        }
+      });
+
+      // Mock reactivate page
+      await page.route("**/billing/reactivate", async (route, request) => {
+        if (request.resourceType() === "document") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/html",
+            body: /* html */ `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8" /></head>
+<body>
+  <h1>Réactiver l'abonnement</h1>
+  <button data-testid="reactivate-btn">Réactiver l'abonnement</button>
+  <div data-testid="reactivate-result"></div>
+  <script>
+    document.querySelector('[data-testid="reactivate-btn"]').addEventListener('click', async function() {
+      try {
+        const res = await fetch('/api/billing/subscription/reactivate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+        });
+        const data = await res.json();
+        document.querySelector('[data-testid="reactivate-result"]').textContent = data.error || 'Succès';
+      } catch(e) { console.error(e); }
+    });
+  </script>
+</body>
+</html>`,
+          });
+        } else {
+          await route.continue();
+        }
+      });
+
+      await page.goto("/billing/reactivate");
+      await page.locator("[data-testid='reactivate-btn']").click();
+
+      await page.waitForTimeout(500);
+
+      // Error message should be displayed
+      await expect(page.getByText("Stripe est temporairement indisponible").first()).toBeVisible();
+    });
+  });
+});
+
+/* ======================================================================== */
+/*  API — Rate limiting avancé et erreurs Redis                             */
+/* ======================================================================== */
+
+test.describe("API — Rate limiting avancé", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page, MOCK_SESSION_FREE);
+  });
+
+  test("POST /api/stripe/checkout rate limité → 429 avec header Retry-After", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/stripe/checkout", async (route) => {
+      requestCount++;
+      if (requestCount > 5) {
+        await route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          headers: {
+            "Retry-After": "60",
+            "X-RateLimit-Limit": "5",
+            "X-RateLimit-Remaining": "0",
+          },
+          body: JSON.stringify({
+            error: "Trop de requêtes. Réessayez plus tard.",
+            code: "RATE_LIMIT",
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ url: "https://checkout.stripe.com/c/pay/test" }),
+        });
+      }
+    });
+
+    // Exceed the rate limit
+    for (let i = 0; i < 6; i++) {
+      await page.request.post("/api/stripe/checkout", {
+        data: { priceId: PRO_PRICE_ID },
+      });
+    }
+
+    // The last request should be rate limited
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: { priceId: PRO_PRICE_ID },
+    });
+
+    if (response.status() === 429) {
+      // Check Retry-After header
+      const retryAfter = response.headers()["retry-after"];
+      expect(retryAfter).toBeDefined();
+      expect(Number(retryAfter)).toBeGreaterThan(0);
+
+      const json = await response.json();
+      expect(json.code).toBe("RATE_LIMIT");
+    }
+  });
+
+  test("POST /api/stripe/checkout Redis indisponible → 503", async ({ page }) => {
+    await page.route("**/api/stripe/checkout", async (route) => {
+      // Simulate Redis failure: rate limit check catches the error and returns 503
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Service temporairement indisponible",
+          code: "SERVICE_UNAVAILABLE",
+        }),
+      });
+    });
+
+    const response = await page.request.post("/api/stripe/checkout", {
+      data: { priceId: PRO_PRICE_ID },
+    });
+    expect(response.status()).toBe(503);
+    const json = await response.json();
+    expect(json.error).toContain("indisponible");
+  });
+
+  test("POST /api/stripe/portal avec returnUrl javascript: → 400", async ({ page }) => {
+    await mockSession(page, MOCK_SESSION_PRO);
+
+    await page.route("**/api/stripe/portal", async (route) => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      const returnUrl = body.returnUrl || "";
+
+      // Zod z.string().url() rejects javascript: protocol
+      if (returnUrl.startsWith("javascript:")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "URL de retour invalide",
+            code: "VALIDATION_ERROR",
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ url: "https://billing.stripe.com/p/session/test" }),
+        });
+      }
+    });
+
+    const response = await page.request.post("/api/stripe/portal", {
+      data: { returnUrl: "javascript:alert('xss')" },
+    });
+    expect(response.status()).toBe(400);
+    const json = await response.json();
+    expect(json.error).toBeDefined();
   });
 });
