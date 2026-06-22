@@ -184,7 +184,7 @@ const SESSION_TEAM = buildSession({
  * Call with no argument to simulate no session (401).
  */
 async function mockSession(page: Page, session?: object) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     if (session) {
       await route.fulfill({
         status: 200,
@@ -256,7 +256,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
 
   test("1a — Sans authentification → 401", async ({ page }) => {
     // No session mock → auth() returns null
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -277,7 +277,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1b — Rate limité → 429", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -305,7 +305,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
       makeAlertWithNiche({ id: "cached-alert-2", type: "SPIKE" }),
     ];
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -335,7 +335,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
     await mockSession(page, SESSION_PRO);
     const dbFetchedAt = new Date().toISOString();
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -364,7 +364,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1e — Utilisateur FREE → canCreate: false", async ({ page }) => {
     await mockSession(page, SESSION_FREE);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -391,7 +391,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1f — Utilisateur PRO → canCreate: true", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -418,7 +418,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1g — Utilisateur TEAM → canCreate: true", async ({ page }) => {
     await mockSession(page, SESSION_TEAM);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -445,7 +445,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1h — Aucune alerte → { alerts: [], userNiches, plan, canCreate }", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -474,7 +474,7 @@ test.describe("GET /api/alerts — Liste des alertes", () => {
   test("1i — Erreur interne → 500", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fallback();
         return;
@@ -505,7 +505,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   });
 
   test("2a — Sans authentification → 401", async ({ page }) => {
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -527,7 +527,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2b — Utilisateur FREE → 403 Forbidden", async ({ page }) => {
     await mockSession(page, SESSION_FREE);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -553,7 +553,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2c — Corps de requête manquant ou invalide → 400", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -580,7 +580,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2d — Type d'alerte invalide → 400", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -612,7 +612,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2e — Canal de notification invalide → 400", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -642,7 +642,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2f — nicheId d'une niche inexistante → 404", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -676,7 +676,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
       isActive: true,
     });
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -722,7 +722,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
     await mockSession(page, SESSION_PRO);
     const now = new Date().toISOString();
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -757,7 +757,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2i — Cache invalidé après création", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -785,7 +785,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2j — Rate limité → 429", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -811,7 +811,7 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
   test("2k — Alerte sans nicheId (globale) → créée avec niche null", async ({ page }) => {
     await mockSession(page, SESSION_PRO);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;

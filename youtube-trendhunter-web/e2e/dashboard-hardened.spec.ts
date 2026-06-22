@@ -116,9 +116,12 @@ function makeTrend(overrides: Partial<TrendMock> = {}): TrendMock {
   };
 }
 
-async function mockSession(page: Page, overrides: Partial<{ id: string; name: string; email: string; role: string; plan: string }> = {}) {
+async function mockSession(
+  page: Page,
+  overrides: Partial<{ id: string; name: string; email: string; role: string; plan: string }> = {},
+) {
   const user = { ...TEST_USER, ...overrides };
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -135,7 +138,7 @@ async function mockUserApi(page: Page, overrides: Partial<UserResponse> = {}) {
     role: "USER",
     plan: "FREE",
   };
-  await page.route("**/api/user", async (route) => {
+  await page.route("**/api/user*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -147,16 +150,9 @@ async function mockUserApi(page: Page, overrides: Partial<UserResponse> = {}) {
 /**
  * Mock the /api/trends endpoint with a custom response.
  */
-async function mockTrendsApi(
-  page: Page,
-  responseBody: TrendsResponse | string,
-  status = 200,
-) {
+async function mockTrendsApi(page: Page, responseBody: TrendsResponse | string, status = 200) {
   await page.route("**/api/trends*", async (route) => {
-    const body =
-      typeof responseBody === "string"
-        ? responseBody
-        : JSON.stringify(responseBody);
+    const body = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody);
     await route.fulfill({
       status,
       contentType: "application/json",
@@ -173,7 +169,7 @@ async function mockNichesApi(
   niches: { id: string; name: string; slug: string; description?: string; isActive?: boolean }[],
   status = 200,
 ) {
-  await page.route("**/api/niches", async (route) => {
+  await page.route("**/api/niches*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status,
@@ -216,7 +212,7 @@ async function mockDefaultApiRoutes(page: Page, trends: TrendMock[] = [], plan =
     });
   });
 
-  await page.route("**/api/alerts", async (route) => {
+  await page.route("**/api/alerts*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
@@ -359,11 +355,13 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get("/api/trends?niche=tech&search=IA");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends.length).toBeGreaterThan(0);
-    for (const t of body.trends) {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&search=IA");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.trends.length).toBeGreaterThan(0);
+    for (const t of result.body.trends) {
       expect(t.title.toLowerCase()).toContain("ia");
     }
   });
@@ -381,11 +379,13 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get("/api/trends?niche=tech&dateRange=today");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&dateRange=today");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
     // At least the trends published today (within hours) are returned
-    expect(Array.isArray(body.trends)).toBe(true);
+    expect(Array.isArray(result.body.trends)).toBe(true);
   });
 
   test("API /api/trends filtre par date (cette semaine)", async ({ page }) => {
@@ -395,10 +395,12 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get("/api/trends?niche=tech&dateRange=week");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(Array.isArray(body.trends)).toBe(true);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&dateRange=week");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(Array.isArray(result.body.trends)).toBe(true);
   });
 
   test("API /api/trends filtre par date (ce mois)", async ({ page }) => {
@@ -408,10 +410,12 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get("/api/trends?niche=tech&dateRange=month");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(Array.isArray(body.trends)).toBe(true);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&dateRange=month");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(Array.isArray(result.body.trends)).toBe(true);
   });
 
   test("API /api/trends filtre par score minimum", async ({ page }) => {
@@ -423,11 +427,13 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get(`/api/trends?niche=tech&minScore=${minScore}`);
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends.length).toBeGreaterThan(0);
-    for (const t of body.trends) {
+    const result = await page.evaluate(async (ms) => {
+      const res = await fetch(`/api/trends?niche=tech&minScore=${ms}`);
+      return { status: res.status, body: await res.json() };
+    }, minScore);
+    expect(result.status).toBe(200);
+    expect(result.body.trends.length).toBeGreaterThan(0);
+    for (const t of result.body.trends) {
       expect(t.score).toBeGreaterThanOrEqual(minScore);
     }
   });
@@ -441,11 +447,13 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get(`/api/trends?niche=tech&channel=${encodeURIComponent(channel)}`);
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends.length).toBeGreaterThan(0);
-    for (const t of body.trends) {
+    const result = await page.evaluate(async (ch) => {
+      const res = await fetch(`/api/trends?niche=tech&channel=${encodeURIComponent(ch)}`);
+      return { status: res.status, body: await res.json() };
+    }, channel);
+    expect(result.status).toBe(200);
+    expect(result.body.trends.length).toBeGreaterThan(0);
+    for (const t of result.body.trends) {
       expect(t.channelName).toBe(channel);
     }
   });
@@ -463,29 +471,38 @@ test.describe("Dashboard — Recherche et filtres", () => {
       nextCursor: null,
     });
 
-    const response = await page.request.get(
-      `/api/trends?niche=${niche}&minScore=${minScore}&dateRange=${dateRange}`,
+    const result = await page.evaluate(
+      async (ns, ms, dr) => {
+        const res = await fetch(`/api/trends?niche=${ns}&minScore=${ms}&dateRange=${dr}`);
+        return { status: res.status, body: await res.json() };
+      },
+      niche,
+      minScore,
+      dateRange,
     );
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    for (const t of body.trends) {
+    expect(result.status).toBe(200);
+    for (const t of result.body.trends) {
       expect(t.niche?.slug).toBe(niche);
       expect(t.score).toBeGreaterThanOrEqual(minScore);
     }
   });
 
-  test("API /api/trends retourne un tableau vide quand aucun résultat ne correspond au filtre", async ({ page }) => {
+  test("API /api/trends retourne un tableau vide quand aucun résultat ne correspond au filtre", async ({
+    page,
+  }) => {
     await mockTrendsApi(page, {
       trends: [],
       plan: "FREE",
       nextCursor: null,
     });
 
-    const response = await page.request.get("/api/trends?niche=tech&search=xxx_inexistant_xxx");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends).toEqual([]);
-    expect(body.plan).toBe("FREE");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&search=xxx_inexistant_xxx");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.trends).toEqual([]);
+    expect(result.body.plan).toBe("FREE");
   });
 
   test("affiche un champ de recherche sur le dashboard", async ({ page }) => {
@@ -493,7 +510,11 @@ test.describe("Dashboard — Recherche et filtres", () => {
     if (!onDashboard) return;
 
     // Si un champ de recherche/filtre input existe
-    const searchInput = page.locator('input[type="search"], input[placeholder*="cherche"], input[placeholder*="filtre"], input:not([type="hidden"])').first();
+    const searchInput = page
+      .locator(
+        'input[type="search"], input[placeholder*="cherche"], input[placeholder*="filtre"], input:not([type="hidden"])',
+      )
+      .first();
     const inputExists = (await searchInput.count()) > 0;
     if (inputExists) {
       await expect(searchInput).toBeVisible();
@@ -536,10 +557,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => b.score - a.score);
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=score&sortOrder=desc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const scores = body.trends.map((t: TrendMock) => t.score);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=score&sortOrder=desc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const scores = result.body.trends.map((t: TrendMock) => t.score);
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
     }
@@ -549,10 +572,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => a.score - b.score);
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=score&sortOrder=asc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const scores = body.trends.map((t: TrendMock) => t.score);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=score&sortOrder=asc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const scores = result.body.trends.map((t: TrendMock) => t.score);
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]).toBeGreaterThanOrEqual(scores[i - 1]);
     }
@@ -562,10 +587,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => (b.views ?? 0) - (a.views ?? 0));
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=views&sortOrder=desc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const views = body.trends.map((t: TrendMock) => t.views ?? 0);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=views&sortOrder=desc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const views = result.body.trends.map((t: TrendMock) => t.views ?? 0);
     for (let i = 1; i < views.length; i++) {
       expect(views[i]).toBeLessThanOrEqual(views[i - 1]);
     }
@@ -575,10 +602,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => (a.views ?? 0) - (b.views ?? 0));
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=views&sortOrder=asc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const views = body.trends.map((t: TrendMock) => t.views ?? 0);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=views&sortOrder=asc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const views = result.body.trends.map((t: TrendMock) => t.views ?? 0);
     for (let i = 1; i < views.length; i++) {
       expect(views[i]).toBeGreaterThanOrEqual(views[i - 1]);
     }
@@ -590,10 +619,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     );
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=date&sortOrder=desc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const dates = body.trends.map((t: TrendMock) => new Date(t.publishedAt ?? 0).getTime());
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=date&sortOrder=desc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const dates = result.body.trends.map((t) => new Date(t.publishedAt ?? 0).getTime());
     for (let i = 1; i < dates.length; i++) {
       expect(dates[i]).toBeLessThanOrEqual(dates[i - 1]);
     }
@@ -605,10 +636,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     );
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=date&sortOrder=asc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const dates = body.trends.map((t: TrendMock) => new Date(t.publishedAt ?? 0).getTime());
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=date&sortOrder=asc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const dates = result.body.trends.map((t) => new Date(t.publishedAt ?? 0).getTime());
     for (let i = 1; i < dates.length; i++) {
       expect(dates[i]).toBeGreaterThanOrEqual(dates[i - 1]);
     }
@@ -618,10 +651,12 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => b.velocity - a.velocity);
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=velocity&sortOrder=desc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const velocities = body.trends.map((t: TrendMock) => t.velocity);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=velocity&sortOrder=desc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const velocities = result.body.trends.map((t) => t.velocity);
     for (let i = 1; i < velocities.length; i++) {
       expect(velocities[i]).toBeLessThanOrEqual(velocities[i - 1]);
     }
@@ -631,21 +666,28 @@ test.describe("Dashboard — Tri des tendances", () => {
     const trends = createDiverseTrends().sort((a, b) => a.velocity - b.velocity);
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=velocity&sortOrder=asc");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    const velocities = body.trends.map((t: TrendMock) => t.velocity);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=velocity&sortOrder=asc");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    const velocities = result.body.trends.map((t) => t.velocity);
     for (let i = 1; i < velocities.length; i++) {
       expect(velocities[i]).toBeGreaterThanOrEqual(velocities[i - 1]);
     }
   });
 
-  test("API /api/trends retourne une erreur pour un paramètre de tri invalide", async ({ page }) => {
+  test("API /api/trends retourne une erreur pour un paramètre de tri invalide", async ({
+    page,
+  }) => {
     await mockDefaultApiRoutes(page, createDiverseTrends());
 
-    const response = await page.request.get("/api/trends?niche=tech&sortBy=invalid_field");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&sortBy=invalid_field");
+      return { status: res.status };
+    });
     // L'API doit soit retourner 400 (Bad Request) soit ignorer le paramètre et retourner 200
-    expect([200, 400]).toContain(response.status());
+    expect([200, 400]).toContain(result.status);
   });
 
   test("des cartes de tendance sont affichées dans l'ordre du score décroissant sur le dashboard", async ({
@@ -658,7 +700,9 @@ test.describe("Dashboard — Tri des tendances", () => {
     if (!onDashboard) return;
 
     // Les scores doivent apparaître dans l'ordre décroissant dans le DOM
-    const scoreBadges = page.locator('[class*="bg-yt-red"], [class*="bg-amber-500"], [class*="bg-green-500"]');
+    const scoreBadges = page.locator(
+      '[class*="bg-yt-red"], [class*="bg-amber-500"], [class*="bg-green-500"]',
+    );
     const count = await scoreBadges.count();
     if (count >= 2) {
       const scores: number[] = [];
@@ -698,9 +742,11 @@ test.describe("Dashboard — Détail des tendances", () => {
       await expect(card).toHaveAttribute("tabindex", "0");
       // Vérifier que le gestionnaire onKeyDown est présent (Enter et Espace)
       const hasOnKeyDown = await card.evaluate((el) => {
-        return el.getAttribute("onkeydown") !== null ||
+        return (
+          el.getAttribute("onkeydown") !== null ||
           typeof (el as HTMLElement).onkeydown !== "undefined" ||
-          el.hasAttribute("data-keydown-attached");
+          el.hasAttribute("data-keydown-attached")
+        );
       });
       // at least verify tabindex exists
       expect(hasOnKeyDown || true).toBe(true);
@@ -754,7 +800,12 @@ test.describe("Dashboard — Détail des tendances", () => {
   });
 
   test("la carte affiche la vélocité avec le bon format", async ({ page }) => {
-    const trendy = makeTrend({ id: "t-velocity", title: "Trend vélocité", velocity: 42.5, score: 80 });
+    const trendy = makeTrend({
+      id: "t-velocity",
+      title: "Trend vélocité",
+      velocity: 42.5,
+      score: 80,
+    });
     await mockDefaultApiRoutes(page, [trendy]);
 
     const onDashboard = await gotoDashboard(page);
@@ -776,9 +827,11 @@ test.describe("Dashboard — Détail des tendances", () => {
     await mockDefaultApiRoutes(page, [trendy]);
 
     // Vérification au niveau API
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    const trend = body.trends[0];
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    const trend = body1.trends[0];
     expect(trend.videoUrl).toBeTruthy();
     expect(trend.videoUrl).toContain("youtube.com/watch");
   });
@@ -807,16 +860,16 @@ test.describe("Dashboard — Détail des tendances", () => {
     await expect(page.getByText("Trend minimal")).toBeVisible();
   });
 
-  test("bouton de partage / favori accessible depuis les données de tendance", async ({
-    page,
-  }) => {
+  test("bouton de partage / favori accessible depuis les données de tendance", async ({ page }) => {
     const trends = createDiverseTrends().slice(0, 1);
     await mockDefaultApiRoutes(page, trends);
 
     // Niveau API: vérifier que les données contiennent les champs nécessaires
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    const trend = body.trends[0];
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    const trend = body1.trends[0];
     expect(trend.id).toBeTruthy();
     expect(trend.title).toBeTruthy();
     // Les champs de partage (id, titre) sont disponibles
@@ -836,14 +889,15 @@ test.describe("Dashboard — Export et partage", () => {
     const trends = createDiverseTrends();
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech&format=csv");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&format=csv");
+      return { status: res.status, contentType: res.headers.get("content-type") || "" };
+    });
     // L'endpoint peut retourner 200 (CSV) ou 400/404 si pas encore implémenté
-    const status = response.status();
-    expect([200, 400, 404]).toContain(status);
+    expect([200, 400, 404]).toContain(result.status);
 
-    if (status === 200) {
-      const contentType = response.headers()["content-type"] || "";
-      expect(contentType).toContain("csv");
+    if (result.status === 200) {
+      expect(result.contentType).toContain("csv");
     }
   });
 
@@ -862,15 +916,17 @@ test.describe("Dashboard — Export et partage", () => {
       });
     });
 
-    const response = await page.request.get("/api/trends/export?format=csv");
-    if (response.status() === 200) {
-      const csv = await response.text();
-      expect(csv).toContain("titre");
-      expect(csv).toContain("score");
-      expect(csv).toContain("velocite");
-      expect(csv).toContain("vues");
+    const result1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends/export?format=csv");
+      return { status: res.status, text: await res.text() };
+    });
+    if (result1.status === 200) {
+      expect(result1.text).toContain("titre");
+      expect(result1.text).toContain("score");
+      expect(result1.text).toContain("velocite");
+      expect(result1.text).toContain("vues");
       // Vérifier que les données sont bien formatées
-      const lines = csv.trim().split("\n");
+      const lines = result1.text.trim().split("\n");
       expect(lines.length).toBeGreaterThanOrEqual(2); // Header + au moins 1 ligne
     }
   });
@@ -884,10 +940,12 @@ test.describe("Dashboard — Export et partage", () => {
       });
     });
 
-    const response = await page.request.get("/api/trends/export?format=csv");
-    if (response.status() === 200) {
-      const csv = await response.text();
-      const lines = csv.trim().split("\n");
+    const result1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends/export?format=csv");
+      return { status: res.status, text: await res.text() };
+    });
+    if (result1.status === 200) {
+      const lines = result1.text.trim().split("\n");
       expect(lines.length).toBe(1); // Un seul header, aucune donnée
       expect(lines[0]).toContain("titre");
     }
@@ -970,9 +1028,7 @@ test.describe("Dashboard — Actualisation des données", () => {
     }
   });
 
-  test("le cache est ignoré lors d'un rechargement manuel (cache busting)", async ({
-    page,
-  }) => {
+  test("le cache est ignoré lors d'un rechargement manuel (cache busting)", async ({ page }) => {
     let callCount = 0;
     await page.route("**/api/trends*", async (route) => {
       callCount++;
@@ -988,9 +1044,7 @@ test.describe("Dashboard — Actualisation des données", () => {
     });
 
     // Mock fresh data after reload
-    await mockNichesApi(page, [
-      { id: "niche-1", name: "Tech & IA", slug: "tech" },
-    ]);
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
     // Premier chargement
@@ -1013,11 +1067,13 @@ test.describe("Dashboard — Actualisation des données", () => {
     }));
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    for (const t of body.trends) {
+    for (const t of result.body.trends) {
       expect(t).toHaveProperty("updatedAt");
       const updated = new Date(t.updatedAt);
       expect(updated instanceof Date && !isNaN(updated.getTime())).toBe(true);
@@ -1035,12 +1091,14 @@ test.describe("Dashboard — Actualisation des données", () => {
     });
     await mockDefaultApiRoutes(page, [expiredTrend]);
 
-    const response = await page.request.get("/api/trends?niche=tech&status=active");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&status=active");
+      return { status: res.status, body: await res.json() };
+    });
 
     // Si l'API supporte le filtre, les tendances expirées sont exclues
-    if (response.status() === 200) {
-      for (const t of body.trends) {
+    if (result.status === 200) {
+      for (const t of result.body.trends) {
         const expires = new Date(t.expiresAt).getTime();
         expect(expires).toBeGreaterThan(Date.now());
       }
@@ -1056,7 +1114,9 @@ test.describe("Dashboard — Actualisation des données", () => {
     if (!onDashboard) return;
 
     // Chercher un texte indiquant la dernière mise à jour
-    const lastUpdateText = page.getByText(/Derni[èe]re mis[eè] à jour|Mis[eè] à jour|Actualis[ée]/i);
+    const lastUpdateText = page.getByText(
+      /Derni[èe]re mis[eè] à jour|Mis[eè] à jour|Actualis[ée]/i,
+    );
     const hasTimestamp = (await lastUpdateText.count()) > 0;
 
     test.info().annotations.push({
@@ -1106,9 +1166,11 @@ test.describe("Dashboard — Cartes avancées", () => {
     await mockDefaultApiRoutes(page, [trendWithBadThumb]);
 
     // Vérifier au niveau API
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    expect(body.trends[0].thumbnailUrl).toBeTruthy();
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    expect(body1.trends[0].thumbnailUrl).toBeTruthy();
 
     // Vérifier que l'image (si affichée) gère les erreurs 404
     const onDashboard = await gotoDashboard(page);
@@ -1136,10 +1198,12 @@ test.describe("Dashboard — Cartes avancées", () => {
     });
     await mockDefaultApiRoutes(page, [trend]);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    expect(body.trends[0].channelName).toBe("TechVision");
-    expect(body.trends[0].channelUrl).toContain("youtube.com");
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    expect(body1.trends[0].channelName).toBe("TechVision");
+    expect(body1.trends[0].channelUrl).toContain("youtube.com");
   });
 
   test("le lien de la chaîne pointe vers YouTube", async ({ page }) => {
@@ -1150,9 +1214,11 @@ test.describe("Dashboard — Cartes avancées", () => {
     });
     await mockDefaultApiRoutes(page, [trend]);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    const channelUrl = body.trends[0].channelUrl;
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    const channelUrl = body1.trends[0].channelUrl;
     expect(channelUrl).toMatch(/^https?:\/\/(www\.)?youtube\.com\/\@/);
   });
 
@@ -1164,9 +1230,11 @@ test.describe("Dashboard — Cartes avancées", () => {
     });
     await mockDefaultApiRoutes(page, [trend]);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    const pubDate = body.trends[0].publishedAt;
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    const pubDate = body1.trends[0].publishedAt;
     expect(pubDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   });
 
@@ -1309,9 +1377,7 @@ test.describe("Dashboard — Layout avancé", () => {
 
     test.info().annotations.push({
       type: breadcrumbExists ? "info" : "info",
-      description: breadcrumbExists
-        ? "Fil d'Ariane présent"
-        : "Aucun fil d'Ariane détecté",
+      description: breadcrumbExists ? "Fil d'Ariane présent" : "Aucun fil d'Ariane détecté",
     });
   });
 
@@ -1460,12 +1526,14 @@ test.describe("Dashboard — Intégration cross-feature", () => {
     await mockDefaultApiRoutes(page, createDiverseTrends());
 
     // Vérifier que l'API alerts retourne la bonne structure
-    const response = await page.request.get("/api/alerts");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("alerts");
-    expect(Array.isArray(body.alerts)).toBe(true);
+    expect(result.body).toHaveProperty("alerts");
+    expect(Array.isArray(result.body.alerts)).toBe(true);
   });
 
   test("le lien 'Niches' dans la sidebar mène à /my-niches", async ({ page }) => {
@@ -1523,8 +1591,10 @@ test.describe("Dashboard — Intégration cross-feature", () => {
     ]);
     await mockUserApi(page);
 
-    const res1 = await page.request.get("/api/trends?niche=tech&limit=3");
-    const body1 = await res1.json();
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&limit=3");
+      return await res.json();
+    });
     expect(body1.trends.length).toBe(3);
     expect(body1.nextCursor).toBeTruthy();
 
@@ -1535,8 +1605,10 @@ test.describe("Dashboard — Intégration cross-feature", () => {
       nextCursor: null,
     });
 
-    const res2 = await page.request.get(`/api/trends?niche=tech&limit=3&cursor=${body1.nextCursor}`);
-    const body2 = await res2.json();
+    const body2 = await page.evaluate(async (cursor) => {
+      const res = await fetch(`/api/trends?niche=tech&limit=3&cursor=${cursor}`);
+      return await res.json();
+    }, body1.nextCursor);
     expect(body2.trends.length).toBe(3);
     expect(body2.nextCursor).toBeNull();
   });
@@ -1573,14 +1645,14 @@ test.describe("Dashboard — Intégration cross-feature", () => {
       plan: "FREE",
       nextCursor: null,
     });
-    await mockNichesApi(page, [
-      { id: "niche-1", name: "Tech & IA", slug: "tech" },
-    ]);
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
 
-    const response = await page.request.get("/api/trends?niche=tech&limit=2");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends.length).toBeLessThanOrEqual(2);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&limit=2");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.trends.length).toBeLessThanOrEqual(2);
   });
 });
 
@@ -1596,28 +1668,31 @@ test.describe("Dashboard — Résilience", () => {
   test("l'API /api/trends inclut un cache-control header", async ({ page }) => {
     await mockDefaultApiRoutes(page, createDiverseTrends().slice(0, 1));
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const headers = response.headers();
-    const cacheControl = headers["cache-control"] || headers["Cache-Control"] || "";
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return {
+        status: res.status,
+        cacheControl: res.headers.get("cache-control") || res.headers.get("Cache-Control") || "",
+      };
+    });
+    const cacheControl = result.cacheControl;
     // La présence d'un header cache-control est une bonne pratique
     test.info().annotations.push({
       type: cacheControl ? "info" : "info",
-      description: cacheControl
-        ? `Cache-Control: ${cacheControl}`
-        : "Aucun header Cache-Control",
+      description: cacheControl ? `Cache-Control: ${cacheControl}` : "Aucun header Cache-Control",
     });
   });
 
   test("l'API /api/trends gère les paramètres inconnus sans erreur", async ({ page }) => {
     await mockDefaultApiRoutes(page, createDiverseTrends().slice(0, 1));
 
-    const response = await page.request.get(
-      "/api/trends?niche=tech&parametre_inconnu=123&autre=test",
-    );
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&parametre_inconnu=123&autre=test");
+      return { status: res.status, body: await res.json() };
+    });
     // L'API doit ignorer les paramètres inconnus et retourner 200
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body).toHaveProperty("trends");
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty("trends");
   });
 
   test("l'API /api/trends avec paramètre niche manquant utilise une valeur par défaut", async ({
@@ -1625,10 +1700,12 @@ test.describe("Dashboard — Résilience", () => {
   }) => {
     await mockDefaultApiRoutes(page, createDiverseTrends().slice(0, 1));
 
-    const response = await page.request.get("/api/trends");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body).toHaveProperty("trends");
-    expect(body).toHaveProperty("plan");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty("trends");
+    expect(result.body).toHaveProperty("plan");
   });
 });

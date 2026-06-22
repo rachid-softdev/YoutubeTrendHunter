@@ -14,6 +14,26 @@ import { test, expect, type Page } from "@playwright/test";
 /*  Helpers                                                                   */
 /* -------------------------------------------------------------------------- */
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 const MOCK_SESSION = {
   user: {
     id: "test-user-id",
@@ -26,7 +46,7 @@ const MOCK_SESSION = {
 };
 
 async function mockSession(page: Page) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -141,7 +161,7 @@ async function mockApiRoutes(page: Page) {
     });
   });
 
-  await page.route("**/api/niches", async (route) => {
+  await page.route("**/api/niches*", async (route) => {
     const url = new URL(route.request().url());
     // GET niches list
     if (route.request().method() === "GET") {
@@ -173,7 +193,7 @@ async function mockApiRoutes(page: Page) {
     });
   });
 
-  await page.route("**/api/alerts", async (route) => {
+  await page.route("**/api/alerts*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
@@ -185,7 +205,7 @@ async function mockApiRoutes(page: Page) {
     }
   });
 
-  await page.route("**/api/user", async (route) => {
+  await page.route("**/api/user*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -234,17 +254,20 @@ test.describe("Dashboard", () => {
 
   test("les tendances mockées sont bien structurées", async ({ page }) => {
     // Direct API test — bypasses server-side page rendering
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("trends");
-    expect(Array.isArray(body.trends)).toBe(true);
-    expect(body.trends.length).toBeGreaterThan(0);
-    expect(body.trends[0]).toHaveProperty("title");
-    expect(body.trends[0]).toHaveProperty("score");
-    expect(body).toHaveProperty("plan", "FREE");
-    expect(body).toHaveProperty("nextCursor");
+    expect(result.body).toHaveProperty("trends");
+    expect(Array.isArray(result.body.trends)).toBe(true);
+    expect(result.body.trends.length).toBeGreaterThan(0);
+    expect(result.body.trends[0]).toHaveProperty("title");
+    expect(result.body.trends[0]).toHaveProperty("score");
+    expect(result.body).toHaveProperty("plan", "FREE");
+    expect(result.body).toHaveProperty("nextCursor");
   });
 });
 
@@ -308,22 +331,28 @@ test.describe("Mes niches", () => {
   });
 
   test("les niches sont retournées par l'API", async ({ page }) => {
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.niches).toBeDefined();
-    expect(Array.isArray(body.niches)).toBe(true);
+    expect(result.body.niches).toBeDefined();
+    expect(Array.isArray(result.body.niches)).toBe(true);
   });
 
   test("la structure des données de niche est correcte", async ({ page }) => {
-    const response = await page.request.get("/api/niches/niche-1");
-    expect(response.status()).toBe(200);
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-1");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.niche).toHaveProperty("id");
-    expect(body.niche).toHaveProperty("name");
-    expect(body.niche).toHaveProperty("slug");
+    expect(result.body.niche).toHaveProperty("id");
+    expect(result.body.niche).toHaveProperty("name");
+    expect(result.body.niche).toHaveProperty("slug");
   });
 });
 
@@ -338,20 +367,26 @@ test.describe("Alertes", () => {
   });
 
   test("les alertes sont retournées par l'API", async ({ page }) => {
-    const response = await page.request.get("/api/alerts");
-    expect(response.status()).toBe(200);
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.alerts).toBeDefined();
-    expect(Array.isArray(body.alerts)).toBe(true);
+    expect(result.body.alerts).toBeDefined();
+    expect(Array.isArray(result.body.alerts)).toBe(true);
   });
 
   test("une alerte a la structure attendue", async ({ page }) => {
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
 
-    if (body.alerts.length > 0) {
-      const alert = body.alerts[0];
+    if (result.body.alerts.length > 0) {
+      const alert = result.body.alerts[0];
       expect(alert).toHaveProperty("id");
       expect(alert).toHaveProperty("keyword");
       expect(alert).toHaveProperty("isActive");

@@ -1,5 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * Auth E2E tests for YouTube TrendHunter
  *
@@ -28,7 +48,7 @@ const MOCK_SESSION = {
 };
 
 async function mockSession(page: Page) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -62,22 +82,30 @@ test.describe("Auth — Non authentifié", () => {
   }
 
   test("/api/trends retourne 401 sans authentification", async ({ page }) => {
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(401);
+    await setupPage(page);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
   });
 
   test("/api/alerts retourne 401 sans authentification", async ({ page }) => {
-    const response = await page.request.get("/api/alerts");
-    expect(response.status()).toBe(401);
+    await setupPage(page);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
@@ -131,6 +159,7 @@ test.describe("Auth — Page de connexion", () => {
 
 test.describe("Auth — Authentifié (session mockée)", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page);
   });
 
@@ -144,12 +173,14 @@ test.describe("Auth — Authentifié (session mockée)", () => {
 
   test("le mock de session est actif sur le réseau", async ({ page }) => {
     // Verify the mock intercepts the fetch to /api/auth/session
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.user.email).toBe("test@test.com");
-    expect(body.user.plan).toBe("FREE");
+    expect(result.body.user.email).toBe("test@test.com");
+    expect(result.body.user.plan).toBe("FREE");
   });
 
   test("la déconnexion est accessible depuis le menu latéral", async ({ page }) => {

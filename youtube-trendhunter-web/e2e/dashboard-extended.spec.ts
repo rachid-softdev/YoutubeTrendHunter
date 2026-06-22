@@ -99,7 +99,7 @@ interface UserResponse {
 
 async function mockSession(page: Page, overrides: Partial<typeof TEST_USER> = {}) {
   const user = { ...TEST_USER, ...overrides };
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -116,7 +116,7 @@ async function mockUserApi(page: Page, overrides: Partial<UserResponse> = {}) {
     role: "USER",
     plan: "FREE",
   };
-  await page.route("**/api/user", async (route) => {
+  await page.route("**/api/user*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -128,16 +128,9 @@ async function mockUserApi(page: Page, overrides: Partial<UserResponse> = {}) {
 /**
  * Mock the /api/trends endpoint with a custom response.
  */
-async function mockTrendsApi(
-  page: Page,
-  responseBody: TrendsResponse | string,
-  status = 200,
-) {
+async function mockTrendsApi(page: Page, responseBody: TrendsResponse | string, status = 200) {
   await page.route("**/api/trends*", async (route) => {
-    const body =
-      typeof responseBody === "string"
-        ? responseBody
-        : JSON.stringify(responseBody);
+    const body = typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody);
     await route.fulfill({
       status,
       contentType: "application/json",
@@ -155,7 +148,7 @@ async function mockNichesApi(
   followed: string[] = [],
   status = 200,
 ) {
-  await page.route("**/api/niches", async (route) => {
+  await page.route("**/api/niches*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status,
@@ -204,7 +197,7 @@ async function mockDefaultApiRoutes(page: Page, trends: TrendMock[] = [], plan =
     });
   });
 
-  await page.route("**/api/alerts", async (route) => {
+  await page.route("**/api/alerts*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
@@ -234,8 +227,20 @@ async function gotoDashboard(page: Page): Promise<boolean> {
  */
 function createScoreTestTrends(): TrendMock[] {
   return [
-    makeTrend({ id: "t-high", title: "Trend Haut Score", score: 95, velocity: +20, status: "PEAK" }),
-    makeTrend({ id: "t-mid", title: "Trend Score Moyen", score: 60, velocity: +5, status: "GROWING" }),
+    makeTrend({
+      id: "t-high",
+      title: "Trend Haut Score",
+      score: 95,
+      velocity: +20,
+      status: "PEAK",
+    }),
+    makeTrend({
+      id: "t-mid",
+      title: "Trend Score Moyen",
+      score: 60,
+      velocity: +5,
+      status: "GROWING",
+    }),
     makeTrend({ id: "t-low", title: "Trend Bas Score", score: 25, velocity: -3, status: "FADING" }),
   ];
 }
@@ -253,7 +258,9 @@ test.describe("Dashboard — Layout & Rendu", () => {
   test("affiche le layout complet: header, sidebar, contenu principal", async ({ page }) => {
     const onDashboard = await gotoDashboard(page);
     if (!onDashboard) {
-      test.info().annotations.push({ type: "skip", description: "Redirigé vers login (auth serveur)" });
+      test
+        .info()
+        .annotations.push({ type: "skip", description: "Redirigé vers login (auth serveur)" });
       return;
     }
 
@@ -378,20 +385,20 @@ test.describe("Dashboard — État vide", () => {
       plan: "FREE",
       nextCursor: null,
     });
-    await mockNichesApi(page, [
-      { id: "niche-1", name: "Tech & IA", slug: "tech" },
-    ]);
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("trends");
-    expect(Array.isArray(body.trends)).toBe(true);
-    expect(body.trends.length).toBe(0);
-    expect(body).toHaveProperty("plan", "FREE");
-    expect(body).toHaveProperty("nextCursor", null);
+    expect(result.body).toHaveProperty("trends");
+    expect(Array.isArray(result.body.trends)).toBe(true);
+    expect(result.body.trends.length).toBe(0);
+    expect(result.body).toHaveProperty("plan", "FREE");
+    expect(result.body).toHaveProperty("nextCursor", null);
   });
 });
 
@@ -409,12 +416,14 @@ test.describe("Dashboard — Erreurs API", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(500);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("error", "Erreur interne");
-    expect(body).toHaveProperty("code", "INTERNAL_ERROR");
+    expect(result.body).toHaveProperty("error", "Erreur interne");
+    expect(result.body).toHaveProperty("code", "INTERNAL_ERROR");
   });
 
   test("API /api/trends retourne 429 rate limit", async ({ page }) => {
@@ -430,30 +439,34 @@ test.describe("Dashboard — Erreurs API", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(429);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(429);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("error");
-    expect(body.error).toContain("Trop de requêtes");
-    expect(body).toHaveProperty("code", "RATE_LIMIT");
-    expect(body.details).toHaveProperty("retryAfter", 30);
+    expect(result.body).toHaveProperty("error");
+    expect(result.body.error).toContain("Trop de requêtes");
+    expect(result.body).toHaveProperty("code", "RATE_LIMIT");
+    expect(result.body.details).toHaveProperty("retryAfter", 30);
   });
 
   test("API /api/trends retourne JSON malformé", async ({ page }) => {
     await mockTrendsApi(page, "ceci n'est pas du json valide {{{", 200);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, text: await res.text() };
+    });
+    expect(result.status).toBe(200);
 
     // La réponse ne peut pas être parsée en JSON
-    const text = await response.text();
-    expect(text).toBe("ceci n'est pas du json valide {{{");
+    expect(result.text).toBe("ceci n'est pas du json valide {{{");
 
     // Vérifier que le parse échoue
     let parseError = false;
     try {
-      JSON.parse(text);
+      JSON.parse(result.text);
     } catch {
       parseError = true;
     }
@@ -468,7 +481,9 @@ test.describe("Dashboard — Erreurs API", () => {
     // La requête doit échouer avec une erreur réseau
     let requestFailed = false;
     try {
-      await page.request.get("/api/trends?niche=tech");
+      await page.evaluate(async () => {
+        await fetch("/api/trends?niche=tech");
+      });
     } catch {
       requestFailed = true;
     }
@@ -487,26 +502,26 @@ test.describe("Dashboard — Erreurs API", () => {
       });
     });
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
   });
 
   test("API /api/niches retourne 500", async ({ page }) => {
-    await mockNichesApi(
-      page,
-      [],
-      [],
-      500,
-    );
+    await mockNichesApi(page, [], [], 500);
 
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status };
+    });
+    expect(result.status).toBe(500);
   });
 
   test("l'interface ne crash pas quand /api/trends retourne 500", async ({ page }) => {
@@ -533,14 +548,24 @@ test.describe("Dashboard — Données extrêmes & cas limites", () => {
   });
 
   test("tendance avec score 0 (minimum)", async ({ page }) => {
-    const trends = [makeTrend({ id: "t-zero", title: "Trend Score Zéro", score: 0, velocity: 0, status: "EMERGING" })];
+    const trends = [
+      makeTrend({
+        id: "t-zero",
+        title: "Trend Score Zéro",
+        score: 0,
+        velocity: 0,
+        status: "EMERGING",
+      }),
+    ];
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.trends[0].score).toBe(0);
+    expect(result.body.trends[0].score).toBe(0);
 
     const onDashboard = await gotoDashboard(page);
     if (onDashboard) {
@@ -550,12 +575,23 @@ test.describe("Dashboard — Données extrêmes & cas limites", () => {
   });
 
   test("tendance avec score 100 (maximum)", async ({ page }) => {
-    const trends = [makeTrend({ id: "t-perfect", title: "Trend Parfait", score: 100, velocity: 50, status: "PEAK" })];
+    const trends = [
+      makeTrend({
+        id: "t-perfect",
+        title: "Trend Parfait",
+        score: 100,
+        velocity: 50,
+        status: "PEAK",
+      }),
+    ];
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
-    expect(response.json().then((b: TrendsResponse) => b.trends[0].score)).resolves.toBe(100);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.trends[0].score).toBe(100);
 
     const onDashboard = await gotoDashboard(page);
     if (onDashboard) {
@@ -565,16 +601,32 @@ test.describe("Dashboard — Données extrêmes & cas limites", () => {
 
   test("plusieurs tendances avec le même score", async ({ page }) => {
     const trends = [
-      makeTrend({ id: "t-same-1", title: "Même Score A", score: 75, velocity: 10, status: "GROWING" }),
+      makeTrend({
+        id: "t-same-1",
+        title: "Même Score A",
+        score: 75,
+        velocity: 10,
+        status: "GROWING",
+      }),
       makeTrend({ id: "t-same-2", title: "Même Score B", score: 75, velocity: 5, status: "PEAK" }),
-      makeTrend({ id: "t-same-3", title: "Même Score C", score: 75, velocity: -2, status: "FADING" }),
+      makeTrend({
+        id: "t-same-3",
+        title: "Même Score C",
+        score: 75,
+        velocity: -2,
+        status: "FADING",
+      }),
     ];
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    expect(body.trends.length).toBe(3);
-    expect(body.trends.every((t: TrendMock) => t.score === 75)).toBe(true);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.trends.length).toBe(3);
+    expect((result.body.trends as Array<{ score: number }>).every((t) => t.score === 75)).toBe(
+      true,
+    );
 
     const onDashboard = await gotoDashboard(page);
     if (onDashboard) {
@@ -591,9 +643,11 @@ test.describe("Dashboard — Données extrêmes & cas limites", () => {
     const trends = [makeTrend({ id: "t-long", title: longTitle, score: 80 })];
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    expect(body.trends[0].title.length).toBeGreaterThan(80);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.trends[0].title.length).toBeGreaterThan(80);
 
     const onDashboard = await gotoDashboard(page);
     if (onDashboard) {
@@ -624,9 +678,11 @@ test.describe("Dashboard — Données extrêmes & cas limites", () => {
     ];
     await mockDefaultApiRoutes(page, trends);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
-    expect(body.trends.length).toBe(3);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.trends.length).toBe(3);
 
     const onDashboard = await gotoDashboard(page);
     if (onDashboard) {
@@ -724,9 +780,7 @@ test.describe("Dashboard — Limites du plan", () => {
     expect(count).toBeGreaterThan(FREE_TREND_COUNT);
   });
 
-  test("API /api/trends retourne plan=FREE avec limite pour les requêtes API", async ({
-    page,
-  }) => {
+  test("API /api/trends retourne plan=FREE avec limite pour les requêtes API", async ({ page }) => {
     await mockSession(page, { plan: "FREE" });
     await mockTrendsApi(page, {
       trends: MANY_TRENDS.slice(0, FREE_TREND_COUNT),
@@ -736,12 +790,14 @@ test.describe("Dashboard — Limites du plan", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page, { plan: "FREE" });
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.plan).toBe("FREE");
-    expect(body.trends.length).toBeLessThanOrEqual(FREE_TREND_COUNT);
+    expect(result.body.plan).toBe("FREE");
+    expect(result.body.trends.length).toBeLessThanOrEqual(FREE_TREND_COUNT);
   });
 
   test("API /api/trends retourne plan=PRO avec toutes les tendances", async ({ page }) => {
@@ -754,12 +810,14 @@ test.describe("Dashboard — Limites du plan", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page, { plan: "PRO" });
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.plan).toBe("PRO");
-    expect(body.trends.length).toBe(15);
+    expect(result.body.plan).toBe("PRO");
+    expect(result.body.trends.length).toBe(15);
   });
 });
 
@@ -784,8 +842,10 @@ test.describe("Dashboard — Pagination", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/trends?niche=tech");
-    const body = await response.json();
+    const body = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
     expect(body.nextCursor).toBeNull();
   });
 
@@ -801,8 +861,10 @@ test.describe("Dashboard — Pagination", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/trends?niche=tech&limit=5");
-    const body = await response.json();
+    const body = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&limit=5");
+      return await res.json();
+    });
     expect(body.nextCursor).toBeTruthy();
     expect(typeof body.nextCursor).toBe("string");
   });
@@ -824,8 +886,10 @@ test.describe("Dashboard — Pagination", () => {
     await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
     await mockUserApi(page);
 
-    const res1 = await page.request.get("/api/trends?niche=tech&limit=2");
-    const body1 = await res1.json();
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&limit=2");
+      return await res.json();
+    });
     expect(body1.trends.length).toBe(2);
     expect(body1.nextCursor).toBe("t-page1-1");
 
@@ -836,8 +900,10 @@ test.describe("Dashboard — Pagination", () => {
       nextCursor: null,
     });
 
-    const res2 = await page.request.get("/api/trends?niche=tech&limit=2&cursor=t-page1-1");
-    const body2 = await res2.json();
+    const body2 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech&limit=2&cursor=t-page1-1");
+      return await res.json();
+    });
     expect(body2.trends.length).toBe(2);
     // Dernière page → nextCursor null
     expect(body2.nextCursor).toBeNull();
@@ -926,37 +992,37 @@ test.describe("Dashboard — Sélecteur de niche", () => {
     ]);
     await mockUserApi(page);
 
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("niches");
-    expect(Array.isArray(body.niches)).toBe(true);
-    expect(body.niches.length).toBeGreaterThanOrEqual(3);
+    expect(result.body).toHaveProperty("niches");
+    expect(Array.isArray(result.body.niches)).toBe(true);
+    expect(result.body.niches.length).toBeGreaterThanOrEqual(3);
 
     // Chaque niche a les champs requis
-    for (const n of body.niches) {
+    for (const n of result.body.niches) {
       expect(n).toHaveProperty("id");
       expect(n).toHaveProperty("name");
       expect(n).toHaveProperty("slug");
     }
 
     // Vérifier la disponibilité
-    expect(body).toHaveProperty("available");
-    expect(Array.isArray(body.available)).toBe(true);
+    expect(result.body).toHaveProperty("available");
+    expect(Array.isArray(result.body.available)).toBe(true);
   });
 
   test("API /api/niches retourne 500 — gestion d'erreur", async ({ page }) => {
     await mockSession(page);
-    await mockNichesApi(
-      page,
-      [],
-      [],
-      500,
-    );
+    await mockNichesApi(page, [], [], 500);
 
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status };
+    });
+    expect(result.status).toBe(500);
   });
 
   test("changement de niche sélectionne différentes tendances", async ({ page }) => {
@@ -971,9 +1037,10 @@ test.describe("Dashboard — Sélecteur de niche", () => {
     let callCount = 0;
     await page.route("**/api/trends*", async (route) => {
       callCount++;
-      const body = callCount === 1
-        ? JSON.stringify({ trends: techTrends, plan: "FREE", nextCursor: null })
-        : JSON.stringify({ trends: gamingTrends, plan: "FREE", nextCursor: null });
+      const body =
+        callCount === 1
+          ? JSON.stringify({ trends: techTrends, plan: "FREE", nextCursor: null })
+          : JSON.stringify({ trends: gamingTrends, plan: "FREE", nextCursor: null });
       await route.fulfill({
         status: 200,
         contentType: "application/json",

@@ -22,6 +22,26 @@ import { test, expect, type Page, type Route } from "@playwright/test";
  * These scenarios are NOT duplicated here.
  */
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Fixtures                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -63,7 +83,7 @@ const MOCK_SESSION_TEAM = {
 };
 
 async function mockSession(page: Page, session: object = MOCK_SESSION_FREE) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -125,7 +145,7 @@ function buildGetAlertsResponse(overrides: Record<string, unknown> = {}) {
  * Intercept GET /api/alerts and return a controlled response.
  */
 async function mockGetAlerts(page: Page, responseData: object) {
-  await page.route("**/api/alerts", async (route) => {
+  await page.route("**/api/alerts*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
@@ -151,7 +171,7 @@ async function mockAlertsApi(
     onDelete?: (route: Route) => Promise<void>;
   },
 ) {
-  await page.route("**/api/alerts", async (route) => {
+  await page.route("**/api/alerts*", async (route) => {
     switch (route.request().method()) {
       case "GET":
         if (handlers.onGet) await handlers.onGet(route);
@@ -187,34 +207,53 @@ async function mockAlertsApi(
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — Authentification", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   // NOTE: GET /api/alerts 401 test exists in auth.spec.ts — NOT duplicated here.
 
   test("POST /api/alerts retourne 401 sans session", async ({ page }) => {
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       await route.continue();
     });
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD" }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   test("PATCH /api/alerts/:id retourne 401 sans session", async ({ page }) => {
     await page.route("**/api/alerts/**", async (route) => {
       await route.continue();
     });
-    const response = await page.request.patch("/api/alerts/alert-nonexistent", {
-      data: { isActive: false },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-nonexistent", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   test("DELETE /api/alerts/:id retourne 401 sans session", async ({ page }) => {
     await page.route("**/api/alerts/**", async (route) => {
       await route.continue();
     });
-    const response = await page.request.delete("/api/alerts/alert-nonexistent");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-nonexistent", {
+        method: "DELETE",
+      });
+      return { status: res.status };
+    });
+    expect(result.status).toBe(401);
   });
 });
 
@@ -223,17 +262,22 @@ test.describe("Alertes API — Authentification", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — GET /api/alerts", () => {
-  test("retourne la structure complète avec alertes, niches, plan, canCreate", async ({
-    page,
-  }) => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("retourne la structure complète avec alertes, niches, plan, canCreate", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const mockData = buildGetAlertsResponse({ plan: "PRO", canCreate: true });
     await mockGetAlerts(page, mockData);
 
-    const response = await page.request.get("/api/alerts");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body;
     expect(body).toHaveProperty("alerts");
     expect(body).toHaveProperty("userNiches");
     expect(body).toHaveProperty("plan", "PRO");
@@ -244,12 +288,24 @@ test.describe("Alertes API — GET /api/alerts", () => {
 
   test("chaque alerte expose tous les champs attendus", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    const alert = makeAlertWithNiche({ type: "SPIKE", threshold: 85, channel: "WEBHOOK", webhookUrl: "https://hooks.example.com/alert" });
-    await mockGetAlerts(page, { alerts: [alert], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    const alert = makeAlertWithNiche({
+      type: "SPIKE",
+      threshold: 85,
+      channel: "WEBHOOK",
+      webhookUrl: "https://hooks.example.com/alert",
+    });
+    await mockGetAlerts(page, {
+      alerts: [alert],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    const a = body.alerts[0];
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    const a = result.body.alerts[0];
 
     expect(a).toHaveProperty("id");
     expect(a).toHaveProperty("type");
@@ -268,21 +324,35 @@ test.describe("Alertes API — GET /api/alerts", () => {
 
   test("retourne une liste vide quand il n'y a pas d'alertes", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await mockGetAlerts(page, { alerts: [], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    await mockGetAlerts(page, {
+      alerts: [],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.alerts).toEqual([]);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.alerts).toEqual([]);
   });
 
   test("peut contenir une alerte avec niche null", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertNoNiche = makeAlert({ nicheId: null, niche: null });
-    await mockGetAlerts(page, { alerts: [alertNoNiche], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    await mockGetAlerts(page, {
+      alerts: [alertNoNiche],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.alerts[0].niche).toBeNull();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.alerts[0].niche).toBeNull();
   });
 
   test("retourne les userNiches pour le formulaire de création", async ({ page }) => {
@@ -294,10 +364,12 @@ test.describe("Alertes API — GET /api/alerts", () => {
     ];
     await mockGetAlerts(page, { alerts: [], userNiches: niches, plan: "PRO", canCreate: true });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.userNiches).toHaveLength(3);
-    expect(body.userNiches[2].niche.name).toBe("Musique");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.userNiches).toHaveLength(3);
+    expect(result.body.userNiches[2].niche.name).toBe("Musique");
   });
 });
 
@@ -306,10 +378,14 @@ test.describe("Alertes API — GET /api/alerts", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — GET /api/alerts/:id", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("retourne une alerte individuelle", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alert = makeAlertWithNiche({ id: "alert-single" });
-    await page.route("**/api/alerts/alert-single", async (route) => {
+    await page.route("**/api/alerts/alert-single*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -317,16 +393,18 @@ test.describe("Alertes API — GET /api/alerts/:id", () => {
       });
     });
 
-    const response = await page.request.get("/api/alerts/alert-single");
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.alert.id).toBe("alert-single");
-    expect(body.alert.type).toBeDefined();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-single");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.alert.id).toBe("alert-single");
+    expect(result.body.alert.type).toBeDefined();
   });
 
   test("retourne 404 pour une alerte inexistante", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts/alert-inconnu", async (route) => {
+    await page.route("**/api/alerts/alert-inconnu*", async (route) => {
       await route.fulfill({
         status: 404,
         contentType: "application/json",
@@ -334,8 +412,11 @@ test.describe("Alertes API — GET /api/alerts/:id", () => {
       });
     });
 
-    const response = await page.request.get("/api/alerts/alert-inconnu");
-    expect(response.status()).toBe(404);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-inconnu");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(404);
   });
 });
 
@@ -344,11 +425,15 @@ test.describe("Alertes API — GET /api/alerts/:id", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — POST /api/alerts (Création)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("crée une alerte avec les champs minimaux — retour 201", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const created = makeAlertWithNiche({ id: "new-alert-1" });
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -362,13 +447,17 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(201);
-    const resBody = await response.json();
-    expect(resBody.alert.id).toBe("new-alert-1");
-    expect(resBody.alert.isActive).toBe(true);
+    expect(result.status).toBe(201);
+    expect(result.body.alert.id).toBe("new-alert-1");
+    expect(result.body.alert.isActive).toBe(true);
   });
 
   test("crée une alerte avec tous les champs (niche, threshold, channel)", async ({ page }) => {
@@ -381,7 +470,7 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       webhookUrl: "https://hooks.example.com/yt",
     });
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.type).toBe("SPIKE");
@@ -396,26 +485,30 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: {
-        type: "SPIKE",
-        threshold: 90,
-        channel: "WEBHOOK",
-        webhookUrl: "https://hooks.example.com/yt",
-        nicheId: "niche-1",
-      },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "SPIKE",
+          threshold: 90,
+          channel: "WEBHOOK",
+          webhookUrl: "https://hooks.example.com/yt",
+          nicheId: "niche-1",
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(201);
-    const resBody = await response.json();
-    expect(resBody.alert.channel).toBe("WEBHOOK");
-    expect(resBody.alert.threshold).toBe(90);
+    expect(result.status).toBe(201);
+    expect(result.body.alert.channel).toBe("WEBHOOK");
+    expect(result.body.alert.threshold).toBe(90);
   });
 
   test("crée une alerte de type DAILY_DIGEST (sans threshold)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const created = makeAlertWithNiche({ id: "alert-digest", type: "DAILY_DIGEST", threshold: 70 });
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.type).toBe("DAILY_DIGEST");
@@ -426,15 +519,20 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "DAILY_DIGEST" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "DAILY_DIGEST" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(201);
+    expect(result.status).toBe(201);
   });
 
   test("rejette une création avec un type invalide → 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 400,
@@ -443,15 +541,20 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "INVALID_TYPE" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "INVALID_TYPE" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
   });
 
   test("rejette une création avec threshold hors limites → 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 400,
@@ -460,15 +563,20 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD", threshold: -5 },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD", threshold: -5 }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
   });
 
   test("rejette une création canal WEBHOOK sans webhookUrl → 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 400,
@@ -480,17 +588,21 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD", channel: "WEBHOOK" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD", channel: "WEBHOOK" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const body = await response.json();
-    expect(body.error).toContain("Webhook");
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain("Webhook");
   });
 
   test("rejette une création avec nicheId inexistante → 404", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 404,
@@ -499,15 +611,20 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD", nicheId: "niche-inexistante" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD", nicheId: "niche-inexistante" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(404);
+    expect(result.status).toBe(404);
   });
 
   test("rejette une création avec body vide → 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 400,
@@ -516,13 +633,20 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", { data: {} });
-    expect(response.status()).toBe(400);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(400);
   });
 
   test("simule une erreur serveur 500 à la création", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 500,
@@ -531,10 +655,15 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(500);
+    expect(result.status).toBe(500);
   });
 });
 
@@ -543,11 +672,15 @@ test.describe("Alertes API — POST /api/alerts (Création)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("toggle isActive de true à false", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertId = "alert-toggle-1";
 
-    await page.route(`**/api/alerts/${alertId}`, async (route) => {
+    await page.route(`**/api/alerts/${alertId}*`, async (route) => {
       if (route.request().method() !== "PATCH") return;
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body).toHaveProperty("isActive");
@@ -560,19 +693,23 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
       });
     });
 
-    const response = await page.request.patch(`/api/alerts/${alertId}`, {
-      data: { isActive: false },
-    });
-    expect(response.status()).toBe(200);
-    const resBody = await response.json();
-    expect(resBody.alert.isActive).toBe(false);
+    const result = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/alerts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, alertId);
+    expect(result.status).toBe(200);
+    expect(result.body.alert.isActive).toBe(false);
   });
 
   test("toggle isActive de false à true", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertId = "alert-toggle-2";
 
-    await page.route(`**/api/alerts/${alertId}`, async (route) => {
+    await page.route(`**/api/alerts/${alertId}*`, async (route) => {
       if (route.request().method() !== "PATCH") return;
       await route.fulfill({
         status: 200,
@@ -583,18 +720,23 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
       });
     });
 
-    const response = await page.request.patch(`/api/alerts/${alertId}`, {
-      data: { isActive: true },
-    });
-    expect(response.status()).toBe(200);
-    expect((await response.json()).alert.isActive).toBe(true);
+    const result = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/alerts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: true }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, alertId);
+    expect(result.status).toBe(200);
+    expect(result.body.alert.isActive).toBe(true);
   });
 
   test("met à jour threshold et channel", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertId = "alert-update-1";
 
-    await page.route(`**/api/alerts/${alertId}`, async (route) => {
+    await page.route(`**/api/alerts/${alertId}*`, async (route) => {
       if (route.request().method() !== "PATCH") return;
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.threshold).toBe(85);
@@ -608,18 +750,22 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
       });
     });
 
-    const response = await page.request.patch(`/api/alerts/${alertId}`, {
-      data: { threshold: 85, channel: "WEBHOOK" },
-    });
-    expect(response.status()).toBe(200);
-    const updated = await response.json();
-    expect(updated.alert.threshold).toBe(85);
-    expect(updated.alert.channel).toBe("WEBHOOK");
+    const result = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/alerts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: 85, channel: "WEBHOOK" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, alertId);
+    expect(result.status).toBe(200);
+    expect(result.body.alert.threshold).toBe(85);
+    expect(result.body.alert.channel).toBe("WEBHOOK");
   });
 
   test("retourne 404 pour une alerte inexistante", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts/alert-inconnu", async (route) => {
+    await page.route("**/api/alerts/alert-inconnu*", async (route) => {
       if (route.request().method() !== "PATCH") return;
       await route.fulfill({
         status: 404,
@@ -628,15 +774,20 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
       });
     });
 
-    const response = await page.request.patch("/api/alerts/alert-inconnu", {
-      data: { isActive: false },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-inconnu", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(404);
+    expect(result.status).toBe(404);
   });
 
   test("simule une erreur serveur 500 au toggle", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts/alert-500", async (route) => {
+    await page.route("**/api/alerts/alert-500*", async (route) => {
       if (route.request().method() !== "PATCH") return;
       await route.fulfill({
         status: 500,
@@ -645,10 +796,15 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
       });
     });
 
-    const response = await page.request.patch("/api/alerts/alert-500", {
-      data: { isActive: false },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-500", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(500);
+    expect(result.status).toBe(500);
   });
 });
 
@@ -657,24 +813,33 @@ test.describe("Alertes API — PATCH /api/alerts/:id (Modification)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — DELETE /api/alerts/:id (Suppression)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("supprime une alerte existante → 204", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertId = "alert-to-delete";
 
-    await page.route(`**/api/alerts/${alertId}`, async (route) => {
+    await page.route(`**/api/alerts/${alertId}*`, async (route) => {
       if (route.request().method() !== "DELETE") return;
       await route.fulfill({ status: 204 });
     });
 
-    const response = await page.request.delete(`/api/alerts/${alertId}`);
-    expect(response.status()).toBe(204);
+    const result = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/alerts/${id}`, {
+        method: "DELETE",
+      });
+      return { status: res.status, statusText: res.statusText };
+    }, alertId);
+    expect(result.status).toBe(204);
     // 204 has no body
-    expect(response.statusText()).toBe("No Content");
+    expect(result.statusText).toBe("No Content");
   });
 
   test("retourne 404 pour une alerte inexistante", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts/alert-inconnu", async (route) => {
+    await page.route("**/api/alerts/alert-inconnu*", async (route) => {
       if (route.request().method() !== "DELETE") return;
       await route.fulfill({
         status: 404,
@@ -683,13 +848,18 @@ test.describe("Alertes API — DELETE /api/alerts/:id (Suppression)", () => {
       });
     });
 
-    const response = await page.request.delete("/api/alerts/alert-inconnu");
-    expect(response.status()).toBe(404);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-inconnu", {
+        method: "DELETE",
+      });
+      return { status: res.status };
+    });
+    expect(result.status).toBe(404);
   });
 
   test("simule une erreur serveur 500 à la suppression", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/alerts/alert-500-del", async (route) => {
+    await page.route("**/api/alerts/alert-500-del*", async (route) => {
       if (route.request().method() !== "DELETE") return;
       await route.fulfill({
         status: 500,
@@ -698,8 +868,13 @@ test.describe("Alertes API — DELETE /api/alerts/:id (Suppression)", () => {
       });
     });
 
-    const response = await page.request.delete("/api/alerts/alert-500-del");
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts/alert-500-del", {
+        method: "DELETE",
+      });
+      return { status: res.status };
+    });
+    expect(result.status).toBe(500);
   });
 });
 
@@ -708,6 +883,10 @@ test.describe("Alertes API — DELETE /api/alerts/:id (Suppression)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — Plan Enforcement", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("FREE plan: canCreate est false et POST est refusé (403)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_FREE);
     await mockGetAlerts(page, {
@@ -718,30 +897,37 @@ test.describe("Alertes API — Plan Enforcement", () => {
     });
 
     // Verify canCreate
-    const getResp = await page.request.get("/api/alerts");
-    const getBody = await getResp.json();
-    expect(getBody.plan).toBe("FREE");
-    expect(getBody.canCreate).toBe(false);
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(getResult.body.plan).toBe("FREE");
+    expect(getResult.body.canCreate).toBe(false);
 
     // Verify POST blocked
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 403,
         contentType: "application/json",
         body: JSON.stringify({
-          error: "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes.",
+          error:
+            "Les alertes sont disponibles à partir du plan Pro. Passez à Pro pour créer des alertes.",
           code: "FORBIDDEN",
         }),
       });
     });
 
-    const postResp = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD" },
+    const postResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(postResp.status()).toBe(403);
-    const postBody = await postResp.json();
-    expect(postBody.error).toContain("plan Pro");
+    expect(postResult.status).toBe(403);
+    expect(postResult.body.error).toContain("plan Pro");
   });
 
   test("PRO plan: canCreate est true et POST est accepté", async ({ page }) => {
@@ -753,13 +939,15 @@ test.describe("Alertes API — Plan Enforcement", () => {
       canCreate: true,
     });
 
-    const getResp = await page.request.get("/api/alerts");
-    const getBody = await getResp.json();
-    expect(getBody.plan).toBe("PRO");
-    expect(getBody.canCreate).toBe(true);
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(getResult.body.plan).toBe("PRO");
+    expect(getResult.body.canCreate).toBe(true);
 
     // Verify POST works
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       await route.fulfill({
         status: 201,
@@ -768,10 +956,15 @@ test.describe("Alertes API — Plan Enforcement", () => {
       });
     });
 
-    const postResp = await page.request.post("/api/alerts", {
-      data: { type: "SCORE_THRESHOLD" },
+    const postResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "SCORE_THRESHOLD" }),
+      });
+      return { status: res.status };
     });
-    expect(postResp.status()).toBe(201);
+    expect(postResult.status).toBe(201);
   });
 
   test("TEAM plan: canCreate est true et POST est accepté", async ({ page }) => {
@@ -783,10 +976,12 @@ test.describe("Alertes API — Plan Enforcement", () => {
       canCreate: true,
     });
 
-    const getResp = await page.request.get("/api/alerts");
-    const getBody = await getResp.json();
-    expect(getBody.plan).toBe("TEAM");
-    expect(getBody.canCreate).toBe(true);
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(getResult.body.plan).toBe("TEAM");
+    expect(getResult.body.canCreate).toBe(true);
   });
 
   test("PRO plan: peut créer plusieurs alertes (pas de limite arbitraire)", async ({ page }) => {
@@ -801,10 +996,12 @@ test.describe("Alertes API — Plan Enforcement", () => {
       canCreate: true,
     });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.alerts).toHaveLength(5);
-    expect(body.canCreate).toBe(true);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.alerts).toHaveLength(5);
+    expect(result.body.canCreate).toBe(true);
   });
 });
 
@@ -813,6 +1010,10 @@ test.describe("Alertes API — Plan Enforcement", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Alertes API — Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("alerte avec niche null (toutes les niches)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const alertNoNiche = makeAlert({ nicheId: null, niche: null, type: "DAILY_DIGEST" });
@@ -823,16 +1024,18 @@ test.describe("Alertes API — Edge Cases", () => {
       canCreate: true,
     });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.alerts[0].niche).toBeNull();
-    expect(body.alerts[0].type).toBe("DAILY_DIGEST");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.alerts[0].niche).toBeNull();
+    expect(result.body.alerts[0].type).toBe("DAILY_DIGEST");
   });
 
   test("10+ alertes simulées (comportement liste longue)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     const manyAlerts = Array.from({ length: 12 }, (_, i) =>
-      makeAlertWithNiche({ id: `alert-${i}`, threshold: 30 + (i * 5) % 71 }),
+      makeAlertWithNiche({ id: `alert-${i}`, threshold: 30 + ((i * 5) % 71) }),
     );
     await mockGetAlerts(page, {
       alerts: manyAlerts,
@@ -841,11 +1044,13 @@ test.describe("Alertes API — Edge Cases", () => {
       canCreate: true,
     });
 
-    const response = await page.request.get("/api/alerts");
-    const body = await response.json();
-    expect(body.alerts).toHaveLength(12);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.alerts).toHaveLength(12);
     // All IDs are unique
-    const ids = body.alerts.map((a: { id: string }) => a.id);
+    const ids = result.body.alerts.map((a: { id: string }) => a.id);
     expect(new Set(ids).size).toBe(12);
   });
 
@@ -856,7 +1061,8 @@ test.describe("Alertes API — Edge Cases", () => {
     const ids: string[] = [];
     for (let i = 0; i < 3; i++) {
       const alertId = `rapid-alert-${i}`;
-      await page.route(`**/api/alerts`, async (route) => {
+      const threshold = 50 + i * 10;
+      await page.route(`**/api/alerts*`, async (route) => {
         if (route.request().method() !== "POST") return;
         await route.fulfill({
           status: 201,
@@ -865,23 +1071,36 @@ test.describe("Alertes API — Edge Cases", () => {
         });
       });
 
-      const postResp = await page.request.post("/api/alerts", {
-        data: { type: "SCORE_THRESHOLD", threshold: 50 + i * 10 },
-      });
-      expect(postResp.status()).toBe(201);
+      const postResult = await page.evaluate(
+        async ({ id, thr }) => {
+          const res = await fetch("/api/alerts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "SCORE_THRESHOLD", threshold: thr }),
+          });
+          return { status: res.status };
+        },
+        { id: alertId, thr: threshold },
+      );
+      expect(postResult.status).toBe(201);
       ids.push(alertId);
     }
     expect(ids).toHaveLength(3);
 
     // Delete them all
     for (const id of ids) {
-      await page.route(`**/api/alerts/${id}`, async (route) => {
+      await page.route(`**/api/alerts/${id}*`, async (route) => {
         if (route.request().method() !== "DELETE") return;
         await route.fulfill({ status: 204 });
       });
 
-      const delResp = await page.request.delete(`/api/alerts/${id}`);
-      expect(delResp.status()).toBe(204);
+      const delResult = await page.evaluate(async (delId) => {
+        const res = await fetch(`/api/alerts/${delId}`, {
+          method: "DELETE",
+        });
+        return { status: res.status };
+      }, id);
+      expect(delResult.status).toBe(204);
     }
 
     // Verify empty list
@@ -891,9 +1110,11 @@ test.describe("Alertes API — Edge Cases", () => {
       plan: "PRO",
       canCreate: true,
     });
-    const getResp = await page.request.get("/api/alerts");
-    const body = await getResp.json();
-    expect(body.alerts).toEqual([]);
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(getResult.body.alerts).toEqual([]);
   });
 
   test("POST avec canal WEBHOOK et URL valide passe", async ({ page }) => {
@@ -904,7 +1125,7 @@ test.describe("Alertes API — Edge Cases", () => {
       webhookUrl: "https://hooks.example.com/valid",
     });
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() !== "POST") return;
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.channel).toBe("WEBHOOK");
@@ -916,14 +1137,19 @@ test.describe("Alertes API — Edge Cases", () => {
       });
     });
 
-    const response = await page.request.post("/api/alerts", {
-      data: {
-        type: "SCORE_THRESHOLD",
-        channel: "WEBHOOK",
-        webhookUrl: "https://hooks.example.com/valid",
-      },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "SCORE_THRESHOLD",
+          channel: "WEBHOOK",
+          webhookUrl: "https://hooks.example.com/valid",
+        }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(201);
+    expect(result.status).toBe(201);
   });
 });
 
@@ -1089,7 +1315,9 @@ test.describe("Alertes UI — Liste vide", () => {
     });
   });
 
-  test("affiche le message 'Aucune alerte configurée' quand la liste est vide", async ({ page }) => {
+  test("affiche le message 'Aucune alerte configurée' quand la liste est vide", async ({
+    page,
+  }) => {
     await page.goto("/alerts");
     await page.waitForLoadState("networkidle");
 
@@ -1111,7 +1339,12 @@ test.describe("Alertes UI — Interactions client (Create / Toggle / Delete)", (
   });
 
   test("le bouton Nouvelle alerte ouvre le formulaire de création", async ({ page }) => {
-    await mockGetAlerts(page, { alerts: [], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    await mockGetAlerts(page, {
+      alerts: [],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
     await page.goto("/alerts");
     await page.waitForLoadState("networkidle");
@@ -1133,7 +1366,12 @@ test.describe("Alertes UI — Interactions client (Create / Toggle / Delete)", (
   });
 
   test("le formulaire permet de sélectionner tous les types d'alerte", async ({ page }) => {
-    await mockGetAlerts(page, { alerts: [], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    await mockGetAlerts(page, {
+      alerts: [],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
     await page.goto("/alerts");
     await page.waitForLoadState("networkidle");
@@ -1153,7 +1391,12 @@ test.describe("Alertes UI — Interactions client (Create / Toggle / Delete)", (
   });
 
   test("le formulaire offre le choix Email et Webhook comme canal", async ({ page }) => {
-    await mockGetAlerts(page, { alerts: [], userNiches: DEFAULT_NICHES, plan: "PRO", canCreate: true });
+    await mockGetAlerts(page, {
+      alerts: [],
+      userNiches: DEFAULT_NICHES,
+      plan: "PRO",
+      canCreate: true,
+    });
 
     await page.goto("/alerts");
     await page.waitForLoadState("networkidle");
@@ -1257,9 +1500,7 @@ test.describe("Alertes UI — Cycle de vie complet (mocké côté client)", () =
   test("toggle actif/inactif depuis l'UI", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
 
-    let alertsData = [
-      makeAlertWithNiche({ id: "toggle-me", isActive: true }),
-    ];
+    let alertsData = [makeAlertWithNiche({ id: "toggle-me", isActive: true })];
 
     await mockAlertsApi(page, {
       onGet: async (route) => {
@@ -1391,7 +1632,9 @@ test.describe("Alertes UI — Cycle de vie complet (mocké côté client)", () =
 
     // Error should be displayed in the form
     // The AlertForm component catches errors and shows them in a red div
-    await expect(page.getByText("Erreur lors de la création").first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Erreur lors de la création").first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("échec de toggle (PATCH 500) → message d'erreur alert()", async ({ page }) => {

@@ -89,6 +89,72 @@ test.describe("ThemeToggle — État initial (dark mode par défaut)", () => {
 });
 
 // ========================================================================== //
+//  ThemeToggle — Flash Prevention                                              //
+//  Vérifie que le script beforeInteractive injecte la classe dark avant        //
+//  l'hydratation React, évitant un flash de thème incorrect au chargement.     //
+// ========================================================================== //
+
+test.describe("ThemeToggle — Flash Prevention", () => {
+  test("le beforeInteractive Script injecte 'dark' sur le htmlElement avant hydratation", async ({
+    page,
+  }) => {
+    let initialClass = "";
+    await page.addInitScript(() => {
+      initialClass = document.documentElement.className;
+      // Store it so we can read it later
+      (window as any).__initialHtmlClass = document.documentElement.className;
+    });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const savedClass = await page.evaluate(() => (window as any).__initialHtmlClass);
+    // The beforeInteractive script runs after addInitScript but before React hydration
+    // So the dark class should be present
+    expect(savedClass).toContain("dark");
+  });
+
+  test("avec localStorage 'theme'='light' → pas de flash dark initial", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("theme", "light");
+    });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const hasDarkClass = await page.evaluate(() =>
+      document.documentElement.classList.contains("dark"),
+    );
+    expect(hasDarkClass).toBe(false);
+  });
+
+  test("sans localStorage avec prefers-color-scheme:light → pas de classe dark", async ({
+    page,
+  }) => {
+    await clearStorage(page);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const hasDarkClass = await page.evaluate(() =>
+      document.documentElement.classList.contains("dark"),
+    );
+    expect(hasDarkClass).toBe(false);
+  });
+
+  test("le beforeInteractive s'exécute avant le rendu React (classe dark présente dès le premier paint)", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      (window as any).__classAtFirstPaint = document.documentElement.className;
+    });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    const firstPaintClass = await page.evaluate(() => (window as any).__classAtFirstPaint);
+    expect(firstPaintClass).toContain("dark");
+  });
+});
+
+// ========================================================================== //
 //  ThemeToggle — Bascule vers le mode clair                                    //
 //  Vérifie qu'un clic sur le toggle passe correctement en mode clair.         //
 // ========================================================================== //
@@ -215,11 +281,26 @@ test.describe("ThemeToggle — Persistance localStorage", () => {
     await expect(toggleBtn).toBeVisible();
     await expect(toggleBtn.locator(".lucide-sun")).toBeVisible();
 
-    // Vérifier que le HTML a la classe dark
+    // Vérifier que le HTML a la clase dark
     const hasDarkClass = await page.evaluate(() =>
       document.documentElement.classList.contains("dark"),
     );
     expect(hasDarkClass).toBe(true);
+  });
+
+  test("le thème persiste après navigation vers une autre page", async ({ page }) => {
+    await setStorage(page, "light");
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Navigate to another page
+    await page.goto("/pricing");
+    await page.waitForLoadState("networkidle");
+
+    // Theme should still be light
+    const toggleBtn = page.getByRole("button", { name: ARIA_LIGHT });
+    await expect(toggleBtn).toBeVisible();
+    await expect(toggleBtn.locator(".lucide-moon")).toBeVisible();
   });
 });
 
