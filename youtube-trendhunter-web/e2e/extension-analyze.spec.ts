@@ -353,6 +353,82 @@ async function mockAnalyzeEndpoint(page: Page, validToken: string) {
       return;
     }
 
+    // ── PRO plan full analysis ──
+    if (testMode === "pro-plan") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          videoId,
+          title: "Pro Plan Analysis",
+          channelTitle: "ProChannel",
+          views: 500000,
+          score: 91.5,
+          trendScore: 95,
+          velocity: 18.3,
+          momentum: "rising",
+          status: "ANALYZED",
+          niche: testNiche,
+          language: "fr",
+        }),
+      });
+      return;
+    }
+
+    // ── Redis failure during rate limit ──
+    if (testMode === "redis-down") {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Service temporairement indisponible",
+          code: "SERVICE_UNAVAILABLE",
+        }),
+      });
+      return;
+    }
+
+    // ── XSS payload sanitized ──
+    if (testMode === "xss") {
+      const sanitizedId = String(body.videoId ?? "").replace(/<[^>]*>/g, "");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          videoId: sanitizedId,
+          title: "Sanitized Video",
+          channelTitle: "SafeChannel",
+          views: 1000,
+          score: 50.0,
+          trendScore: 55,
+          velocity: 1.0,
+          momentum: "stable",
+          status: "ANALYZED",
+        }),
+      });
+      return;
+    }
+
+    // ── Extra unknown fields in body ignored ──
+    if (testMode === "extra-fields") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          videoId,
+          title: "Extra Fields Test",
+          channelTitle: "TestChannel",
+          views: 100000,
+          score: 75.0,
+          trendScore: 80,
+          velocity: 5.0,
+          momentum: "rising",
+          status: "ANALYZED",
+        }),
+      });
+      return;
+    }
+
     // ── Default full response ──
     const testNiche = url.searchParams.get("_test_niche") || "Tech & IA";
     await route.fulfill({
@@ -905,5 +981,168 @@ test.describe("Extension Analyze — Intégration", () => {
       const body = res.body as Record<string, unknown>;
       expect(body.videoId).toBe(videoId);
     }
+  });
+});
+
+/* ========================================================================== */
+/*  6. POST /api/extension/analyze — Nouveaux scénarios                       */
+/* ========================================================================== */
+
+test.describe("Extension Analyze — Nouveaux scénarios", () => {
+  const VALID_TOKEN = crypto.randomUUID();
+
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+    await mockAnalyzeEndpoint(page, VALID_TOKEN);
+  });
+
+  test("6a — Plan PRO → analyse complète (status ANALYZED)", async ({ page }) => {
+    const res = await fetchApi(page, "/api/extension/analyze?_test=pro-plan&_test_plan=PRO", {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+      body: { videoId: "proTestVideo" },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      videoId: "proTestVideo",
+      status: "ANALYZED",
+    });
+    expect(body).toHaveProperty("title");
+    expect(body).toHaveProperty("views");
+    expect(body).toHaveProperty("score");
+    expect(body.score).toBeGreaterThan(0);
+    // PRO plan should NOT return LIMITED status
+    expect(body.status).not.toBe("LIMITED");
+  });
+
+  test("6b — videoId avec payload XSS <script> → nettoyé (réponse 200)", async ({ page }) => {
+    const xssPayload = '<script>alert(1)</script>';
+
+    const res = await fetchApi(page, "/api/extension/analyze?_test=xss", {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+      body: { videoId: xssPayload },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toHaveProperty("videoId");
+    // The XSS tags should be stripped from the videoId
+    const returnedId = body.videoId as string;
+    expect(returnedId).not.toContain("<script>");
+    expect(returnedId).not.toContain("</script>");
+    expect(returnedId).not.toContain("alert");
+  });
+
+  test("6c — Requêtes concurrentes rapides avec le même token → toutes 200 ou certaines 429", async ({
+    page,
+  }) => {
+    // Fire 10 concurrent requests — they should all complete without error
+    const promises = Array.from({ length: 10 }, (_, i) =>
+      fetchApi(page, "/api/extension/analyze", {
+        headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+        body: { videoId: `concurrent-video-${i}` },
+      }),
+    );
+
+    const results = await Promise.all(promises);
+
+    // All requests should complete (no hangs, no network errors)
+    expect(results.length).toBe(10);
+
+    // Each should be either 200 (success) or 429 (rate-limited)
+    for (const res of results) {
+      expect([200, 429]).toContain(res.status);
+      if (res.status === 200) {
+        const body = res.body as Record<string, unknown>;
+        expect(body).toHaveProperty("videoId");
+      } else if (res.status === 429) {
+        const body = res.body as Record<string, unknown>;
+        expect(body).toMatchObject({
+          error: expect.stringContaining("Trop de requêtes"),
+          code: "RATE_LIMIT",
+        });
+      }
+    }
+  });
+
+  test("6d — Token passé en query param (pas en header) → 401", async ({ page }) => {
+    const res = await page.evaluate(
+      async (token) => {
+        const res = await fetch(
+          `http://localhost:3000/api/extension/analyze?token=${token}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ videoId: "testVideo" }),
+          },
+        );
+        return { status: res.status, body: await res.json() };
+      },
+      VALID_TOKEN,
+    );
+
+    // Without Authorization header, the endpoint should return 401
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({
+      error: "Token manquant",
+    });
+  });
+
+  test("6e — Header Authorization avec scheme Basic → 401", async ({ page }) => {
+    const res = await page.evaluate(async () => {
+      const res = await fetch("http://localhost:3000/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Basic dGVzdDpwYXNzd29yZA==",
+        },
+        body: JSON.stringify({ videoId: "testVideo" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    // "Basic" scheme is not "Bearer" → token extraction returns null → 401
+    expect(res.status).toBe(401);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      error: expect.stringContaining("Token"),
+    });
+  });
+
+  test("6f — Redis indisponible pendant le rate limiting → 503", async ({ page }) => {
+    const res = await fetchApi(page, "/api/extension/analyze?_test=redis-down", {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+      body: { videoId: "redisDownTest" },
+    });
+
+    expect(res.status).toBe(503);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      error: expect.stringContaining("indisponible"),
+      code: "SERVICE_UNAVAILABLE",
+    });
+  });
+
+  test("6g — Champs supplémentaires inconnus dans le corps → ignorés (200)", async ({ page }) => {
+    const res = await fetchApi(page, "/api/extension/analyze?_test=extra-fields", {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+      body: {
+        videoId: "extraFieldsTest",
+        unknownField: "shouldBeIgnored",
+        anotherField: 12345,
+        nested: { key: "value" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    // The response should contain the analysis data, not error about unknown fields
+    expect(body).toMatchObject({
+      videoId: "extraFieldsTest",
+      status: "ANALYZED",
+    });
+    expect(body).toHaveProperty("title");
+    expect(body).toHaveProperty("score");
   });
 });

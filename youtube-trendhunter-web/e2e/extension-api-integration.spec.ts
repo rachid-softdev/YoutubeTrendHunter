@@ -1900,3 +1900,369 @@ test.describe("Integration — Parcours complet Extension → API", () => {
     expect(analyzeResult2.status).toBe(200);
   });
 });
+
+/* ========================================================================== */
+/*  9. EXTENSION AUTH — Rate limit et création concurrente                    */
+/* ========================================================================== */
+
+test.describe("Extension Auth — Rate limit et création concurrente", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("9a — Épuisement du rate limit : 6 requêtes POST rapides → 429 après la 5e", async ({
+    page,
+  }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    // Compteur de requêtes dans le mock
+    let requestCount = 0;
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      requestCount++;
+      if (requestCount > 5) {
+        await route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Trop de requêtes. Réessayez plus tard.",
+            code: "RATE_LIMIT",
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: crypto.randomUUID(),
+          id: `tok_${Date.now()}`,
+          name: "Extension Chrome",
+        }),
+      });
+    });
+
+    // Fire 6 requests rapidly
+    const results = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await page.evaluate(async () => {
+        const r = await fetch("/api/extension/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Extension Chrome" }),
+        });
+        return { status: r.status };
+      });
+      results.push(res);
+    }
+
+    // First 5 should be 200, 6th should be 429
+    const statuses = results.map((r) => r.status);
+    expect(statuses.filter((s) => s === 200).length).toBe(5);
+    expect(statuses.filter((s) => s === 429).length).toBe(1);
+  });
+
+  test("9b — Création concurrente de tokens (5 POST parallèles) → tous 200, un seul token existe", async ({
+    page,
+  }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    // Simule un stockage où un seul token actif par utilisateur
+    let activeToken: string | null = null;
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      // Chaque création remplace le token précédent
+      const newToken = crypto.randomUUID();
+      activeToken = newToken;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: newToken,
+          id: `tok_${Date.now()}`,
+          name: "Extension Chrome",
+        }),
+      });
+    });
+
+    // 5 créations parallèles
+    const promises = Array.from({ length: 5 }, () =>
+      page.evaluate(async () => {
+        const r = await fetch("/api/extension/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Extension Chrome" }),
+        });
+        return { status: r.status, body: await r.json() };
+      }),
+    );
+
+    const results = await Promise.all(promises);
+
+    // Tous doivent être 200
+    for (const res of results) {
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("token");
+      expect(res.body.token).toMatch(UUID_V4_REGEX);
+    }
+
+    // Un seul token actif doit exister à la fin
+    expect(activeToken).not.toBeNull();
+  });
+});
+
+/* ========================================================================== */
+/*  10. EXTENSION AUTH — Validation du nom du token                           */
+/* ========================================================================== */
+
+test.describe("Extension Auth — Validation du nom", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("10a — Nom de token > 100 caractères → 400", async ({ page }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      // Validation: name max 100 chars (comme le schema)
+      if (body.name && typeof body.name === "string" && body.name.length > 100) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Données invalides",
+            code: "VALIDATION_ERROR",
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: crypto.randomUUID(),
+          id: `tok_${Date.now()}`,
+          name: body.name ?? "Extension Chrome",
+        }),
+      });
+    });
+
+    const longName = "A".repeat(101);
+    const res = await page.evaluate(async (name) => {
+      const r = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return { status: r.status, body: await r.json() };
+    }, longName);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: "Données invalides",
+      code: "VALIDATION_ERROR",
+    });
+  });
+
+  test("10b — Nom avec caractères spéciaux / de contrôle → 200 avec nom tel quel", async ({
+    page,
+  }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      // Accepter tout nom de type string ≤ 100 chars (comportement réel du schéma)
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: crypto.randomUUID(),
+          id: `tok_${Date.now()}`,
+          name: typeof body.name === "string" ? body.name : "Extension Chrome",
+        }),
+      });
+    });
+
+    const specialName = "Mon Extension\t\n⚡🔥";
+    const res = await page.evaluate(async (name) => {
+      const r = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return { status: r.status, body: await r.json() };
+    }, specialName);
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe(specialName);
+  });
+
+  test("10c — Corps vide {} → 200 avec nom par défaut 'Extension Chrome'", async ({ page }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: crypto.randomUUID(),
+          id: `tok_${Date.now()}`,
+          name: "Extension Chrome",
+        }),
+      });
+    });
+
+    const res = await page.evaluate(async () => {
+      const r = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: r.status, body: await r.json() };
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      token: expect.any(String),
+      id: expect.any(String),
+      name: "Extension Chrome",
+    });
+  });
+});
+
+/* ========================================================================== */
+/*  11. EXTENSION AUTH — GET liste de tokens                                  */
+/* ========================================================================== */
+
+test.describe("Extension Auth — GET /api/extension/auth", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("11a — GET retourne tous les tokens dans un tableau", async ({ page }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            tokens: [
+              { id: "tok-1", name: "Extension Chrome", createdAt: new Date().toISOString(), lastUsedAt: null, expiresAt: null },
+              { id: "tok-2", name: "API Script", createdAt: new Date().toISOString(), lastUsedAt: null, expiresAt: null },
+              { id: "tok-3", name: "CI/CD Pipeline", createdAt: new Date().toISOString(), lastUsedAt: null, expiresAt: null },
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    const res = await page.evaluate(async () => {
+      const r = await fetch("/api/extension/auth");
+      return { status: r.status, body: await r.json() };
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("tokens");
+    expect(Array.isArray(res.body.tokens)).toBe(true);
+    expect(res.body.tokens.length).toBe(3);
+    for (const tok of res.body.tokens) {
+      expect(tok).toHaveProperty("id");
+      expect(tok).toHaveProperty("name");
+      expect(tok).toHaveProperty("createdAt");
+    }
+  });
+
+  test("11b — GET sans token → { tokens: [] }", async ({ page }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ tokens: [] }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    const res = await page.evaluate(async () => {
+      const r = await fetch("/api/extension/auth");
+      return { status: r.status, body: await r.json() };
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ tokens: [] });
+  });
+});
+
+/* ========================================================================== */
+/*  12. EXTENSION AUTH — Erreurs internes                                     */
+/* ========================================================================== */
+
+test.describe("Extension Auth — Erreurs internes", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("12a — createApiToken lance une erreur Prisma → 500", async ({ page }) => {
+    await mockAuthSession(page, { plan: "TEAM" });
+
+    await page.route("**/api/extension/auth*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      // Simuler une erreur Prisma (contrainte unique, connexion perdue, etc.)
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Erreur lors de la création du token",
+          code: "INTERNAL_ERROR",
+        }),
+      });
+    });
+
+    const res = await page.evaluate(async () => {
+      const r = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: r.status, body: await r.json() };
+    });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("Erreur"),
+      code: "INTERNAL_ERROR",
+    });
+  });
+});

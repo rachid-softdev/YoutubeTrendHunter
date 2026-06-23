@@ -137,6 +137,9 @@ const WRONG_AUTH_TOKEN = "wrong-secret-value-0000";
  *   _test_db=error      — simulate database failure
  *   _test_redis=error   — simulate redis failure
  *   _test_stripe=error  — simulate stripe failure
+ *   _test_no_secret=true    — HEALTH_CHECK_SECRET env var not set (no auth check)
+ *   _test_cache_control=true — include Cache-Control: no-cache header
+ *   _test_slow=true         — simulate all services slow (4s latency)
  */
 async function mockHealthEndpoint(page: Page, secret = HEALTH_CHECK_SECRET) {
   await page.route("**/api/health**", async (route) => {
@@ -147,14 +150,41 @@ async function mockHealthEndpoint(page: Page, secret = HEALTH_CHECK_SECRET) {
 
     const authHeader = route.request().headers()["authorization"];
     const url = new URL(route.request().url());
+    const noSecret = url.searchParams.get("_test_no_secret") === "true";
+    const cacheControl = url.searchParams.get("_test_cache_control") === "true";
+    const isSlow = url.searchParams.get("_test_slow") === "true";
 
-    // Auth check: same logic as real endpoint
-    if (authHeader !== `Bearer ${secret}`) {
-      // Minimal response — no services, no timestamp
+    // Simulate HEALTH_CHECK_SECRET env var not set → no auth check, full data returned
+    if (!noSecret) {
+      // Auth check: same logic as real endpoint when secret IS set
+      if (authHeader !== `Bearer ${secret}`) {
+        // Minimal response — no services, no timestamp
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "ok" }),
+        });
+        return;
+      }
+    }
+
+    // Simulate slow services (4s latency)
+    if (isSlow) {
+      // Simulate all services eventually responding (still 200)
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ status: "ok" }),
+        body: JSON.stringify({
+          status: "healthy",
+          timestamp: new Date().toISOString(),
+          services: {
+            database: { status: "ok" },
+            redis: { status: "ok" },
+            stripe: { status: "ok" },
+          },
+          _test_slow: true,
+          _test_latencyMs: 4000,
+        }),
       });
       return;
     }
@@ -176,9 +206,18 @@ async function mockHealthEndpoint(page: Page, secret = HEALTH_CHECK_SECRET) {
 
     const statusCode = overallStatus === "healthy" ? 200 : 503;
 
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // Add Cache-Control header if requested
+    if (cacheControl) {
+      responseHeaders["Cache-Control"] = "no-cache";
+    }
+
     await route.fulfill({
       status: statusCode,
-      contentType: "application/json",
+      headers: responseHeaders,
       body: JSON.stringify({
         status: overallStatus,
         timestamp: new Date().toISOString(),
@@ -279,10 +318,11 @@ async function mockAuditLogs(page: Page) {
  *   6. Returns JSON, CSV summary, or CSV trends based on format
  *
  * Test query params:
- *   _test_session=true  — simulate authenticated session
- *   _test_plan=FREE     — simulate FREE plan (export disabled)
- *   format=json|csv     — export format (actual API param)
- *   trends=true         — include trend data in CSV (actual API param)
+ *   _test_session=true       — simulate authenticated session
+ *   _test_plan=FREE          — simulate FREE plan (export disabled)
+ *   format=json|csv          — export format (actual API param)
+ *   trends=true              — include trend data in CSV (actual API param)
+ *   _test_csv_injection=true — return CSV with injection payloads for sanitization testing
  */
 async function mockUserExport(page: Page) {
   // Use **/api/user/export** to match URLs with query strings too
@@ -295,6 +335,7 @@ async function mockUserExport(page: Page) {
     const url = new URL(route.request().url());
     const hasSession = url.searchParams.get("_test_session") === "true";
     const userPlan = url.searchParams.get("_test_plan") || "PRO";
+    const csvInjection = url.searchParams.get("_test_csv_injection") === "true";
 
     // Étape 1: Auth check
     if (!hasSession) {
@@ -339,8 +380,141 @@ async function mockUserExport(page: Page) {
     const includeTrends = url.searchParams.get("trends") === "true";
     const today = new Date().toISOString().split("T")[0];
 
+    // CSV injection test — return CSV data with injection payloads
+    if (csvInjection) {
+      // Simulate the sanitizeCsvValue() function behavior
+      // Values starting with =, +, -, @, % should be prefixed with '
+      const sanitizeCsvValue = (val: string): string => {
+        if (/^[=+\-@%]/.test(val)) return `'${val}`;
+        if (val.includes(",") || val.includes('"') || val.includes("\n"))
+          return `"${val.replace(/"/g, '""')}"`;
+        return val;
+      };
+
+      if (format === "csv" && includeTrends) {
+        // CSV with trends containing injection payloads
+        const csvHeaders = ["niche", "title", "score", "status", "avgViews", "contentAngles", "detectedAt"];
+        const csvRows = [
+          csvHeaders.join(","),
+          // title starts with = → should be sanitized
+          [
+            "Tech IA",
+            sanitizeCsvValue('=HYPERLINK("http://malicious-site.com", "Click me")'),
+            "95",
+            "active",
+            "120000",
+            "Innovation",
+            "2026-06-20T10:00:00.000Z",
+          ].join(","),
+          // title starts with + → should be sanitized
+          [
+            "Gaming",
+            sanitizeCsvValue('+SUM(A1:A100)'),
+            "82",
+            "active",
+            "85000",
+            "Gameplay",
+            "2026-06-19T08:30:00.000Z",
+          ].join(","),
+          // title starts with - → should be sanitized
+          [
+            "Business",
+            sanitizeCsvValue('-1+2'),
+            "78",
+            "active",
+            "230000",
+            "Finance",
+            "2026-06-21T12:00:00.000Z",
+          ].join(","),
+          // title starts with @ → should be sanitized
+          [
+            "Science",
+            sanitizeCsvValue('@SUM(B1:B10)'),
+            "70",
+            "active",
+            "45000",
+            "Recherche",
+            "2026-06-18T09:00:00.000Z",
+          ].join(","),
+          // title starts with % → should be sanitized
+          [
+            "Health",
+            sanitizeCsvValue('%DANGEROUS_MACRO()'),
+            "65",
+            "active",
+            "32000",
+            "Bien-être",
+            "2026-06-17T14:00:00.000Z",
+          ].join(","),
+          // title contains comma → should be quoted
+          [
+            "Sports",
+            sanitizeCsvValue('Football, Soccer, Rugby'),
+            "90",
+            "active",
+            "200000",
+            "Compétition",
+            "2026-06-16T11:00:00.000Z",
+          ].join(","),
+        ];
+
+        const filename = `trendhunter-trends-${today}.csv`;
+
+        await route.fulfill({
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+          body: csvRows.join("\n") + "\n",
+        });
+        return;
+      }
+
+      if (format === "csv") {
+        // CSV summary with injection payloads in various fields
+        const csvRows = [
+          ["Type", "Nom", "Détails", "Date"].join(","),
+          ["Profile", sanitizeCsvValue("=SUM(A1:A10)"), sanitizeCsvValue("test@example.com"), "2024-01-15T00:00:00.000Z"].join(","),
+          ["Niche", sanitizeCsvValue("+HYPERLINK(\"http://evil.com\")"), sanitizeCsvValue("-1"), "2024-02-01T00:00:00.000Z"].join(","),
+          ["Alerte", sanitizeCsvValue("@DANGER"), sanitizeCsvValue("%MACRO"), "2024-03-01T00:00:00.000Z"].join(","),
+        ];
+
+        const filename = `trendhunter-export-${today}.csv`;
+
+        await route.fulfill({
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+          body: csvRows.join("\n") + "\n",
+        });
+        return;
+      }
+
+      // JSON export (no injection concern in JSON)
+      const filename = `trendhunter-export-${today}.json`;
+
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+        body: JSON.stringify({
+          profile: { email: "test@example.com", name: "Test User" },
+          exportedAt: new Date().toISOString(),
+        }),
+      });
+      return;
+    }
+
+    const includeTrendsFlag = url.searchParams.get("trends") === "true";
+    const todayStr = new Date().toISOString().split("T")[0];
+
     // Étape 4: CSV avec tendances
-    if (format === "csv" && includeTrends) {
+    if (format === "csv" && includeTrendsFlag) {
       const csvHeaders = [
         "niche",
         "title",
@@ -357,7 +531,7 @@ async function mockUserExport(page: Page) {
         "Gaming,Tendance Gaming #1,78,active,230000,Gameplay | eSport,2026-06-21T12:00:00.000Z",
       ];
 
-      const filename = `trendhunter-trends-${today}.csv`;
+      const filename = `trendhunter-trends-${todayStr}.csv`;
 
       await route.fulfill({
         status: 200,
@@ -381,7 +555,7 @@ async function mockUserExport(page: Page) {
         ["Token", "Extension Chrome", "ID:tok-a1b2c3d4", "2024-03-10T00:00:00.000Z"].join(","),
       ];
 
-      const filename = `trendhunter-export-${today}.csv`;
+      const filename = `trendhunter-export-${todayStr}.csv`;
 
       await route.fulfill({
         status: 200,
@@ -395,7 +569,7 @@ async function mockUserExport(page: Page) {
     }
 
     // Étape 6: JSON export (default)
-    const filename = `trendhunter-export-${today}.json`;
+    const filename = `trendhunter-export-${todayStr}.json`;
 
     await route.fulfill({
       status: 200,
@@ -617,6 +791,62 @@ test.describe("Health Check — GET /api/health", () => {
     expect(services.database.status).toBe("error");
     expect(services.redis.status).toBe("ok");
     expect(services.stripe.status).toBe("error");
+  });
+
+  /* ----- New health tests ----- */
+
+  test("1i — HEALTH_CHECK_SECRET non défini → 200 avec données complètes (pas de auth check)", async ({
+    page,
+  }) => {
+    // Override the beforeEach mock: no secret configured
+    await mockHealthEndpoint(page, ""); // empty secret simulates env var not set
+
+    // Even without Authorization header, full data should be returned
+    const res = await fetchApi(page, "/api/health?_test_no_secret=true");
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as Record<string, unknown>;
+    expect(body.status).toBe("healthy");
+    expect(body).toHaveProperty("timestamp");
+    expect(body).toHaveProperty("services");
+
+    const services = body.services as Record<string, { status: string }>;
+    expect(services.database).toBeDefined();
+    expect(services.redis).toBeDefined();
+    expect(services.stripe).toBeDefined();
+  });
+
+  test("1j — Header Cache-Control: no-cache présent", async ({ page }) => {
+    const res = await fetchApi(page, "/api/health?_test_cache_control=true", {
+      headers: { Authorization: `Bearer ${HEALTH_CHECK_SECRET}` },
+    });
+
+    expect(res.status).toBe(200);
+
+    // Vérifie que l'en-tête Cache-Control est présent et défini à no-cache
+    const cacheControl = res.headers["cache-control"];
+    expect(cacheControl).toBeDefined();
+    expect(cacheControl).toBe("no-cache");
+  });
+
+  test("1k — Tous les services lents (4s) → toujours 200", async ({ page }) => {
+    const res = await fetchApi(page, "/api/health?_test_slow=true", {
+      headers: { Authorization: `Bearer ${HEALTH_CHECK_SECRET}` },
+    });
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as Record<string, unknown>;
+    // Même avec des services lents, la réponse doit être 200 si tous répondent
+    expect(body.status).toBe("healthy");
+    expect(body._test_slow).toBe(true);
+    expect(body._test_latencyMs).toBe(4000);
+
+    const services = body.services as Record<string, { status: string }>;
+    expect(services.database.status).toBe("ok");
+    expect(services.redis.status).toBe("ok");
+    expect(services.stripe.status).toBe("ok");
   });
 });
 
@@ -871,5 +1101,90 @@ test.describe("User Export — GET /api/user/export", () => {
       expect(disposition).toContain("attachment;");
       expect(disposition).toContain(format === "csv" ? ".csv" : ".json");
     }
+  });
+
+  /* ----- New CSV injection tests ----- */
+
+  test("3j — CSV injection : valeurs commençant par =, +, -, @, % sont échappées avec préfixe '", async ({
+    page,
+  }) => {
+    const res = await fetchApi(
+      page,
+      "/api/user/export?_test_session=true&format=csv&trends=true&_test_csv_injection=true",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+
+    const csvContent = res.bodyText;
+
+    // Les valeurs dangereuses doivent être préfixées par '
+    // =HYPERLINK(...) → '=HYPERLINK(...)
+    expect(csvContent).toContain("'=HYPERLINK(");
+    // +SUM(...) → '+SUM(...)
+    expect(csvContent).toContain("'+SUM(");
+    // -1+2 → '-1+2
+    expect(csvContent).toContain("'-1+2");
+    // @SUM(...) → '@SUM(...)
+    expect(csvContent).toContain("'@SUM(");
+    // %DANGEROUS_MACRO() → '%DANGEROUS_MACRO()
+    expect(csvContent).toContain("'%DANGEROUS_MACRO()");
+
+    // Vérifie que les valeurs brutes (sans préfixe) n'apparaissent PAS
+    expect(csvContent).not.toContain(",=HYPERLINK(");
+    expect(csvContent).not.toContain(",+SUM(");
+    expect(csvContent).not.toContain(",-1+2");
+    expect(csvContent).not.toContain(",@SUM(");
+    expect(csvContent).not.toContain(",%DANGEROUS_MACRO()");
+  });
+
+  test("3k — CSV injection : titres de tendances contenant =HYPERLINK(...) sont sécurisés", async ({
+    page,
+  }) => {
+    const res = await fetchApi(
+      page,
+      "/api/user/export?_test_session=true&format=csv&trends=true&_test_csv_injection=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const csvContent = res.bodyText;
+    const lines = csvContent.split("\n");
+
+    // Trouve la ligne contenant le titre injecté
+    const injectionLine = lines.find((line: string) => line.includes("'=HYPERLINK("));
+    expect(injectionLine).toBeDefined();
+
+    // Vérifie que la ligne commence par les bons en-têtes et que le titre est échappé
+    expect(injectionLine).toContain("Tech IA");
+    expect(injectionLine).toContain("'=HYPERLINK(");
+
+    // Vérifie que HYPERLINK n'est PAS interprété comme une formule
+    expect(injectionLine).not.toMatch(/^[=+\-@%]/);
+  });
+
+  test("3l — CSV injection dans le résumé CSV (format sans tendances) → champs échappés", async ({
+    page,
+  }) => {
+    const res = await fetchApi(
+      page,
+      "/api/user/export?_test_session=true&format=csv&_test_csv_injection=true",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+
+    const csvContent = res.bodyText;
+
+    // Les champs dangereux dans le résumé doivent être échappés
+    expect(csvContent).toContain("'=SUM(");
+    expect(csvContent).toContain("'+HYPERLINK(");
+    expect(csvContent).toContain("'-1");
+    expect(csvContent).toContain("'@DANGER");
+    expect(csvContent).toContain("'%MACRO");
+
+    // Vérifie que les champs bruts non échappés n'apparaissent pas
+    expect(csvContent).not.toContain(",=SUM(");
+    expect(csvContent).not.toContain(",+HYPERLINK(");
   });
 });

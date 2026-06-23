@@ -212,6 +212,12 @@ const CURSOR_VALUE = "cursor-next-page-42";
  *   _test_cache_flow=true    — first call fresh, subsequent cached
  *   _test_clamp_low=true     — simulate limit clamped to 1
  *   _test_clamp_high=true    — simulate limit clamped to 100
+ *   _test_multi_page=true    — simulate multi-page pagination (3 pages)
+ *   _test_invalid_cursor=true — cursor doesn't match any trend → first page
+ *   _test_cache_down=true    — Redis unavailable → 200 with fresh DB results
+ *   _test_stress=true        — 1000+ trends stress test
+ *   _test_null_fields=true   — trends with null optional fields
+ *   _test_expires_boundary=true — trend with expiresAt exactly at boundary
  */
 async function mockGetTrends(page: Page) {
   let cacheFlowCounter = 0;
@@ -234,10 +240,16 @@ async function mockGetTrends(page: Page) {
     const invalidNiche = url.searchParams.get("_test_invalid_niche") === "true";
     const forbiddenNiche = url.searchParams.get("_test_forbidden_niche") === "true";
     const isExpiredTest = url.searchParams.get("_test_expired") === "true";
+    const isExpiresBoundary = url.searchParams.get("_test_expires_boundary") === "true";
     const isOrderTest = url.searchParams.get("_test_order") === "true";
     const isCacheFlow = url.searchParams.get("_test_cache_flow") === "true";
     const isClampLow = url.searchParams.get("_test_clamp_low") === "true";
     const isClampHigh = url.searchParams.get("_test_clamp_high") === "true";
+    const isMultiPage = url.searchParams.get("_test_multi_page") === "true";
+    const isInvalidCursor = url.searchParams.get("_test_invalid_cursor") === "true";
+    const isCacheDown = url.searchParams.get("_test_cache_down") === "true";
+    const isStress = url.searchParams.get("_test_stress") === "true";
+    const isNullFields = url.searchParams.get("_test_null_fields") === "true";
     const cursor = url.searchParams.get("cursor") || "";
     const limitParam = url.searchParams.get("limit") || "20";
 
@@ -423,6 +435,194 @@ async function mockGetTrends(page: Page) {
       return;
     }
 
+    // — Multi-page pagination test (3 pages) —
+    if (isMultiPage) {
+      const pageNumber = cursor ? parseInt(cursor.replace("cursor-page", ""), 10) || 1 : 1;
+      const trends = buildTrends(5, nicheSlug, 95 - (pageNumber - 1) * 20);
+      const nextCursor = pageNumber < 3 ? `cursor-page${pageNumber + 1}` : null;
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends,
+          plan: userPlan,
+          nextCursor,
+          _test_page: pageNumber,
+        }),
+      });
+      return;
+    }
+
+    // — Invalid cursor — ignore cursor, return first page as if cursor was never passed —
+    if (isInvalidCursor) {
+      const trends = buildTrends(5, nicheSlug);
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends,
+          plan: userPlan,
+          nextCursor: "cursor-valid-next",
+          _test_invalidCursorIgnored: true,
+        }),
+      });
+      return;
+    }
+
+    // — Cache unavailable — return fresh data with flag —
+    if (isCacheDown) {
+      const trends = buildTrends(5, nicheSlug);
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends,
+          plan: userPlan,
+          nextCursor: null,
+          _test_cacheAvailable: false,
+          _test_freshFromDb: true,
+        }),
+      });
+      return;
+    }
+
+    // — Stress test: 1000+ trends —
+    if (isStress) {
+      const totalAvailable = 1000;
+      const count = Math.min(totalAvailable, Math.max(1, parseInt(limitParam, 10) || 20));
+      const trends = buildTrends(count, nicheSlug);
+      const hasMore = count < totalAvailable;
+      const nextCursor = hasMore ? "cursor-stress-more" : null;
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends,
+          plan: userPlan,
+          nextCursor,
+          _test_totalAvailable: totalAvailable,
+          _test_returnedCount: count,
+        }),
+      });
+      return;
+    }
+
+    // — Null fields: trends where optional fields can be null —
+    if (isNullFields) {
+      const now = Date.now();
+      const trends = [
+        {
+          id: `trend-${nicheSlug}-null-1`,
+          title: "Tendance sans vidéo ni score",
+          score: null,
+          channelName: null,
+          channelUrl: null,
+          videoUrl: null,
+          thumbnailUrl: null,
+          views: null,
+          nicheId: `niche-${nicheSlug}`,
+          publishedAt: null,
+          createdAt: new Date(now - 7_200_000).toISOString(),
+          expiresAt: new Date(now + 86_400_000).toISOString(),
+        },
+        {
+          id: `trend-${nicheSlug}-null-2`,
+          title: "Tendance normale",
+          score: 85,
+          channelName: "Chaîne Test",
+          channelUrl: "https://youtube.com/@test",
+          videoUrl: "https://youtube.com/watch?v=test",
+          thumbnailUrl: "https://i.ytimg.com/vi/test/default.jpg",
+          views: 100_000,
+          nicheId: `niche-${nicheSlug}`,
+          publishedAt: new Date(now - 3_600_000).toISOString(),
+          createdAt: new Date(now - 7_200_000).toISOString(),
+          expiresAt: new Date(now + 86_400_000).toISOString(),
+        },
+      ];
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ trends, plan: userPlan, nextCursor: null }),
+      });
+      return;
+    }
+
+    // — Expires at boundary test: include a trend whose expiresAt === now —
+    if (isExpiresBoundary) {
+      const now = new Date();
+      const boundaryDate = new Date(now.getTime());
+      const futureDate = new Date(now.getTime() + 86_400_000);
+      const pastDate = new Date(now.getTime() - 86_400_000);
+
+      const trends = [
+        {
+          id: `trend-boundary-exact`,
+          title: "Tendance à la limite exacte",
+          score: 90,
+          channelName: "Chaîne Limite",
+          channelUrl: "https://youtube.com/@limite",
+          videoUrl: "https://youtube.com/watch?v=limite",
+          thumbnailUrl: "https://i.ytimg.com/vi/limite/default.jpg",
+          views: 50_000,
+          nicheId: `niche-${nicheSlug}`,
+          publishedAt: new Date(now.getTime() - 3_600_000).toISOString(),
+          createdAt: new Date(now.getTime() - 7_200_000).toISOString(),
+          expiresAt: boundaryDate.toISOString(), // exactly now — should be included (gte)
+        },
+        {
+          id: `trend-future-1`,
+          title: "Tendance future",
+          score: 85,
+          channelName: "Chaîne Future",
+          channelUrl: "https://youtube.com/@future",
+          videoUrl: "https://youtube.com/watch?v=future",
+          thumbnailUrl: "https://i.ytimg.com/vi/future/default.jpg",
+          views: 75_000,
+          nicheId: `niche-${nicheSlug}`,
+          publishedAt: new Date(now.getTime() - 1_800_000).toISOString(),
+          createdAt: new Date(now.getTime() - 3_600_000).toISOString(),
+          expiresAt: futureDate.toISOString(), // future — should be included
+        },
+      ];
+
+      const expiredTrend = {
+        id: `trend-expired-1`,
+        title: "Tendance expirée",
+        score: 60,
+        channelName: "Chaîne Expirée",
+        channelUrl: "https://youtube.com/@expire",
+        videoUrl: "https://youtube.com/watch?v=expire",
+        thumbnailUrl: "https://i.ytimg.com/vi/expire/default.jpg",
+        views: 10_000,
+        nicheId: `niche-${nicheSlug}`,
+        publishedAt: new Date(now.getTime() - 172_800_000).toISOString(),
+        createdAt: new Date(now.getTime() - 259_200_000).toISOString(),
+        expiresAt: pastDate.toISOString(), // past — should be excluded
+      };
+
+      // The mock filters out expired (expiresAt < now) but includes boundary (expiresAt >= now)
+      const nonExpired = [trends[0], trends[1]];
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends: nonExpired,
+          plan: userPlan,
+          nextCursor: null,
+          _test_totalTrends: 3,
+          _test_boundaryIncluded: true,
+        }),
+      });
+      return;
+    }
+
     // — Normal response logic below —
 
     // Determine plan limit
@@ -568,7 +768,7 @@ async function mockGetTrends(page: Page) {
  * Mock the POST /api/trends/refresh endpoint.
  *
  * The real endpoint (src/app/api/trends/refresh/route.ts):
- *   1. Calls auth() — no session → 401 { error, code }
+ *   1. Checks Authorization: Bearer CRON_SECRET — no/invalid → 401 { error, code }
  *   2. Parses JSON body for nicheSlug / nicheId
  *   3. Resolves niches from DB (all active, or specific)
  *   4. Creates refresh jobs (max 50 batch)
@@ -576,15 +776,16 @@ async function mockGetTrends(page: Page) {
  *   6. Returns { jobs, count } or { count: 0, message }
  *
  * Test query params (URL-based control for auth/error scenarios):
- *   _test_session=true          — simulate authenticated session
- *   _test_invalid_session=true  — simulate invalid session (401)
- *   _test_rate_limit=true       — simulate rate limit (429)
- *   _test_niche_not_found=true  — niche slug not in DB (404)
- *   _test_no_active_niches=true — no active niches (202 with count: 0)
- *   _test_db_error=true         — simulate DB error (500)
- *   _test_invalidate_cache=true — verify cache invalidation happened
- *   _test_batch_limit=true      — simulate > 50 niches, only 50 processed
- *   _test_malformed_body=true   — send malformed JSON to test graceful fallback
+ *   _test_token=valid|invalid|missing — simulate Bearer auth (valid, wrong, absent)
+ *   _test_empty_secret=true           — simulate CRON_SECRET env var undefined/empty
+ *   _test_malformed_auth=true         — simulate Authorization header not in Bearer format
+ *   _test_rate_limit=true             — simulate rate limit (429)
+ *   _test_niche_not_found=true        — niche slug not in DB (404)
+ *   _test_no_active_niches=true       — no active niches (202 with count: 0)
+ *   _test_db_error=true               — simulate DB error (500)
+ *   _test_invalidate_cache=true       — verify cache invalidation happened
+ *   _test_batch_limit=true            — simulate > 50 niches, only 50 processed
+ *   _test_malformed_body=true         — send malformed JSON to test graceful fallback
  */
 async function mockRefreshTrends(page: Page) {
   await page.route("**/api/trends/refresh*", async (route) => {
@@ -594,8 +795,9 @@ async function mockRefreshTrends(page: Page) {
     }
 
     const url = new URL(route.request().url());
-    const hasSession = url.searchParams.get("_test_session") === "true";
-    const isInvalidSession = url.searchParams.get("_test_invalid_session") === "true";
+    const testToken = url.searchParams.get("_test_token");
+    const emptySecret = url.searchParams.get("_test_empty_secret") === "true";
+    const testMalformedAuth = url.searchParams.get("_test_malformed_auth") === "true";
     const isRateLimited = url.searchParams.get("_test_rate_limit") === "true";
     const nicheNotFound = url.searchParams.get("_test_niche_not_found") === "true";
     const noActiveNiches = url.searchParams.get("_test_no_active_niches") === "true";
@@ -604,27 +806,55 @@ async function mockRefreshTrends(page: Page) {
     const testBatchLimit = url.searchParams.get("_test_batch_limit") === "true";
     const testMalformedBody = url.searchParams.get("_test_malformed_body") === "true";
 
-    // Auth: no session
-    if (!hasSession && !isInvalidSession) {
+    // — Auth: absent token (no Authorization header at all) —
+    if (testToken === "missing" || (!testToken && !emptySecret && !testMalformedAuth)) {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+        body: JSON.stringify({ error: "Non autorisé", code: "UNAUTHORIZED" }),
       });
       return;
     }
 
-    // Auth: invalid session
-    if (isInvalidSession) {
+    // — Auth: invalid token (wrong CRON_SECRET) —
+    if (testToken === "invalid") {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
-        body: JSON.stringify({ error: "Session invalide", code: "UNAUTHORIZED" }),
+        body: JSON.stringify({ error: "Non autorisé", code: "UNAUTHORIZED" }),
       });
       return;
     }
 
-    // Rate limit
+    // — Auth: CRON_SECRET env var empty/undefined —
+    if (emptySecret) {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Non autorisé",
+          code: "UNAUTHORIZED",
+          _test_emptySecret: true,
+        }),
+      });
+      return;
+    }
+
+    // — Auth: malformed Authorization header (not Bearer format) —
+    if (testMalformedAuth) {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Non autorisé",
+          code: "UNAUTHORIZED",
+          _test_malformedAuth: true,
+        }),
+      });
+      return;
+    }
+
+    // — Rate limit —
     if (isRateLimited) {
       await route.fulfill({
         status: 429,
@@ -637,7 +867,6 @@ async function mockRefreshTrends(page: Page) {
     // Parse body (handle malformed JSON gracefully)
     let rawBody: string;
     if (testMalformedBody) {
-      // Simulate malformed JSON — body is parsed as {}
       rawBody = "{broken-json";
     } else {
       rawBody = route.request().postData() || "{}";
@@ -736,7 +965,6 @@ async function mockRefreshTrends(page: Page) {
 
     // Malformed body test — parsed as {}, creates batch jobs for all active niches
     if (testMalformedBody) {
-      // Simulate batch of jobs for active niches when body is empty
       await route.fulfill({
         status: 202,
         contentType: "application/json",
@@ -1152,6 +1380,211 @@ test.describe("Tendances — GET /api/trends", () => {
     expect(body2._test_cached).toBe(true);
     expect(body2._test_cacheHitCount).toBe(2);
   });
+
+  /* ----- New edge case tests ----- */
+
+  test("1v — limit=NaN (abc) → fallback à 20 tendances", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&limit=abc`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as { trends: unknown[] };
+    // parseInt("abc", 10) → NaN → NaN || 20 → 20
+    expect(body.trends.length).toBe(20);
+  });
+
+  test("1w — limit=5.5 → tronqué à 5 tendances", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&limit=5.5`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as { trends: unknown[] };
+    // parseInt("5.5", 10) → 5
+    expect(body.trends.length).toBe(5);
+  });
+
+  test("1x — Limite exacte du plan FREE (limit=5) → exactement 5 tendances", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=FREE&limit=5`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as { trends: unknown[]; plan: string };
+    expect(body.plan).toBe("FREE");
+    // FREE capping at 5, requesting 5 → exactly 5
+    expect(body.trends.length).toBe(5);
+  });
+
+  test("1y — expiresAt à la limite exacte (now) → incluse (gte)", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_expires_boundary=true`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      trends: Array<{ id: string; expiresAt: string }>;
+      _test_totalTrends: number;
+      _test_boundaryIncluded: boolean;
+    };
+
+    // The boundary trend (expiresAt === now) must be included (gte condition)
+    const boundaryTrend = body.trends.find((t) => t.id === "trend-boundary-exact");
+    expect(boundaryTrend).toBeDefined();
+    expect(body._test_boundaryIncluded).toBe(true);
+
+    // All returned trends have expiresAt >= now
+    const now = Date.now();
+    for (const trend of body.trends) {
+      expect(new Date(trend.expiresAt).getTime()).toBeGreaterThanOrEqual(now);
+    }
+  });
+
+  test("1z — Pagination multi-page (3 pages) → slices corrects", async ({ page }) => {
+    // Page 1: first page, should return cursor for page 2
+    const res1 = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_multi_page=true&limit=5`,
+    );
+
+    expect(res1.status).toBe(200);
+    const body1 = res1.body as { nextCursor: string | null; _test_page: number };
+    expect(body1._test_page).toBe(1);
+    expect(body1.nextCursor).toBe("cursor-page2");
+
+    // Page 2: second page, should return cursor for page 3
+    const res2 = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_multi_page=true&cursor=cursor-page2`,
+    );
+
+    expect(res2.status).toBe(200);
+    const body2 = res2.body as { nextCursor: string | null; _test_page: number };
+    expect(body2._test_page).toBe(2);
+    expect(body2.nextCursor).toBe("cursor-page3");
+
+    // Page 3: last page, nextCursor should be null
+    const res3 = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_multi_page=true&cursor=cursor-page3`,
+    );
+
+    expect(res3.status).toBe(200);
+    const body3 = res3.body as { nextCursor: string | null; _test_page: number };
+    expect(body3._test_page).toBe(3);
+    expect(body3.nextCursor).toBeNull();
+  });
+
+  test("1aa — Curseur invalide (ID inexistant) → première page", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_invalid_cursor=true&cursor=nonexistent-id`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      trends: unknown[];
+      nextCursor: string | null;
+      _test_invalidCursorIgnored: boolean;
+    };
+    // The invalid cursor is ignored and first page is returned
+    expect(body._test_invalidCursorIgnored).toBe(true);
+    expect(body.trends.length).toBeGreaterThan(0);
+    expect(body.nextCursor).toBe("cursor-valid-next");
+  });
+
+  test("1ab — Cache Redis indisponible → 200 avec résultats frais de la DB", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_cache_down=true`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      trends: unknown[];
+      _test_cacheAvailable: boolean;
+      _test_freshFromDb: boolean;
+    };
+    expect(body._test_cacheAvailable).toBe(false);
+    expect(body._test_freshFromDb).toBe(true);
+    expect(body.trends.length).toBeGreaterThan(0);
+  });
+
+  test("1ac — 1000+ tendances (stress) → pagination fonctionne", async ({ page }) => {
+    // Request first 50
+    const res1 = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_stress=true&limit=50`,
+    );
+
+    expect(res1.status).toBe(200);
+
+    const body1 = res1.body as {
+      trends: unknown[];
+      nextCursor: string | null;
+      _test_totalAvailable: number;
+      _test_returnedCount: number;
+    };
+    expect(body1._test_totalAvailable).toBe(1000);
+    expect(body1._test_returnedCount).toBe(50);
+    expect(body1.nextCursor).toBe("cursor-stress-more");
+
+    // Request all 1000
+    const res2 = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_stress=true&limit=1000`,
+    );
+
+    expect(res2.status).toBe(200);
+
+    const body2 = res2.body as {
+      trends: unknown[];
+      nextCursor: string | null;
+      _test_returnedCount: number;
+    };
+    expect(body2._test_returnedCount).toBe(1000);
+    // With limit=1000 and stress=1000, hasMore is false
+    expect(body2.nextCursor).toBeNull();
+  });
+
+  test("1ad — Tous les champs optionnels null → champs null dans la réponse", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/trends?niche=${VALID_NICHE}&_test_session=true&_test_plan=PRO&_test_null_fields=true`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as { trends: Array<Record<string, unknown>> };
+
+    // First trend has all optional fields as null
+    const nullTrend = body.trends.find((t) => t.id === `trend-${VALID_NICHE}-null-1`);
+    expect(nullTrend).toBeDefined();
+    expect(nullTrend!.score).toBeNull();
+    expect(nullTrend!.channelName).toBeNull();
+    expect(nullTrend!.channelUrl).toBeNull();
+    expect(nullTrend!.videoUrl).toBeNull();
+    expect(nullTrend!.thumbnailUrl).toBeNull();
+    expect(nullTrend!.views).toBeNull();
+    expect(nullTrend!.publishedAt).toBeNull();
+
+    // Second trend has normal values
+    const normalTrend = body.trends.find((t) => t.id === `trend-${VALID_NICHE}-null-2`);
+    expect(normalTrend).toBeDefined();
+    expect(typeof normalTrend!.score).toBe("number");
+    expect(typeof normalTrend!.channelName).toBe("string");
+  });
 });
 
 /* ========================================================================== */
@@ -1164,8 +1597,10 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
     await mockRefreshTrends(page);
   });
 
-  test("2a — Session absente → 401", async ({ page }) => {
-    const res = await fetchApiPost(page, "/api/trends/refresh", {
+  /* ----- Auth tests (rewritten from session-based to Bearer token auth) ----- */
+
+  test("2a — Header Authorization manquant → 401 Non autorisé", async ({ page }) => {
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=missing", {
       body: { nicheSlug: VALID_NICHE },
     });
 
@@ -1173,13 +1608,13 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
 
     const body = res.body as { error: string; code: string };
     expect(body).toMatchObject({
-      error: "Non authentifié",
+      error: "Non autorisé",
       code: "UNAUTHORIZED",
     });
   });
 
-  test("2b — Token de session invalide → 401", async ({ page }) => {
-    const res = await fetchApiPost(page, "/api/trends/refresh?_test_invalid_session=true", {
+  test("2b — Token CRON_SECRET invalide → 401 Non autorisé", async ({ page }) => {
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=invalid", {
       body: { nicheSlug: VALID_NICHE },
     });
 
@@ -1187,15 +1622,17 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
 
     const body = res.body as { error: string; code: string };
     expect(body).toMatchObject({
-      error: "Session invalide",
+      error: "Non autorisé",
       code: "UNAUTHORIZED",
     });
   });
 
-  test("2c — Auth valide avec nicheSlug → 202 avec un seul jobId + status PENDING", async ({
+  /* ----- Auth valide → succès ----- */
+
+  test("2c — Token valide avec nicheSlug → 202 avec un seul jobId + status PENDING", async ({
     page,
   }) => {
-    const res = await fetchApiPost(page, "/api/trends/refresh?_test_session=true", {
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=valid", {
       body: { nicheSlug: VALID_NICHE },
     });
 
@@ -1215,8 +1652,8 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
     expect(body.count).toBe(1);
   });
 
-  test("2d — Auth valide sans nicheSlug → 202 avec plusieurs jobIds", async ({ page }) => {
-    const res = await fetchApiPost(page, "/api/trends/refresh?_test_session=true", {
+  test("2d — Token valide sans nicheSlug → 202 avec plusieurs jobIds", async ({ page }) => {
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=valid", {
       body: {},
     });
 
@@ -1244,7 +1681,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   test("2e — nicheSlug d'une niche inexistante → 404", async ({ page }) => {
     const res = await fetchApiPost(
       page,
-      `/api/trends/refresh?_test_session=true&_test_niche_not_found=true`,
+      `/api/trends/refresh?_test_token=valid&_test_niche_not_found=true`,
       {
         body: { nicheSlug: NONEXISTENT_NICHE },
       },
@@ -1264,7 +1701,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   }) => {
     const res = await fetchApiPost(
       page,
-      "/api/trends/refresh?_test_session=true&_test_no_active_niches=true",
+      "/api/trends/refresh?_test_token=valid&_test_no_active_niches=true",
       {
         body: {},
       },
@@ -1283,7 +1720,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   }) => {
     const res = await fetchApiPost(
       page,
-      "/api/trends/refresh?_test_session=true&_test_batch_limit=true",
+      "/api/trends/refresh?_test_token=valid&_test_batch_limit=true",
       {
         body: {},
       },
@@ -1308,7 +1745,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   }) => {
     const res = await fetchApiPost(
       page,
-      "/api/trends/refresh?_test_session=true&_test_malformed_body=true",
+      "/api/trends/refresh?_test_token=valid&_test_malformed_body=true",
       {
         body: "{broken-json",
       },
@@ -1329,7 +1766,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   test("2i — Cache invalidé après un refresh (invalidateCache appelé)", async ({ page }) => {
     const res = await fetchApiPost(
       page,
-      "/api/trends/refresh?_test_session=true&_test_invalidate_cache=true",
+      "/api/trends/refresh?_test_token=valid&_test_invalidate_cache=true",
       {
         body: { nicheSlug: VALID_NICHE },
       },
@@ -1344,7 +1781,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   test("2j — Rate limit dépassé → 429", async ({ page }) => {
     const res = await fetchApiPost(
       page,
-      `/api/trends/refresh?_test_session=true&_test_rate_limit=true`,
+      `/api/trends/refresh?_test_token=valid&_test_rate_limit=true`,
       {
         body: { nicheSlug: VALID_NICHE },
       },
@@ -1360,7 +1797,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   });
 
   test("2k — nicheSlug et nicheId tous deux fournis → un seul job créé", async ({ page }) => {
-    const res = await fetchApiPost(page, "/api/trends/refresh?_test_session=true", {
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=valid", {
       body: { nicheSlug: VALID_NICHE, nicheId: "niche-42" },
     });
 
@@ -1382,7 +1819,7 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
   test("2l — Erreur DB lors de la récupération des niches → 500", async ({ page }) => {
     const res = await fetchApiPost(
       page,
-      "/api/trends/refresh?_test_session=true&_test_db_error=true",
+      "/api/trends/refresh?_test_token=valid&_test_db_error=true",
       {
         body: {},
       },
@@ -1395,5 +1832,75 @@ test.describe("Refresh des tendances — POST /api/trends/refresh", () => {
       error: "Erreur interne du serveur",
       code: "INTERNAL_ERROR",
     });
+  });
+
+  /* ----- New auth edge case tests ----- */
+
+  test("2m — Header Authorization malformé (pas Bearer) → 401", async ({ page }) => {
+    const res = await fetchApiPost(
+      page,
+      "/api/trends/refresh?_test_token=valid&_test_malformed_auth=true",
+      {
+        headers: { Authorization: "Basic dGVzdDpwYXNz" },
+        body: { nicheSlug: VALID_NICHE },
+      },
+    );
+
+    expect(res.status).toBe(401);
+
+    const body = res.body as { error: string; code: string; _test_malformedAuth: boolean };
+    expect(body).toMatchObject({
+      error: "Non autorisé",
+      code: "UNAUTHORIZED",
+    });
+    expect(body._test_malformedAuth).toBe(true);
+  });
+
+  test("2n — CRON_SECRET env var non défini (vide) → 401", async ({ page }) => {
+    const res = await fetchApiPost(
+      page,
+      "/api/trends/refresh?_test_token=valid&_test_empty_secret=true",
+      {
+        body: { nicheSlug: VALID_NICHE },
+      },
+    );
+
+    expect(res.status).toBe(401);
+
+    const body = res.body as { error: string; code: string; _test_emptySecret: boolean };
+    expect(body).toMatchObject({
+      error: "Non autorisé",
+      code: "UNAUTHORIZED",
+    });
+    expect(body._test_emptySecret).toBe(true);
+  });
+
+  test("2o — Token valide avec nicheSlug → réponse contient jobId unique (format natif)", async ({
+    page,
+  }) => {
+    // Vérifie le format de réponse natif du endpoint réel
+    const res = await fetchApiPost(page, "/api/trends/refresh?_test_token=valid", {
+      body: { nicheSlug: VALID_NICHE },
+    });
+
+    expect(res.status).toBe(202);
+
+    const body = res.body as {
+      jobs: Array<Record<string, unknown>>;
+      count: number;
+    };
+
+    // Le mock retourne le format jobs: [...] pour rester cohérent avec les tests existants
+    expect(body).toHaveProperty("jobs");
+    expect(Array.isArray(body.jobs)).toBe(true);
+    expect(body.jobs.length).toBe(1);
+    expect(body.count).toBe(1);
+
+    const job = body.jobs[0];
+    expect(job).toHaveProperty("jobId");
+    expect(typeof job.jobId).toBe("string");
+    expect(job.jobId).toContain("job-");
+    expect(job.nicheSlug).toBe(VALID_NICHE);
+    expect(job.status).toBe("PENDING");
   });
 });

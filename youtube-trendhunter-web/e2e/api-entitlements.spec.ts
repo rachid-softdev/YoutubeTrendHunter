@@ -136,6 +136,14 @@ const BASE_USER: TestUser = {
  *   _test_no_usage=true             — no usage tracking (usage[key] = 0)
  *   _test_experiment=true           — include experiment feature
  *   _test_internal_error=true       — simulate internal error
+ *   _test_trial_active=true         — active trial user → plan PRO/TEAM
+ *   _test_trial_expired=true        — expired trial user → plan FREE
+ *   _test_sub_canceled=true         — CANCELED subscription → plan FREE
+ *   _test_sub_incomplete=true       — INCOMPLETE subscription → plan FREE
+ *   _test_limit_zero=true           — plan limit with value 0
+ *   _test_override_timebound=true   — time-bound org override applied
+ *   _test_no_user=true              — no user record in DB → 500
+ *   _test_unknown_plan=ENTERPRISE   — unknown plan → graceful fallback / error
  */
 async function mockEntitlementsEndpoint(page: Page) {
   await page.route("**/api/auth/session", async (route) => {
@@ -149,7 +157,8 @@ async function mockEntitlementsEndpoint(page: Page) {
       if (
         url.searchParams.get("_test_override_enabled") === "true" ||
         url.searchParams.get("_test_override_limit") === "true" ||
-        url.searchParams.get("_test_override_expired") === "true"
+        url.searchParams.get("_test_override_expired") === "true" ||
+        url.searchParams.get("_test_override_timebound") === "true"
       ) {
         user.orgId = "org-test-123";
       }
@@ -189,7 +198,17 @@ async function mockEntitlementsEndpoint(page: Page) {
     const hasExperiment = url.searchParams.get("_test_experiment") === "true";
     const internalError = url.searchParams.get("_test_internal_error") === "true";
 
-    const testPlan = url.searchParams.get("_test_plan") || "FREE";
+    // New test params
+    const trialActive = url.searchParams.get("_test_trial_active") === "true";
+    const trialExpired = url.searchParams.get("_test_trial_expired") === "true";
+    const subCanceled = url.searchParams.get("_test_sub_canceled") === "true";
+    const subIncomplete = url.searchParams.get("_test_sub_incomplete") === "true";
+    const limitZero = url.searchParams.get("_test_limit_zero") === "true";
+    const overrideTimebound = url.searchParams.get("_test_override_timebound") === "true";
+    const noUser = url.searchParams.get("_test_no_user") === "true";
+    const unknownPlan = url.searchParams.get("_test_unknown_plan") || "";
+
+    const testPlan = unknownPlan || url.searchParams.get("_test_plan") || "FREE";
     const planKey = testPlan.toLowerCase();
 
     // Étape 1: Auth check
@@ -212,7 +231,41 @@ async function mockEntitlementsEndpoint(page: Page) {
       return;
     }
 
-    // Étape 3: Build features, limits, usage, resetAt, experimentBuckets
+    // Étape 3: No user record in DB → 500
+    if (noUser) {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Erreur interne", code: "INTERNAL_ERROR" }),
+      });
+      return;
+    }
+
+    // Étape 4: Unknown plan → graceful fallback or error
+    if (unknownPlan && !["FREE", "PRO", "TEAM"].includes(unknownPlan)) {
+      // Simulate the real endpoint crash when PLAN_LIMITS[plan] is undefined
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Erreur interne", code: "INTERNAL_ERROR" }),
+      });
+      return;
+    }
+
+    // Étape 5: Determine effective plan based on subscription scenarios
+    let effectivePlan = testPlan;
+
+    if (trialActive) {
+      // Active trial → PRO (or TEAM if plan is TEAM)
+      effectivePlan = testPlan === "TEAM" ? "TEAM" : "PRO";
+    } else if (trialExpired || subCanceled || subIncomplete) {
+      // Expired trial, CANCELED, or INCOMPLETE → FREE
+      effectivePlan = "FREE";
+    }
+
+    const effectivePlanKey = effectivePlan.toLowerCase();
+
+    // Étape 6: Build features, limits, usage, resetAt, experimentBuckets
     const features: Record<string, boolean> = {};
     const limits: Record<string, number | null> = {};
     const usage: Record<string, number> = {};
@@ -223,14 +276,14 @@ async function mockEntitlementsEndpoint(page: Page) {
       // Simulate DB plan with planFeatures
       features["niches"] = true;
       features["trends"] = true;
-      features["alerts"] = testPlan !== "FREE";
-      features["export"] = testPlan !== "FREE";
-      features["api"] = testPlan === "TEAM";
-      features["ai_insights"] = testPlan !== "FREE";
+      features["alerts"] = effectivePlan !== "FREE";
+      features["export"] = effectivePlan !== "FREE";
+      features["api"] = effectivePlan === "TEAM";
+      features["ai_insights"] = effectivePlan !== "FREE";
 
-      if (testPlan === "FREE") {
-        limits["niches.max"] = 1;
-        limits["trends.perNiche"] = 5;
+      if (effectivePlan === "FREE") {
+        limits["niches.max"] = limitZero ? 0 : 1;
+        limits["trends.perNiche"] = limitZero ? 0 : 5;
       } else {
         limits["niches.max"] = null; // unlimited
         limits["trends.perNiche"] = null; // unlimited
@@ -246,11 +299,16 @@ async function mockEntitlementsEndpoint(page: Page) {
         limits["niches.max"] = 10; // override sets custom limit
       }
 
+      // Time-bound override (still valid)
+      if (overrideTimebound) {
+        limits["niches.max"] = 25; // time-bound override applied
+        features["export"] = true;
+        features["_override_timebound_applied"] = true;
+      }
+
       // Expired override — NOT applied (simulated by not being in test params)
       if (overrideExpired) {
         // The override exists but is expired, so it's not applied.
-        // Features stay as default DB plan values.
-        // We use a flag to verify the override was NOT applied.
         features["_override_expired_skipped"] = true;
       }
 
@@ -280,13 +338,13 @@ async function mockEntitlementsEndpoint(page: Page) {
       // Fallback to static PLAN_LIMITS
       features["niches"] = true;
       features["trends"] = true;
-      features["alerts"] = testPlan !== "FREE";
-      features["export"] = testPlan !== "FREE";
-      features["api"] = testPlan === "TEAM";
+      features["alerts"] = effectivePlan !== "FREE";
+      features["export"] = effectivePlan !== "FREE";
+      features["api"] = effectivePlan === "TEAM";
 
-      if (testPlan === "FREE") {
-        limits["niches.max"] = 1;
-        limits["trends.perNiche"] = 5;
+      if (effectivePlan === "FREE") {
+        limits["niches.max"] = limitZero ? 0 : 1;
+        limits["trends.perNiche"] = limitZero ? 0 : 5;
       } else {
         limits["niches.max"] = null;
         limits["trends.perNiche"] = null;
@@ -322,8 +380,8 @@ async function mockEntitlementsEndpoint(page: Page) {
     }
 
     const entitlements = {
-      plan: testPlan,
-      planKey,
+      plan: effectivePlan,
+      planKey: effectivePlanKey,
       features,
       limits,
       usage,
@@ -579,5 +637,159 @@ test.describe("Entitlements — GET /api/entitlements", () => {
     const body = res.body as { error: string; code: string };
     expect(body).toHaveProperty("error");
     expect(body.code).toBe("INTERNAL_ERROR");
+  });
+
+  /* ----- New tests ----- */
+
+  test("1n — Utilisateur en essai actif → plan PRO (ou TEAM)", async ({ page }) => {
+    // Active trial with PRO plan
+    const resPro = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=PRO&_test_trial_active=true",
+    );
+
+    expect(resPro.status).toBe(200);
+    const bodyPro = resPro.body as { plan: string; planKey: string; features: Record<string, boolean> };
+    // Active trial grants PRO benefits
+    expect(bodyPro.plan).toBe("PRO");
+    expect(bodyPro.planKey).toBe("pro");
+    expect(bodyPro.features.alerts).toBe(true);
+    expect(bodyPro.features.export).toBe(true);
+    expect(bodyPro.features.ai_insights).toBe(true);
+
+    // Active trial with TEAM plan
+    const resTeam = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=TEAM&_test_trial_active=true",
+    );
+
+    expect(resTeam.status).toBe(200);
+    const bodyTeam = resTeam.body as { plan: string; planKey: string; features: Record<string, boolean> };
+    expect(bodyTeam.plan).toBe("TEAM");
+    expect(bodyTeam.planKey).toBe("team");
+    expect(bodyTeam.features.api).toBe(true);
+  });
+
+  test("1o — Essai expiré → plan FREE", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=PRO&_test_trial_expired=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      plan: string;
+      planKey: string;
+      features: Record<string, boolean>;
+      limits: Record<string, number | null>;
+    };
+    // Expired trial → FREE
+    expect(body.plan).toBe("FREE");
+    expect(body.planKey).toBe("free");
+    // FREE features
+    expect(body.features.alerts).toBe(false);
+    expect(body.features.export).toBe(false);
+    expect(body.features.api).toBe(false);
+    // FREE limits
+    expect(body.limits["niches.max"]).toBe(1);
+    expect(body.limits["trends.perNiche"]).toBe(5);
+  });
+
+  test("1p — Abonnement CANCELED → plan FREE", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=PRO&_test_sub_canceled=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      plan: string;
+      planKey: string;
+      features: Record<string, boolean>;
+    };
+    expect(body.plan).toBe("FREE");
+    expect(body.planKey).toBe("free");
+    expect(body.features.alerts).toBe(false);
+    expect(body.features.export).toBe(false);
+  });
+
+  test("1q — Abonnement INCOMPLETE → plan FREE", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=TEAM&_test_sub_incomplete=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      plan: string;
+      planKey: string;
+      features: Record<string, boolean>;
+    };
+    expect(body.plan).toBe("FREE");
+    expect(body.planKey).toBe("free");
+    expect(body.features.alerts).toBe(false);
+    expect(body.features.export).toBe(false);
+    expect(body.features.api).toBe(false);
+  });
+
+  test("1r — Limite de plan avec valeur 0 → 0", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=FREE&_test_limit_zero=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as { limits: Record<string, number | null> };
+    // Limit value should be exactly 0, not null
+    expect(body.limits["niches.max"]).toBe(0);
+    expect(body.limits["trends.perNiche"]).toBe(0);
+  });
+
+  test("1s — Surcharge org limitée dans le temps → surcharges appliquées", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_db_plan=true&_test_plan=PRO&_test_override_timebound=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as {
+      features: Record<string, boolean>;
+      limits: Record<string, number | null>;
+    };
+    // Time-bound override should be applied
+    expect(body.features["_override_timebound_applied"]).toBe(true);
+    expect(body.limits["niches.max"]).toBe(25);
+    expect(body.features.export).toBe(true);
+  });
+
+  test("1t — Aucun enregistrement utilisateur en DB → 500", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_no_user=true",
+    );
+
+    expect(res.status).toBe(500);
+
+    const body = res.body as { error: string; code: string };
+    expect(body).toHaveProperty("error");
+    expect(body.code).toBe("INTERNAL_ERROR");
+  });
+
+  test("1u — Plan inconnu 'ENTERPRISE' → fallback gracieux ou 500", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/entitlements?_test_session=true&_test_unknown_plan=ENTERPRISE",
+    );
+
+    // The real endpoint would crash because PLAN_LIMITS["ENTERPRISE"] is undefined
+    expect(res.status).toBe(500);
+
+    const body = res.body as { error: string; code: string };
+    expect(body).toHaveProperty("error");
   });
 });

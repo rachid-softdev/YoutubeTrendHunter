@@ -1519,3 +1519,834 @@ test.describe("DELETE /api/alerts/[id] — Suppression d'une alerte", () => {
     ).toBe(true);
   });
 });
+
+/* ========================================================================== */
+/*  6. GET /api/alerts — Cas limites supplémentaires                          */
+/* ========================================================================== */
+
+test.describe("GET /api/alerts — Cas limites supplémentaires", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("6a — Utilisateur avec 0 niches suivies → userNiches: []", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alerts: [makeAlertWithNiche()],
+          userNiches: [],
+          plan: "PRO",
+          canCreate: true,
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts");
+    expect(res.status).toBe(200);
+    const body = res.body as { userNiches: unknown[] };
+    expect(Array.isArray(body.userNiches)).toBe(true);
+    expect(body.userNiches).toEqual([]);
+  });
+
+  test("6b — Échec partiel (getUserNiches lance une erreur) → 500", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Erreur interne du serveur", code: "INTERNAL_ERROR" }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts");
+    expect(res.status).toBe(500);
+    expect((res.body as Record<string, string>).code).toBe("INTERNAL_ERROR");
+  });
+
+  test("6c — Plan utilisateur inconnu → fallback gracieux", async ({ page }) => {
+    const sessionUnknown = buildSession({
+      id: "user-unknown-plan",
+      name: "Unknown Plan",
+      email: "unknown@test.com",
+      role: "USER",
+      plan: "SUPER_DUPER_PLAN",
+    });
+    await mockSession(page, sessionUnknown);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alerts: [],
+          userNiches: [{ nicheId: "niche-1" }],
+          plan: "SUPER_DUPER_PLAN",
+          canCreate: false,
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts");
+    expect(res.status).toBe(200);
+    const body = res.body as { plan: string; canCreate: boolean };
+    // Unknown plan → PLAN_LIMITS fallback should treat as restrictive
+    expect(body.plan).toBe("SUPER_DUPER_PLAN");
+    expect(body.canCreate).toBe(false);
+  });
+
+  test("6d — Cache périmé → données en cache retournées", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    const cachedAt = new Date(Date.now() - 3600000).toISOString(); // 1h old
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alerts: [makeAlertWithNiche({ id: "stale-cached-alert" })],
+          userNiches: [{ niche: { id: "niche-1", name: "Tech & IA", slug: "tech" } }],
+          plan: "PRO",
+          canCreate: true,
+          _cache: { hit: true, stale: true, cachedAt },
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts");
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    const cache = body._cache as Record<string, unknown>;
+    expect(cache.hit).toBe(true);
+    expect(cache.stale).toBe(true);
+  });
+});
+
+/* ========================================================================== */
+/*  7. POST /api/alerts — Cas limites supplémentaires                         */
+/* ========================================================================== */
+
+test.describe("POST /api/alerts — Cas limites supplémentaires", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("7a — threshold en chaîne de caractères '70' → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (typeof body.threshold === "string") {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { threshold: ["Expected number, received string"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche({ id: "alert-threshold-ok" }) }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "EMAIL", threshold: "70" },
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details.threshold).toBeDefined();
+  });
+
+  test("7b — Threshold à la limite inférieure (0) → 201", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (body.threshold < 0 || body.threshold > 100) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Threshold hors limites", code: "VALIDATION_ERROR" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            alert: makeAlertWithNiche({ id: "alert-threshold-0", threshold: 0 }),
+          }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "EMAIL", threshold: 0 },
+    });
+    expect(res.status).toBe(201);
+    const data = res.body as { alert: Record<string, unknown> };
+    expect(data.alert.threshold).toBe(0);
+  });
+
+  test("7c — Threshold à la limite supérieure (100) → 201", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (body.threshold < 0 || body.threshold > 100) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Threshold hors limites", code: "VALIDATION_ERROR" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            alert: makeAlertWithNiche({ id: "alert-threshold-100", threshold: 100 }),
+          }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "EMAIL", threshold: 100 },
+    });
+    expect(res.status).toBe(201);
+    const data = res.body as { alert: Record<string, unknown> };
+    expect(data.alert.threshold).toBe(100);
+  });
+
+  test("7d — type chaîne vide → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (!body.type || (typeof body.type === "string" && body.type.trim() === "")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { type: ["Required"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche({ id: "alert-type-ok" }) }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "", channel: "EMAIL" },
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details.type).toBeDefined();
+  });
+
+  test("7e — channel chaîne vide → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (!body.channel || (typeof body.channel === "string" && body.channel.trim() === "")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { channel: ["Required"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche({ id: "alert-channel-ok" }) }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "" },
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details.channel).toBeDefined();
+  });
+
+  test("7f — CRITIQUE: XSS dans webhookUrl (javascript:alert(1)) → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      const webhook = body.webhookUrl as string;
+      if (webhook && webhook.toLowerCase().startsWith("javascript:")) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { webhookUrl: ["URL non autorisée"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche({ id: "alert-webhook-ok" }) }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "WEBHOOK", webhookUrl: "javascript:alert(1)" },
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details.webhookUrl).toBeDefined();
+  });
+
+  test("7g — webhookUrl très long (5000 caractères) → 400 ou 500", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    const longUrl = "https://hooks.example.com/" + "a".repeat(4970);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      const webhook = body.webhookUrl as string;
+      if (webhook && webhook.length > 2000) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { webhookUrl: ["URL trop longue (max 2000)"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche({ id: "alert-webhook-ok" }) }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: { type: "SCORE_THRESHOLD", channel: "WEBHOOK", webhookUrl: longUrl },
+    });
+    // Should be a client error (400) or server error (500), never success
+    expect([400, 500]).toContain(res.status);
+  });
+
+  test("7h — Payload complet avec tous les champs optionnels → 201", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      // Verify all fields present
+      expect(body.type).toBe("SPIKE");
+      expect(body.channel).toBe("WEBHOOK");
+      expect(body.nicheId).toBe("niche-1");
+      expect(body.threshold).toBe(85);
+      expect(body.webhookUrl).toBe("https://hooks.example.com/full");
+
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alert: makeAlertWithNiche({
+            id: "alert-full-fields",
+            type: "SPIKE",
+            threshold: 85,
+            channel: "WEBHOOK",
+            webhookUrl: "https://hooks.example.com/full",
+          }),
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      body: {
+        type: "SPIKE",
+        channel: "WEBHOOK",
+        nicheId: "niche-1",
+        threshold: 85,
+        webhookUrl: "https://hooks.example.com/full",
+      },
+    });
+    expect(res.status).toBe(201);
+    const data = res.body as { alert: Record<string, unknown> };
+    expect(data.alert.type).toBe("SPIKE");
+    expect(data.alert.channel).toBe("WEBHOOK");
+    expect(data.alert.nicheId).toBe("niche-1");
+    expect(data.alert.threshold).toBe(85);
+    expect(data.alert.webhookUrl).toBe("https://hooks.example.com/full");
+  });
+
+  test("7i — Corps JSON non-objet (tableau) → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      if (Array.isArray(body) || typeof body !== "object" || body === null) {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { _body: ["Expected object, received array"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche() }),
+        });
+      }
+    });
+
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      // fetchApi auto-stringifies arrays correctly
+      body: ["SCORE_THRESHOLD", "EMAIL"],
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details._body).toBeDefined();
+  });
+
+  test("7j — Corps JSON non-objet (chaîne simple) → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      // Check if postData is valid JSON object
+      const rawBody = route.request().postData() || "{}";
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawBody);
+      } catch {
+        parsed = rawBody;
+      }
+      if (typeof parsed === "string" || typeof parsed === "number") {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Paramètres invalides",
+            code: "VALIDATION_ERROR",
+            details: { _body: ["Expected object, received string"] },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ alert: makeAlertWithNiche() }),
+        });
+      }
+    });
+
+    // For a string body, we need to pass it differently since fetchApi auto-stringifies
+    // Override Content-Type and pass raw string
+    const res = await fetchApi(page, "/api/alerts", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: '"ceci est une simple chaîne"',
+    });
+    expect(res.status).toBe(400);
+    const details = (res.body as Record<string, unknown>).details as Record<string, unknown>;
+    expect(details._body).toBeDefined();
+  });
+});
+
+/* ========================================================================== */
+/*  8. PATCH /api/alerts/[id] — Cas limites supplémentaires                   */
+/* ========================================================================== */
+
+test.describe("PATCH /api/alerts/[id] — Cas limites supplémentaires", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("8a — Corps vide {} → 200 sans modification", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts/alert-patch-empty*", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alert: makeAlertWithNiche({ id: "alert-patch-empty" }),
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts/alert-patch-empty", {
+      method: "PATCH",
+      body: {},
+    });
+    expect(res.status).toBe(200);
+    const data = res.body as { alert: Record<string, unknown> };
+    expect(data.alert.id).toBe("alert-patch-empty");
+  });
+
+  test("8b — nicheId: null → supprime l'association à la niche", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts/alert-unlink-niche*", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      const body = JSON.parse(route.request().postData() || "{}");
+      expect(body.nicheId).toBeNull();
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alert: makeAlert({ id: "alert-unlink-niche", nicheId: null, niche: null }),
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts/alert-unlink-niche", {
+      method: "PATCH",
+      body: { nicheId: null },
+    });
+    expect(res.status).toBe(200);
+    const data = res.body as { alert: Record<string, unknown> };
+    expect(data.alert.nicheId).toBeNull();
+    expect(data.alert.niche).toBeNull();
+  });
+
+  test("8c — CRITIQUE: IDOR — User A tente de PATCH l'alerte de User B → 404", async ({ page }) => {
+    // Authenticated as SESSION_PRO (user-pro-002) but accessing alert belonging to another user
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts/alert-b-1*", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Alerte introuvable", code: "NOT_FOUND" }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts/alert-b-1", {
+      method: "PATCH",
+      body: { isActive: false },
+    });
+    expect(res.status).toBe(404);
+    expect((res.body as Record<string, string>).code).toBe("NOT_FOUND");
+  });
+
+  test("8d — Mise à jour concurrente (2 PATCH simultanés) → les deux 200, dernier gagne", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    let patchVersion = 0;
+
+    await page.route("**/api/alerts/alert-concurrent*", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      patchVersion++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          alert: makeAlertWithNiche({
+            id: "alert-concurrent",
+            threshold: 80 + patchVersion,
+            _patchVersion: patchVersion,
+          }),
+        }),
+      });
+    });
+
+    const [res1, res2] = await Promise.all([
+      fetchApi(page, "/api/alerts/alert-concurrent", {
+        method: "PATCH",
+        body: { threshold: 85 },
+      }),
+      fetchApi(page, "/api/alerts/alert-concurrent", {
+        method: "PATCH",
+        body: { threshold: 90 },
+      }),
+    ]);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+
+    const data1 = res1.body as { alert: Record<string, unknown> };
+    const data2 = res2.body as { alert: Record<string, unknown> };
+    expect(data1.alert).toHaveProperty("id");
+    expect(data2.alert).toHaveProperty("id");
+    // Both should succeed (last write wins semantics)
+    expect(data1.alert._patchVersion ?? data2.alert._patchVersion).toBeDefined();
+  });
+
+  test("8e — Cohérence read-after-write (PATCH puis GET) → valeurs mises à jour", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    let updatedThreshold = 70;
+
+    await page.route("**/api/alerts/alert-rw-consistency*", async (route) => {
+      const method = route.request().method();
+
+      if (method === "PATCH") {
+        const body = JSON.parse(route.request().postData() || "{}");
+        if (body.threshold !== undefined) {
+          updatedThreshold = body.threshold;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            alert: makeAlertWithNiche({
+              id: "alert-rw-consistency",
+              threshold: updatedThreshold,
+            }),
+          }),
+        });
+      } else if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            alert: makeAlertWithNiche({
+              id: "alert-rw-consistency",
+              threshold: updatedThreshold,
+            }),
+          }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    // Étape 1: PATCH pour mettre à jour le threshold
+    const patchRes = await fetchApi(page, "/api/alerts/alert-rw-consistency", {
+      method: "PATCH",
+      body: { threshold: 95 },
+    });
+    expect(patchRes.status).toBe(200);
+    expect((patchRes.body as { alert: Record<string, unknown> }).alert.threshold).toBe(95);
+
+    // Étape 2: GET pour vérifier la valeur mise à jour
+    const getRes = await fetchApi(page, "/api/alerts/alert-rw-consistency");
+    expect(getRes.status).toBe(200);
+    const getData = getRes.body as { alert: Record<string, unknown> };
+    expect(getData.alert.threshold).toBe(95);
+  });
+
+  test("8f — Corps JSON invalide → 400", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts/alert-patch-invalid-json*", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Paramètres invalides",
+          code: "VALIDATION_ERROR",
+        }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts/alert-patch-invalid-json", {
+      method: "PATCH",
+      headers: { "content-type": "text/plain" },
+      body: "pas du json valide",
+    });
+    expect(res.status).toBe(400);
+    expect((res.body as Record<string, string>).code).toBe("VALIDATION_ERROR");
+  });
+});
+
+/* ========================================================================== */
+/*  9. DELETE /api/alerts/[id] — Cas limites supplémentaires                  */
+/* ========================================================================== */
+
+test.describe("DELETE /api/alerts/[id] — Cas limites supplémentaires", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("9a — CRITIQUE: IDOR — User A tente de DELETE l'alerte de User B → 404", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+
+    await page.route("**/api/alerts/alert-b-1*", async (route) => {
+      if (route.request().method() !== "DELETE") {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Alerte introuvable", code: "NOT_FOUND" }),
+      });
+    });
+
+    const res = await fetchApi(page, "/api/alerts/alert-b-1", { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect((res.body as Record<string, string>).code).toBe("NOT_FOUND");
+  });
+
+  test("9b — Double suppression → 204 puis 404", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    let deleteCount = 0;
+
+    await page.route("**/api/alerts/alert-del-twice*", async (route) => {
+      if (route.request().method() !== "DELETE") {
+        await route.fallback();
+        return;
+      }
+      deleteCount++;
+      if (deleteCount === 1) {
+        await route.fulfill({ status: 204 });
+      } else {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Alerte introuvable", code: "NOT_FOUND" }),
+        });
+      }
+    });
+
+    const res1 = await fetchApi(page, "/api/alerts/alert-del-twice", { method: "DELETE" });
+    expect(res1.status).toBe(204);
+    expect(res1.bodyText).toBe("");
+
+    const res2 = await fetchApi(page, "/api/alerts/alert-del-twice", { method: "DELETE" });
+    expect(res2.status).toBe(404);
+    expect((res2.body as Record<string, string>).code).toBe("NOT_FOUND");
+  });
+
+  test("9c — Injection SQL dans le paramètre ID → 404 (Prisma paramétrise)", async ({ page }) => {
+    await mockSession(page, SESSION_PRO);
+    const sqlPayloads = [
+      "'; DROP TABLE alerts; --",
+      "1 OR 1=1",
+      "'; SELECT * FROM users; --",
+      "alert-id' UNION SELECT * FROM credentials; --",
+    ];
+
+    for (const payload of sqlPayloads) {
+      await page.route(`**/api/alerts/${payload}*`, async (route) => {
+        if (route.request().method() !== "DELETE") {
+          await route.fallback();
+          return;
+        }
+        // Prisma parameterizes queries, so injection payloads should result in 404
+        // (no matching record with that id)
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Alerte introuvable", code: "NOT_FOUND" }),
+        });
+      });
+
+      const res = await fetchApi(page, `/api/alerts/${encodeURIComponent(payload)}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+      expect((res.body as Record<string, string>).code).toBe("NOT_FOUND");
+    }
+  });
+});
