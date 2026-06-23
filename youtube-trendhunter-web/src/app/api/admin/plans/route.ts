@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = Math.max(1, parseInt(searchParams.get("limit") || "20"));
     const sort = searchParams.get("sort") || "sortOrder:asc";
 
     // @ts-ignore - using new plan model

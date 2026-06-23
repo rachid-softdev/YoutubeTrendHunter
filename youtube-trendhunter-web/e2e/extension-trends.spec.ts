@@ -1492,3 +1492,93 @@ test.describe("Extension Trends — Sécurité", () => {
     // FREE plan: nextCursor should be null since we can't paginate beyond limit
   });
 });
+
+/* ========================================================================== */
+/*  GET /api/extension/trends — Cas supplémentaires                          */
+/* ========================================================================== */
+
+test.describe("Extension Trends — Cas supplémentaires", () => {
+  const VALID_TOKEN = crypto.randomUUID();
+
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+    await mockTrendsEndpoint(page, VALID_TOKEN);
+  });
+
+  test("8a — Slug de niche avec espaces encodés (%20tech-ia%20) → slug trimé ou niche inconnue → 200", async ({
+    page,
+  }) => {
+    // Le slug " tech-ia " (avec espaces) ne correspond à aucune niche connue
+    const res = await fetchApi(page, `/api/extension/trends?niche=%20tech-ia%20`, {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    // Le endpoint retourne un tableau vide pour les niches inconnues (pas d'erreur)
+    expect(body).toHaveProperty("trends");
+    expect(body).toHaveProperty("plan");
+    expect(body).toHaveProperty("nextCursor");
+  });
+
+  test("8b — Paramètre cursor avec tentative d'injection SQL → 200, pas de crash", async ({
+    page,
+  }) => {
+    const sqlInjectionPayloads = [
+      "' OR 1=1 --",
+      "'; DROP TABLE trends; --",
+      "' UNION SELECT * FROM users --",
+      "1; SELECT * FROM admin --",
+    ];
+
+    for (const payload of sqlInjectionPayloads) {
+      const res = await fetchApi(
+        page,
+        `/api/extension/trends?niche=tech-ia&limit=5&cursor=${encodeURIComponent(payload)}&_test_mode=empty-cursor`,
+        {
+          headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+        },
+      );
+
+      // Le endpoint ne doit pas crasher — soit il retourne 200, soit il rejette proprement
+      expect(res.status).toBe(200);
+      const body = res.body as Record<string, unknown>;
+      expect(body).toHaveProperty("trends");
+      expect(body).toHaveProperty("plan");
+      expect(body).toHaveProperty("nextCursor");
+    }
+  });
+
+  test("8c — Paramètre limit=9999999 → clampé à 100 puis au planLimit (20 pour TEAM)", async ({
+    page,
+  }) => {
+    const res = await fetchApi(page, `/api/extension/trends?niche=tech-ia&limit=9999999`, {
+      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    const trends = body.trends as Array<unknown>;
+    // TEAM planLimit is 20, so max 20 trends — même avec 9999999
+    expect(trends.length).toBeLessThanOrEqual(20);
+    expect(trends.length).toBe(20);
+  });
+
+  test("8d — Plan FREE avec pagination (cursor) → nextCursor: null", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      `/api/extension/trends?niche=tech-ia&limit=5&cursor=trend-3&_test_plan=FREE`,
+      {
+        headers: { Authorization: `Bearer ${VALID_TOKEN}` },
+      },
+    );
+
+    expect(res.status).toBe(200);
+    const body = res.body as Record<string, unknown>;
+    expect(body.plan).toBe("FREE");
+    // Le plan FREE ne supporte pas la pagination avancée → nextCursor null
+    // Le nombre de tendances est limité à 5
+    const trends = body.trends as Array<unknown>;
+    expect(trends.length).toBeLessThanOrEqual(5);
+  });
+});

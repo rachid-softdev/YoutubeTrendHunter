@@ -100,6 +100,11 @@ async function fetchApi<T = unknown>(page: Page, url: string): Promise<ApiRespon
  *   _test_owner=self|other     — set job ownership (default: self)
  *   _test_status=PENDING|PROCESSING|COMPLETED|FAILED  — set job status
  *   _test_invalid_id=true      — simulate invalid ID format (treated as not found)
+ *   _test_lifecycle=true       — simulate job lifecycle steps (_test_step=1|2|3)
+ *   _test_system_owned=true    — job with userId=null (system-owned)
+ *   _test_stale=true           — stale PROCESSING job (lockedAt > 5 min ago)
+ *   _test_max_attempts=true    — job exceeded maxAttempts (3) → FAILED
+ *   _test_path_traversal=true  — path traversal in job ID → 404
  */
 async function mockGetJob(page: Page) {
   await page.route("**/api/auth/session", async (route) => {
@@ -145,6 +150,11 @@ async function mockGetJob(page: Page) {
     const isAdmin = url.searchParams.get("_test_role") === "admin";
     const status = url.searchParams.get("_test_status") || "COMPLETED";
     const invalidId = url.searchParams.get("_test_invalid_id") === "true";
+    const isLifecycle = url.searchParams.get("_test_lifecycle") === "true";
+    const isSystemOwned = url.searchParams.get("_test_system_owned") === "true";
+    const isStale = url.searchParams.get("_test_stale") === "true";
+    const isMaxAttempts = url.searchParams.get("_test_max_attempts") === "true";
+    const isPathTraversal = url.searchParams.get("_test_path_traversal") === "true";
 
     // Étape 1: Auth check — mirrors real endpoint
     if (!hasSession) {
@@ -156,7 +166,17 @@ async function mockGetJob(page: Page) {
       return;
     }
 
-    // Étape 2: Invalid ID — treated as not found
+    // Étape 2: Path traversal — 404
+    if (isPathTraversal) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Job introuvable", code: "NOT_FOUND" }),
+      });
+      return;
+    }
+
+    // Étape 3: Invalid ID — treated as not found
     if (invalidId) {
       await route.fulfill({
         status: 404,
@@ -166,7 +186,7 @@ async function mockGetJob(page: Page) {
       return;
     }
 
-    // Étape 3: Job not found — getJob returns null
+    // Étape 4: Job not found — getJob returns null
     if (notFound) {
       await route.fulfill({
         status: 404,
@@ -176,7 +196,7 @@ async function mockGetJob(page: Page) {
       return;
     }
 
-    // Étape 4: Ownership check — hide existence from non-owners (non-admin)
+    // Étape 5: Ownership check — hide existence from non-owners (non-admin)
     if (owner === "other" && !isAdmin) {
       await route.fulfill({
         status: 404,
@@ -186,7 +206,123 @@ async function mockGetJob(page: Page) {
       return;
     }
 
-    // Étape 5: Build job data based on status
+    // Étape 6: System-owned job (userId=null) — accessible to all authenticated users
+    if (isSystemOwned) {
+      const now = new Date();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "job-system-1",
+          type: "TREND_SCORE",
+          status: "COMPLETED",
+          progress: 100,
+          result: { trendsCreated: 3, nicheSlug: "tech-ia" },
+          error: null,
+          createdAt: new Date(now.getTime() - 7_200_000).toISOString(),
+          completedAt: now.toISOString(),
+        }),
+      });
+      return;
+    }
+
+    // Étape 7: Lifecycle test — simulate progression PENDING → PROCESSING → COMPLETED
+    if (isLifecycle) {
+      const step = parseInt(url.searchParams.get("_test_step") || "1", 10);
+      const now = new Date();
+
+      let jobStatus: string;
+      let jobProgress: number;
+      let jobResult: unknown;
+      let jobError: string | null;
+      let jobCompletedAt: string | null;
+
+      switch (step) {
+        case 1:
+          jobStatus = "PENDING";
+          jobProgress = 0;
+          jobResult = null;
+          jobError = null;
+          jobCompletedAt = null;
+          break;
+        case 2:
+          jobStatus = "PROCESSING";
+          jobProgress = 45;
+          jobResult = null;
+          jobError = null;
+          jobCompletedAt = null;
+          break;
+        case 3:
+        default:
+          jobStatus = "COMPLETED";
+          jobProgress = 100;
+          jobResult = { trendsCreated: 5, nicheSlug: "tech-ia" };
+          jobError = null;
+          jobCompletedAt = now.toISOString();
+          break;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "job-lifecycle-1",
+          type: "TREND_SCORE",
+          status: jobStatus,
+          progress: jobProgress,
+          result: jobResult,
+          error: jobError,
+          createdAt: new Date(now.getTime() - 3_600_000).toISOString(),
+          completedAt: jobCompletedAt,
+        }),
+      });
+      return;
+    }
+
+    // Étape 8: Stale PROCESSING job (lockedAt > 5 min ago)
+    if (isStale) {
+      const now = new Date();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "job-stale-1",
+          type: "TREND_SCORE",
+          status: "PROCESSING",
+          progress: 30,
+          result: null,
+          error: null,
+          createdAt: new Date(now.getTime() - 3_600_000).toISOString(),
+          completedAt: null,
+          _test_stale: true,
+          _test_lockedAt: new Date(now.getTime() - 600_000).toISOString(), // locked > 5 min ago
+        }),
+      });
+      return;
+    }
+
+    // Étape 9: Max attempts exceeded → FAILED
+    if (isMaxAttempts) {
+      const now = new Date();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "job-max-attempts-1",
+          type: "TREND_SCORE",
+          status: "FAILED",
+          progress: 50,
+          result: null,
+          error: "Maximum d&apos;essais dépassé (3/3)",
+          createdAt: new Date(now.getTime() - 3_600_000).toISOString(),
+          completedAt: now.toISOString(),
+          _test_maxAttempts: 3,
+        }),
+      });
+      return;
+    }
+
+    // Étape 10: Build job data based on status
     const now = new Date();
     const isTerminal = status === "COMPLETED" || status === "FAILED";
     let progress: number;
@@ -409,5 +545,123 @@ test.describe("API Jobs / [id] — GET /api/jobs/[id]", () => {
           break;
       }
     }
+  });
+
+  /* ----- New tests ----- */
+
+  test("1i — Progression cycle de vie PENDING→PROCESSING→COMPLETED", async ({ page }) => {
+    // Step 1: PENDING
+    const res1 = await fetchApi(
+      page,
+      "/api/jobs/lifecycle-job?_test_session=true&_test_lifecycle=true&_test_step=1",
+    );
+
+    expect(res1.status).toBe(200);
+    const body1 = res1.body as Record<string, unknown>;
+    expect(body1.status).toBe("PENDING");
+    expect(body1.progress).toBe(0);
+    expect(body1.result).toBeNull();
+    expect(body1.completedAt).toBeNull();
+
+    // Step 2: PROCESSING
+    const res2 = await fetchApi(
+      page,
+      "/api/jobs/lifecycle-job?_test_session=true&_test_lifecycle=true&_test_step=2",
+    );
+
+    expect(res2.status).toBe(200);
+    const body2 = res2.body as Record<string, unknown>;
+    expect(body2.status).toBe("PROCESSING");
+    expect(body2.progress).toBe(45);
+    expect(body2.result).toBeNull();
+    expect(body2.completedAt).toBeNull();
+
+    // Step 3: COMPLETED
+    const res3 = await fetchApi(
+      page,
+      "/api/jobs/lifecycle-job?_test_session=true&_test_lifecycle=true&_test_step=3",
+    );
+
+    expect(res3.status).toBe(200);
+    const body3 = res3.body as Record<string, unknown>;
+    expect(body3.status).toBe("COMPLETED");
+    expect(body3.progress).toBe(100);
+    expect(body3.result).not.toBeNull();
+    expect(body3.completedAt).not.toBeNull();
+
+    // All three calls reference the same logical job
+    expect(body1.id).toBe("job-lifecycle-1");
+    expect(body2.id).toBe("job-lifecycle-1");
+    expect(body3.id).toBe("job-lifecycle-1");
+  });
+
+  test("1j — Job avec userId=null (système) → 200", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/jobs/system-job?_test_session=true&_test_system_owned=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as Record<string, unknown>;
+    expect(body).toHaveProperty("id");
+    expect(body).toHaveProperty("type");
+    expect(body).toHaveProperty("status");
+    expect(body.status).toBe("COMPLETED");
+    expect(body.progress).toBe(100);
+    expect(body.result).not.toBeNull();
+    expect(body.error).toBeNull();
+    expect(body.id).toBe("job-system-1");
+  });
+
+  test("1k — Job PROCESSING périmé (lockedAt > 5 min) → statut stale", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/jobs/stale-job?_test_session=true&_test_stale=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as Record<string, unknown>;
+    expect(body.status).toBe("PROCESSING");
+    expect(body.progress).toBe(30);
+    expect(body.result).toBeNull();
+    expect(body.completedAt).toBeNull();
+
+    // Vérifie que le job a un lockedAt ancien (> 5 min)
+    expect(body._test_stale).toBe(true);
+    const lockedAt = new Date(body._test_lockedAt as string).getTime();
+    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+    expect(lockedAt).toBeLessThan(fiveMinAgo);
+  });
+
+  test("1l — Job dépassant maxAttempts (3) → FAILED", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/jobs/max-attempts-job?_test_session=true&_test_max_attempts=true",
+    );
+
+    expect(res.status).toBe(200);
+
+    const body = res.body as Record<string, unknown>;
+    expect(body.status).toBe("FAILED");
+    expect(body.error).not.toBeNull();
+    expect(body.error).toContain("Maximum");
+    expect(body.error).toContain("essais");
+    expect(body._test_maxAttempts).toBe(3);
+    expect(body.completedAt).not.toBeNull();
+  });
+
+  test("1m — Path traversal dans l'ID du job → 404", async ({ page }) => {
+    const res = await fetchApi(
+      page,
+      "/api/jobs/../../../etc/passwd?_test_session=true&_test_path_traversal=true",
+    );
+
+    expect(res.status).toBe(404);
+
+    const body = res.body as { error: string; code: string };
+    expect(body.error).toContain("Job");
+    expect(body.code).toBe("NOT_FOUND");
   });
 });

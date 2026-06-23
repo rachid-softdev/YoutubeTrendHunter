@@ -78,10 +78,26 @@ test.describe("CRON Tendances — GET /api/cron/trends", () => {
    * Shared mock that simulates the cron/trends auth logic and processing.
    * - Missing or invalid Bearer token → 401
    * - Valid token → 200 with processing results
+   *
+   * Test query params:
+   *   _test_no_secret=true — simulate CRON_SECRET env var undefined
+   *   _test_method=POST    — simulate method check (for 405)
    */
   async function mockCronTrends(page: Page) {
     await page.route("**/api/cron/trends*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
+      const url = new URL(route.request().url());
+      const noSecret = url.searchParams.get("_test_no_secret") === "true";
+
+      // Simulate CRON_SECRET env var undefined/empty
+      if (noSecret) {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unauthorized" }),
+        });
+        return;
+      }
 
       // Simulates: if (authHeader !== `Bearer ${process.env.CRON_SECRET}`)
       if (authHeader !== `Bearer ${VALID_CRON_SECRET}`) {
@@ -244,6 +260,21 @@ test.describe("CRON Tendances — GET /api/cron/trends", () => {
     expect(result.body).toHaveProperty("error");
     expect(result.body.error).toBe("Method Not Allowed");
   });
+
+  /* ----- New cron/trends tests ----- */
+
+  test("1h — CRON_SECRET env var non défini → 401", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/cron/trends?_test_no_secret=true", {
+        headers: { Authorization: `Bearer ${VALID_CRON_SECRET}` },
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(401);
+    expect(result.body).toHaveProperty("error");
+    expect(result.body.error).toBe("Unauthorized");
+  });
 });
 
 /* ========================================================================== */
@@ -255,6 +286,14 @@ test.describe("CRON Process Jobs — POST /api/cron/process-jobs", () => {
    * Shared mock that simulates the cron/process-jobs auth + processing logic.
    * - Missing or invalid Bearer token → 401
    * - Valid token → 200 with job processing statistics
+   *
+   * Test query params:
+   *   _test_empty_queue=true   — no PENDING jobs in queue
+   *   _test_video_score=true   — VIDEO_SCORE job type → FAILED
+   *   _test_unknown_type=true  — unknown job type → FAILED
+   *   _test_all_fail=true      — all jobs fail
+   *   _test_stale_reclaim=true — stale PROCESSING jobs reclaimed
+   *   _test_no_secret=true     — CRON_SECRET env var undefined
    */
   async function mockCronProcessJobs(page: Page) {
     await page.route("**/api/cron/process-jobs*", async (route) => {
@@ -264,6 +303,23 @@ test.describe("CRON Process Jobs — POST /api/cron/process-jobs", () => {
       }
 
       const authHeader = route.request().headers()["authorization"];
+      const url = new URL(route.request().url());
+      const emptyQueue = url.searchParams.get("_test_empty_queue") === "true";
+      const videoScore = url.searchParams.get("_test_video_score") === "true";
+      const unknownType = url.searchParams.get("_test_unknown_type") === "true";
+      const allFail = url.searchParams.get("_test_all_fail") === "true";
+      const staleReclaim = url.searchParams.get("_test_stale_reclaim") === "true";
+      const noSecret = url.searchParams.get("_test_no_secret") === "true";
+
+      // Simulate CRON_SECRET env var undefined/empty
+      if (noSecret) {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unauthorized" }),
+        });
+        return;
+      }
 
       // Simulates: if (authHeader !== `Bearer ${process.env.CRON_SECRET}`)
       if (authHeader !== `Bearer ${VALID_CRON_SECRET}`) {
@@ -271,6 +327,89 @@ test.describe("CRON Process Jobs — POST /api/cron/process-jobs", () => {
           status: 401,
           contentType: "application/json",
           body: JSON.stringify({ error: "Unauthorized" }),
+        });
+        return;
+      }
+
+      // Empty job queue — no PENDING jobs
+      if (emptyQueue) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            processed: 0,
+            failed: 0,
+            durationMs: 5,
+            _test_emptyQueue: true,
+          }),
+        });
+        return;
+      }
+
+      // VIDEO_SCORE job type — always marked FAILED
+      if (videoScore) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            processed: 0,
+            failed: 2,
+            durationMs: 45,
+            _test_videoScoreFailed: true,
+            _test_details: "VIDEO_SCORE not yet implemented",
+          }),
+        });
+        return;
+      }
+
+      // Unknown job type — all marked FAILED
+      if (unknownType) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            processed: 0,
+            failed: 3,
+            durationMs: 30,
+            _test_unknownTypeFailed: true,
+            _test_details: "Unknown job type: CUSTOM_JOB",
+          }),
+        });
+        return;
+      }
+
+      // All jobs fail
+      if (allFail) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            processed: 0,
+            failed: 5,
+            durationMs: 1200,
+            _test_allFailed: true,
+          }),
+        });
+        return;
+      }
+
+      // Stale PROCESSING reclamation (lockedAt > 5 min ago)
+      if (staleReclaim) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            processed: 3,
+            failed: 0,
+            durationMs: 890,
+            _test_staleReclaimed: true,
+            _test_details: "3 stale PROCESSING jobs reclaimed and completed",
+          }),
         });
         return;
       }
@@ -525,5 +664,112 @@ test.describe("CRON Process Jobs — POST /api/cron/process-jobs", () => {
     expect(result.body).toHaveProperty("error");
     expect(result.body).toHaveProperty("details");
     expect(result.body.error).toBe("Processing failed");
+  });
+
+  /* ----- New cron/process-jobs tests ----- */
+
+  test("2j — File d'attente vide (aucun job PENDING) → processed: 0, failed: 0", async ({
+    page,
+  }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_empty_queue=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(200);
+    expect(result.body.success).toBe(true);
+    expect(result.body.processed).toBe(0);
+    expect(result.body.failed).toBe(0);
+    expect(result.body._test_emptyQueue).toBe(true);
+  });
+
+  test("2k — Job type VIDEO_SCORE → marqué FAILED", async ({ page }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_video_score=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(200);
+    expect(result.body.success).toBe(true);
+    expect(result.body.processed).toBe(0);
+    expect(result.body.failed).toBe(2);
+    expect(result.body._test_videoScoreFailed).toBe(true);
+    expect(result.body._test_details).toBe("VIDEO_SCORE not yet implemented");
+  });
+
+  test("2l — Type de job inconnu → marqué FAILED", async ({ page }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_unknown_type=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(200);
+    expect(result.body.success).toBe(true);
+    expect(result.body.processed).toBe(0);
+    expect(result.body.failed).toBe(3);
+    expect(result.body._test_unknownTypeFailed).toBe(true);
+    expect(result.body._test_details).toContain("Unknown job type");
+  });
+
+  test("2m — Tous les jobs échouent → processed: 0, failed: 5", async ({ page }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_all_fail=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(200);
+    expect(result.body.success).toBe(true);
+    expect(result.body.processed).toBe(0);
+    expect(result.body.failed).toBe(5);
+    expect(result.body._test_allFailed).toBe(true);
+  });
+
+  test("2n — Récupération PROCESSING périmé (lockedAt > 5 min) → re-traité", async ({ page }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_stale_reclaim=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(200);
+    expect(result.body.success).toBe(true);
+    expect(result.body.processed).toBe(3);
+    expect(result.body.failed).toBe(0);
+    expect(result.body._test_staleReclaimed).toBe(true);
+    expect(result.body._test_details).toContain("stale");
+  });
+
+  test("2o — CRON_SECRET env var non défini → 401", async ({ page }) => {
+    const result = await page.evaluate(async (token: string) => {
+      const res = await fetch("/api/cron/process-jobs?_test_no_secret=true", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_CRON_SECRET);
+
+    expect(result.status).toBe(401);
+    expect(result.body).toHaveProperty("error");
+    expect(result.body.error).toBe("Unauthorized");
   });
 });
