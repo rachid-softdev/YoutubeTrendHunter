@@ -23,8 +23,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -83,9 +81,9 @@ jobs:
         run: |
           git tag --sort=-creatordate | while read TAG; do
             if gh release view "$TAG" --json url &>/dev/null 2>&1; then
-              echo "??  Release existe déjà pour $TAG"
+              echo "??  Release existe dï¿½jï¿½ pour $TAG"
             else
-              echo "?? Création release pour $TAG"
+              echo "?? Crï¿½ation release pour $TAG"
               gh release create "$TAG" \
                 --title "$TAG" \
                 --notes "See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details." \

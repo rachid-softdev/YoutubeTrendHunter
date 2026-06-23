@@ -4,15 +4,12 @@ import { test, expect, type Page } from "@playwright/test";
  * Error pages E2E tests for YouTube TrendHunter
  *
  * Tests:
- *   - 404 (not-found.tsx): page content, navigation, API responses
+ *   - 404 (not-found.tsx): page content, navigation, HTTP status
  *   - Error (error.tsx): content, interactions (fixme — requires React error
  *     boundary trigger, which cannot be reliably done in E2E)
  *   - HTTP Status Error UIs: HTTP response codes, component isolation
  *   - Error Boundary — Réessayer button (fixme — same trigger limitation)
  *   - Global Error (global-error.tsx): documentation only
- *
- * 404 navigation is straightforward — any non-existent route renders the
- * NotFound component via Next.js file-system routing.
  *
  * error.tsx requires a React error boundary trigger (uncaught render /
  * lifecycle exception in a child component).  Since all client components
@@ -83,137 +80,149 @@ async function safeGoto(page: Page, path: string): Promise<boolean> {
 /*  404 — Page Content                                                         */
 /* -------------------------------------------------------------------------- */
 
-test.describe
-  .fixme("404 — Contenu de la page", () => {
-    // FIXME: Dev server returns 500 for non-existent routes (pre-existing).
-    // These tests verify not-found.tsx rendering, which works in production.
-    test("1 — navigation vers une route inexistante affiche la page 404", async ({ page }) => {
-      await page.goto("/nonexistent-page-xyz");
-      await page.waitForLoadState("networkidle");
+test.describe("404 — Contenu de la page", () => {
+  test("1 — navigation vers une route inexistante affiche la page 404", async ({ page }) => {
+    await page.goto("/nonexistent-page-xyz");
+    await page.waitForLoadState("networkidle");
 
-      const on404 = await isOn404Page(page);
-      expect(on404).toBe(true);
-    });
-
-    test("2 — titre '404' visible avec classes text-5xl font-black", async ({ page }) => {
-      await page.goto("/nonexistent-route-42");
-      await page.waitForLoadState("networkidle");
-
-      const heading = page.locator("h1");
-      await expect(heading).toBeVisible();
-      await expect(heading).toContainText(FOUR04_HEADING);
-
-      const classAttr = await heading.getAttribute("class");
-      expect(classAttr).toContain("text-5xl");
-      expect(classAttr).toContain("font-black");
-    });
-
-    test("3 — message 'Cette page n\\'existe pas ou a été déplacée.' visible", async ({ page }) => {
-      await page.goto("/some-random/path");
-      await page.waitForLoadState("networkidle");
-
-      await expect(page.getByText(FOUR04_MESSAGE)).toBeVisible();
-    });
-
-    test("4 — icône Search (lucide-search) visible dans un conteneur circulaire", async ({
-      page,
-    }) => {
-      await page.goto("/missing");
-      await page.waitForLoadState("networkidle");
-
-      // The Search icon is inside a rounded-full circle container
-      const searchIcon = page.locator(".lucide-search");
-      await expect(searchIcon).toBeVisible();
-
-      // The parent container is a rounded-full div with bg-dark-surface
-      const circle = searchIcon.locator("..");
-      await expect(circle).toHaveClass(/rounded-full/);
-      await expect(circle).toHaveClass(/w-20/);
-      await expect(circle).toHaveClass(/h-20/);
-    });
-
-    test("5 — lien 'Retour à l\\'accueil' visible avec icône Play", async ({ page }) => {
-      await page.goto("/unknown");
-      await page.waitForLoadState("networkidle");
-
-      const link = page.getByText(FOUR04_LINK_TEXT);
-      await expect(link).toBeVisible();
-
-      // The parent <a> contains a Play icon (lucide-play)
-      const anchor = link.locator("..");
-      await expect(anchor.locator(".lucide-play")).toBeVisible();
-    });
-
-    test("6 — lien href pointe vers '/'", async ({ page }) => {
-      await page.goto("/does-not-exist");
-      await page.waitForLoadState("networkidle");
-
-      const link = page.locator(`a:has-text("${FOUR04_LINK_TEXT}")`);
-      await expect(link).toHaveAttribute("href", "/");
-    });
-
-    test("7 — lien a la classe bg-yt-red (bouton styling)", async ({ page }) => {
-      await page.goto("/not-here");
-      await page.waitForLoadState("networkidle");
-
-      const link = page.locator(`a:has-text("${FOUR04_LINK_TEXT}")`);
-      const classAttr = await link.getAttribute("class");
-      expect(classAttr).toContain("bg-yt-red");
-      // Also verify it's a rounded-full pill button
-      expect(classAttr).toContain("rounded-full");
-      expect(classAttr).toContain("font-bold");
-    });
+    const on404 = await isOn404Page(page);
+    expect(on404).toBe(true);
   });
+
+  test("2 — titre '404' visible avec classes text-5xl font-black", async ({ page }) => {
+    await page.goto("/nonexistent-route-42");
+    await page.waitForLoadState("networkidle");
+
+    const heading = page.locator("h1");
+    await expect(heading).toBeVisible();
+    await expect(heading).toContainText(FOUR04_HEADING);
+
+    const classAttr = await heading.getAttribute("class");
+    expect(classAttr).toContain("text-5xl");
+    expect(classAttr).toContain("font-black");
+  });
+
+  test("3 — message 'Cette page n\\'existe pas ou a été déplacée.' visible", async ({ page }) => {
+    await page.goto("/some-random/path");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByText(FOUR04_MESSAGE)).toBeVisible();
+  });
+
+  test("4 — icône Search (lucide-search) visible dans un conteneur circulaire", async ({
+    page,
+  }) => {
+    await page.goto("/missing");
+    await page.waitForLoadState("networkidle");
+
+    // The Search icon is inside a rounded-full circle container
+    const searchIcon = page.locator(".lucide-search");
+    await expect(searchIcon).toBeVisible();
+
+    // The parent container is a rounded-full div with bg-dark-surface
+    const circle = searchIcon.locator("..");
+    await expect(circle).toHaveClass(/rounded-full/);
+    await expect(circle).toHaveClass(/w-20/);
+    await expect(circle).toHaveClass(/h-20/);
+  });
+
+  test("5 — lien 'Retour à l\\'accueil' visible avec icône Play", async ({ page }) => {
+    await page.goto("/unknown");
+    await page.waitForLoadState("networkidle");
+
+    const link = page.getByText(FOUR04_LINK_TEXT);
+    await expect(link).toBeVisible();
+
+    // The parent <a> contains a Play icon (lucide-play)
+    const anchor = link.locator("..");
+    await expect(anchor.locator(".lucide-play")).toBeVisible();
+  });
+
+  test("6 — lien href pointe vers '/'", async ({ page }) => {
+    await page.goto("/does-not-exist");
+    await page.waitForLoadState("networkidle");
+
+    const link = page.locator(`a:has-text("${FOUR04_LINK_TEXT}")`);
+    await expect(link).toHaveAttribute("href", "/");
+  });
+
+  test("7 — lien a la classe bg-yt-red (bouton styling)", async ({ page }) => {
+    await page.goto("/not-here");
+    await page.waitForLoadState("networkidle");
+
+    const link = page.locator(`a:has-text("${FOUR04_LINK_TEXT}")`);
+    const classAttr = await link.getAttribute("class");
+    expect(classAttr).toContain("bg-yt-red");
+    // Also verify it's a rounded-full pill button
+    expect(classAttr).toContain("rounded-full");
+    expect(classAttr).toContain("font-bold");
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /*  404 — Navigation & comportement                                           */
 /* -------------------------------------------------------------------------- */
 
-test.describe
-  .fixme("404 — Navigation & comportement", () => {
-    // FIXME: Dev server returns 500 for non-existent routes (pre-existing).
-    // These tests verify 404 navigation behavior, which works in production.
-    test("8 — clic 'Retour à l\\'accueil' navigue vers la page d\\'accueil", async ({ page }) => {
-      await page.goto("/bogus");
-      await page.waitForLoadState("networkidle");
+test.describe("404 — Navigation & comportement", () => {
+  test("8 — clic 'Retour à l\\'accueil' navigue vers la page d\\'accueil", async ({ page }) => {
+    await page.goto("/bogus");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1")).toContainText(FOUR04_HEADING);
 
-      const link = page.locator(`a:has-text("${FOUR04_LINK_TEXT}")`);
-      await link.click();
-      await page.waitForLoadState("networkidle");
-
-      // After clicking, we should be on the home page ("/" or "/login")
-      // The marketing landing page has a <h1> with "Hacker" text
-      const currentUrl = page.url();
-      // Home page URL is either "/" or "/" with trailing slash
-      expect(currentUrl.endsWith("/")).toBe(true);
-    });
-
-    test("9 — plusieurs routes invalides affichent toutes la page 404", async ({ page }) => {
-      const invalidRoutes = [
-        "/zzzzz",
-        "/a/b/c/d/e",
-        "/user/999999",
-        "/trend/unknown-slug",
-        "/dashboard/nonexistent",
-      ];
-
-      for (const route of invalidRoutes) {
-        await page.goto(route);
-        await page.waitForLoadState("networkidle");
-        const on404 = await isOn404Page(page);
-        expect(on404).toBe(true);
+    // Click the link via JavaScript inside the browser to trigger SPA navigation
+    await page.evaluate(() => {
+      const links = document.querySelectorAll('a[href="/"]');
+      for (const link of links) {
+        if (link.textContent?.includes("Retour à l'accueil")) {
+          (link as HTMLAnchorElement).click();
+          break;
+        }
       }
     });
 
-    test("10 — route API sans handler retourne 404 (vérification status)", async ({ page }) => {
-      // Use full URL inside evaluate because there's no page context providing base URL
-      const result = await page.evaluate(async () => {
-        const res = await fetch("http://localhost:3000/api/nonexistent-endpoint");
-        return res.status;
-      });
-      expect(result).toBe(404);
-    });
+    // Wait for the client-side navigation to update the URL
+    try {
+      await page.waitForFunction(
+        () => window.location.pathname !== "/bogus",
+        {},
+        { timeout: 8_000 },
+      );
+    } catch {
+      // Navigation may not change the URL in all scenarios; check content instead
+    }
+
+    // Verify we navigated away from the 404 page
+    await expect(page.locator("h1")).not.toContainText(FOUR04_HEADING, { timeout: 5_000 });
   });
+
+  test("9 — plusieurs routes invalides affichent toutes la page 404", async ({ page }) => {
+    const invalidRoutes = ["/zzzzz", "/a/b/c/d/e", "/user/999999", "/trend/unknown-slug"];
+
+    // Routes starting with "/dashboard" are excluded because the dashboard
+    // layout intercepts them and redirects unauthenticated users to /login
+    // before the 404 page can render.
+
+    for (const route of invalidRoutes) {
+      await page.goto(route);
+      await page.waitForLoadState("networkidle");
+
+      // Retry up to 2 times to handle transient Turbopack compilation
+      // failures that can occur under parallel load
+      let on404 = await isOn404Page(page);
+      if (!on404) {
+        await page.goto(route);
+        await page.waitForLoadState("networkidle");
+        on404 = await isOn404Page(page);
+      }
+      expect(on404).toBe(true);
+    }
+  });
+
+  test("10 — route API sans handler retourne 404 (vérification status)", async ({ page }) => {
+    const res = await page.request.get("/api/nonexistent-endpoint");
+    expect(res.status()).toBe(404);
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /*  Error Page — Content (fixme)                                               */
@@ -390,43 +399,37 @@ test.describe("Page d'erreur — Interactions", () => {
 /*  HTTP Status Error UIs                                                      */
 /* -------------------------------------------------------------------------- */
 
-test.describe
-  .fixme("HTTP Status Error UIs", () => {
-    // FIXME: Dev server returns 500 for non-existent routes (pre-existing).
-    // These tests verify HTTP status code handling and 404 page rendering.
-    test("20 — navigation vers /nonexistent retourne une page 404 avec le bon statut HTTP", async ({
-      page,
-    }) => {
-      // Use page.evaluate + fetch to get the actual HTTP response status code
-      const status = await page.evaluate(async () => {
-        const res = await fetch("http://localhost:3000/nonexistent-page-xyz");
-        return res.status;
-      });
-      expect(status).toBe(404);
+test.describe("HTTP Status Error UIs", () => {
+  test("20 — navigation vers /nonexistent retourne une page 404 avec le bon statut HTTP", async ({
+    page,
+  }) => {
+    // Verify the HTTP response status code using Playwright's built-in request API
+    const res = await page.request.get("/nonexistent-page-xyz");
+    expect(res.status()).toBe(404);
 
-      // Also verify the page renders the 404 UI correctly
-      await page.goto("/nonexistent-page-xyz");
-      await page.waitForLoadState("networkidle");
-      await expect(page.locator("h1")).toContainText(FOUR04_HEADING);
-    });
-
-    test("21 — la page 404 ne contient PAS le composant error.tsx", async ({ page }) => {
-      // Navigate to a non-existent route and verify that the 404 page component
-      // (not-found.tsx) renders instead of the error boundary (error.tsx)
-      await page.goto("/nonexistent-page-xyz");
-      await page.waitForLoadState("networkidle");
-
-      // The 404 page should show "404" heading
-      await expect(page.locator("h1")).toContainText(FOUR04_HEADING);
-
-      // Verify that error.tsx content is NOT present
-      // error.tsx renders <h1>Une erreur est survenue</h1>
-      await expect(page.locator("h1")).not.toContainText(ERROR_HEADING);
-
-      // Also ensure the error.tsx description text is absent
-      await expect(page.getByText(ERROR_DESCRIPTION)).not.toBeVisible();
-    });
+    // Also verify the page renders the 404 UI correctly
+    await page.goto("/nonexistent-page-xyz");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("h1")).toContainText(FOUR04_HEADING);
   });
+
+  test("21 — la page 404 ne contient PAS le composant error.tsx", async ({ page }) => {
+    // Navigate to a non-existent route and verify that the 404 page component
+    // (not-found.tsx) renders instead of the error boundary (error.tsx)
+    await page.goto("/nonexistent-page-xyz");
+    await page.waitForLoadState("networkidle");
+
+    // The 404 page should show "404" heading
+    await expect(page.locator("h1")).toContainText(FOUR04_HEADING);
+
+    // Verify that error.tsx content is NOT present
+    // error.tsx renders <h1>Une erreur est survenue</h1>
+    await expect(page.locator("h1")).not.toContainText(ERROR_HEADING);
+
+    // Also ensure the error.tsx description text is absent
+    await expect(page.getByText(ERROR_DESCRIPTION)).not.toBeVisible();
+  });
+});
 
 /* -------------------------------------------------------------------------- */
 /*  Error Boundary — Réessayer bouton (fixme)                                  */

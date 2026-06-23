@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { injectSessionCookie, cleanupTestSession } from "./auth-helpers";
 
 /**
  * Dashboard Extended E2E tests for YouTube TrendHunter
@@ -255,6 +256,14 @@ test.describe("Dashboard — Layout & Rendu", () => {
     await mockDefaultApiRoutes(page, createScoreTestTrends());
   });
 
+  let currentSessionToken = "";
+
+  test.afterEach(async () => {
+    if (currentSessionToken) {
+      await cleanupTestSession(currentSessionToken);
+    }
+  });
+
   test("affiche le layout complet: header, sidebar, contenu principal", async ({ page }) => {
     const onDashboard = await gotoDashboard(page);
     if (!onDashboard) {
@@ -278,9 +287,26 @@ test.describe("Dashboard — Layout & Rendu", () => {
     await expect(page.getByText("Déconnexion")).toBeVisible();
   });
 
+  test("affiche le layout complet sans redirection — cookie session injecté", async ({ page }) => {
+    const { sessionToken } = await injectSessionCookie(page, { plan: "FREE" });
+    currentSessionToken = sessionToken;
+    await mockDefaultApiRoutes(page, createScoreTestTrends());
+
+    await page.goto("/dashboard");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("Tendances");
+    await expect(page.getByText("TrendHunter").first()).toBeVisible();
+    await expect(page.locator('nav a[href="/dashboard"]')).toBeVisible();
+    await expect(page.getByText("Déconnexion")).toBeVisible();
+  });
+
   test("affiche les cartes de tendance avec les données correctes", async ({ page }) => {
-    const onDashboard = await gotoDashboard(page);
-    if (!onDashboard) return;
+    const { sessionToken } = await injectSessionCookie(page, { plan: "FREE" });
+    currentSessionToken = sessionToken;
+    await mockDefaultApiRoutes(page, createScoreTestTrends());
+    await page.goto("/dashboard");
+    await page.waitForLoadState("networkidle");
 
     // Cartes visibles
     await expect(page.getByText("Trend Haut Score")).toBeVisible();
