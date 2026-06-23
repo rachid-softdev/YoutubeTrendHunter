@@ -661,3 +661,28 @@ test.describe("Features — Responsive mobile", () => {
     await expect(page.getByText(`© ${currentYear} TrendHunter.`)).toBeVisible();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  14 — Features Tablette 768px 2 colonnes (Responsive)                      */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Features — Tablette responsive", () => {
+  test("à 768px la grille de fonctionnalités est en 2 colonnes", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/features");
+
+    // La grille utilise grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+    // À 768px (md), elle doit être en 2 colonnes
+    const featuresSection = page
+      .locator("section")
+      .filter({ has: page.getByText("Tout ce dont vous avez besoin") });
+    const grid = featuresSection.locator(".grid");
+
+    const colCount = await grid.evaluate((el) => {
+      const cols = getComputedStyle(el).gridTemplateColumns;
+      const match = cols.match(/repeat\((\d+)/);
+      return match ? parseInt(match[1], 10) : cols.split(/\s+/).length;
+    });
+    expect(colCount).toBe(2);
+  });
+});

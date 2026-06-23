@@ -1121,3 +1121,193 @@ test.describe("Dashboard — Responsive", () => {
     await expect(sidebar).toBeVisible();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  Dashboard — En-tête mobile et avatar                                       */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — En-tête mobile & avatar", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+    await mockDefaultApiRoutes(page, createScoreTestTrends());
+  });
+
+  test("en-tête mobile affiche le logo TrendHunter et l'icône Play", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const logo = page.locator("header").getByText("TrendHunter").first();
+    await expect(logo).toBeVisible();
+
+    const playIcon = page.locator('header svg.lucide-play, header [class*="play"]').first();
+    if ((await playIcon.count()) > 0) {
+      await expect(playIcon).toBeVisible();
+    }
+  });
+
+  test("l'avatar affiche l'initiale quand il n'y a pas d'image", async ({ page }) => {
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const avatar = page.locator('[class*="bg-yt-red"]').first();
+    if ((await avatar.count()) > 0) {
+      await expect(avatar).toBeVisible();
+      const text = await avatar.textContent();
+      expect(text?.trim()).toBe("T");
+    }
+  });
+
+  test("le logo en mobile redirige vers la page d'accueil", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const logoLink = page.locator("header a").filter({ hasText: "TrendHunter" }).first();
+    if ((await logoLink.count()) > 0) {
+      await logoLink.click();
+      await page.waitForLoadState("networkidle");
+      expect(page.url()).not.toContain("/dashboard");
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Dashboard — Niches & plan — cas limites                                   */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Niches & plan — cas limites", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("slug de niche inconnu retourne un état vide sans erreur", async ({ page }) => {
+    await mockTrendsApi(page, {
+      trends: [],
+      plan: "FREE",
+      nextCursor: null,
+    });
+    await mockNichesApi(page, [
+      { id: "niche-1", name: "Tech & IA", slug: "tech" },
+      { id: "niche-2", name: "Gaming", slug: "gaming" },
+    ]);
+    await mockUserApi(page);
+
+    await page.goto("/dashboard");
+    await page.waitForLoadState("networkidle");
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=niche-inexistante");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.trends).toEqual([]);
+  });
+
+  test("l'icône Zap est visible dans l'alerte Plan Free", async ({ page }) => {
+    await mockDefaultApiRoutes(page, createScoreTestTrends(), "FREE");
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Plan Free").first()).toBeVisible();
+    const zapIcon = page.locator('svg.lucide-zap, [class*="zap"]').first();
+    if ((await zapIcon.count()) > 0) {
+      await expect(zapIcon).toBeVisible();
+    }
+  });
+
+  test("aucune niche active — le sélecteur n'a pas d'options", async ({ page }) => {
+    await mockTrendsApi(page, {
+      trends: [],
+      plan: "FREE",
+      nextCursor: null,
+    });
+    await mockNichesApi(page, []);
+    await mockUserApi(page);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    if ((await select.count()) > 0) {
+      const options = select.locator("option");
+      const count = await options.count();
+      expect(count).toBe(0);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Dashboard — Responsive avancé                                             */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Responsive avancé", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+    await mockDefaultApiRoutes(page, createScoreTestTrends());
+  });
+
+  test("orientation paysage (812x375) — rendu correct, pas de débordement", async ({ page }) => {
+    await page.setViewportSize({ width: 812, height: 375 });
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.locator("h1")).toContainText("Tendances");
+
+    const hasOverflow = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > window.innerWidth;
+    });
+    expect(hasOverflow).toBe(false);
+  });
+
+  test("viewport très étroit (280px) — pas de débordement horizontal", async ({ page }) => {
+    await page.setViewportSize({ width: 280, height: 653 });
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const hasOverflow = await page.evaluate(() => {
+      return document.documentElement.scrollWidth > window.innerWidth;
+    });
+    expect(hasOverflow).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Dashboard — Tendances expirées                                            */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Tendances expirées", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("les tendances avec expiresAt dans le passé n'apparaissent pas dans le rendu", async ({
+    page,
+  }) => {
+    const validTrend = makeTrend({
+      id: "trend-valid",
+      title: "Trend valide",
+      score: 85,
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+    });
+    const expiredTrend = makeTrend({
+      id: "trend-expired",
+      title: "Trend expirée",
+      score: 90,
+      expiresAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+    });
+    await mockDefaultApiRoutes(page, [validTrend, expiredTrend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend valide")).toBeVisible();
+
+    await expect(page.getByText("Trend expirée")).toHaveCount(0);
+  });
+});

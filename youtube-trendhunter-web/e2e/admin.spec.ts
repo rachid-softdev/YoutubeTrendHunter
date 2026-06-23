@@ -1229,4 +1229,97 @@ test.describe("Admin", () => {
       }
     });
   });
+
+  /* ====================================================================== */
+  /*  Revenue — Zéro counts, keyboard, responsive, title                    */
+  /* ====================================================================== */
+
+  test.describe("Revenue & UI Edge Cases", () => {
+    test("Admin — Revenue tab proCount=0 teamCount=0", async ({ page }) => {
+      // Override stats mock to return zero counts
+      await page.route("**/api/admin/stats", async (route) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              stats: {
+                totalUsers: 0,
+                totalSubscriptions: 0,
+                proCount: 0,
+                teamCount: 0,
+                freeCount: 0,
+                totalTrends: 0,
+                activeAlerts: 0,
+                mrr: 0,
+              },
+              recentUsers: [],
+            }),
+          });
+        } else {
+          await route.fulfill({ status: 405 });
+        }
+      });
+
+      await page.goto("/admin?tab=revenue");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(1000);
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const nanElements = page.locator("text=NaN");
+        expect(await nanElements.count()).toBe(0);
+        await expect(page.getByText("MRR Actuel").first()).toBeVisible();
+      }
+    });
+
+    test("Admin — Navigation clavier onglets", async ({ page }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const tabConfigs = [
+          { name: "Utilisateurs", expected: "users" },
+          { name: "Revenus", expected: "revenue" },
+          { name: "Logs", expected: "logs" },
+          { name: "Niches", expected: "niches" },
+          { name: "Monitoring", expected: "monitoring" },
+        ];
+
+        for (const { name, expected } of tabConfigs) {
+          const link = page.locator(`a:has-text("${name}")`).first();
+          await link.focus();
+          await page.keyboard.press("Enter");
+          await page.waitForLoadState("networkidle");
+          await page.waitForTimeout(300);
+          expect(page.url()).toContain(expected);
+        }
+      }
+    });
+
+    test("Admin — Stat cards mobile 2 colonnes", async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const grid = page.locator("div.grid").first();
+        const classAttr = await grid.getAttribute("class");
+        expect(classAttr).toContain("grid-cols-2");
+      }
+    });
+
+    test("Admin — Titre page HTML", async ({ page }) => {
+      await page.goto("/admin");
+      await page.waitForLoadState("networkidle");
+
+      const onAdmin = page.url().includes("/admin");
+      if (onAdmin) {
+        const title = await page.title();
+        expect(title).toBe("Administration - TrendHunter");
+      }
+    });
+  });
 });

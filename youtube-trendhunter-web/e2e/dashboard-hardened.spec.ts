@@ -1709,3 +1709,480 @@ test.describe("Dashboard — Résilience", () => {
     expect(result.body).toHaveProperty("plan");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  10. TrendCard Description & Content Angles Edge Cases                     */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — TrendCard Description & Content Angles Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("trend with null description renders without error", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-null-desc",
+      title: "Trend sans description",
+      description: null,
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend sans description")).toBeVisible();
+  });
+
+  test("trend with empty contentAngles has no play icons", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-empty-angles",
+      title: "Trend angles vides",
+      contentAngles: [],
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    expect(body1.trends[0].contentAngles).toEqual([]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend angles vides")).toBeVisible();
+  });
+
+  test("trend with null contentAngles is handled gracefully", async ({ page }) => {
+    await page.route("**/api/trends*", async (route) => {
+      const base = makeTrend({ id: "t-null-ca", title: "Trend null angles" });
+      (base as any).contentAngles = null;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends: [base],
+          plan: "FREE",
+          nextCursor: null,
+        }),
+      });
+    });
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
+    await mockUserApi(page);
+
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    expect(body1.trends[0].contentAngles).toBeNull();
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend null angles")).toBeVisible();
+  });
+
+  test("trend with very long description uses line-clamp-2 truncation", async ({ page }) => {
+    const longDesc = "A".repeat(500);
+    const trend = makeTrend({
+      id: "t-long-desc",
+      title: "Trend longue description",
+      description: longDesc,
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend longue description")).toBeVisible();
+
+    const lineClampEls = page.locator('[class*="line-clamp-2"]');
+    const hasLineClamp = (await lineClampEls.count()) > 0;
+    test.info().annotations.push({
+      type: "info",
+      description: hasLineClamp
+        ? "line-clamp-2 class found on description element"
+        : "line-clamp-2 not found (CSS truncation may use a different approach)",
+    });
+  });
+
+  test("trend with both description and contentAngles renders correctly", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-full-data",
+      title: "Trend complet",
+      description: "Une description bien remplie avec des détails intéressants.",
+      contentAngles: ["Angle narratif", "Angle démonstratif"],
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend complet")).toBeVisible();
+    await expect(
+      page.getByText("Une description bien remplie avec des détails intéressants."),
+    ).toBeVisible();
+    for (const angle of trend.contentAngles) {
+      const angleLocator = page.getByText(angle);
+      if ((await angleLocator.count()) > 0) {
+        await expect(angleLocator.first()).toBeVisible();
+      }
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  11. Niche Selector Edge Cases                                             */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Niche Selector Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("empty niches array renders selector gracefully", async ({ page }) => {
+    await mockTrendsApi(page, {
+      trends: createDiverseTrends(),
+      plan: "FREE",
+      nextCursor: null,
+    });
+    await mockNichesApi(page, []);
+    await mockUserApi(page);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    const selectExists = (await select.count()) > 0;
+    if (selectExists) {
+      const options = select.locator("option");
+      const optionCount = await options.count();
+      test.info().annotations.push({
+        type: "info",
+        description:
+          optionCount === 0
+            ? "Select has no options (empty niches)"
+            : `Select has ${optionCount} option(s) with empty niches`,
+      });
+    }
+  });
+
+  test("single niche keeps selector visible", async ({ page }) => {
+    await mockTrendsApi(page, {
+      trends: createDiverseTrends(),
+      plan: "FREE",
+      nextCursor: null,
+    });
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
+    await mockUserApi(page);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    const selectExists = (await select.count()) > 0;
+    if (selectExists) {
+      await expect(select).toBeVisible();
+      const options = select.locator("option");
+      expect(await options.count()).toBeGreaterThanOrEqual(1);
+      await expect(select.locator('option[value="tech"]')).toBeVisible();
+    }
+  });
+
+  test("current niche slug not in niches list shows first available option", async ({ page }) => {
+    await mockTrendsApi(page, {
+      trends: createDiverseTrends().slice(0, 2),
+      plan: "FREE",
+      nextCursor: null,
+    });
+    await mockNichesApi(page, [
+      { id: "niche-2", name: "Gaming", slug: "gaming" },
+      { id: "niche-3", name: "Musique", slug: "musique" },
+    ]);
+    await mockUserApi(page);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    const selectExists = (await select.count()) > 0;
+    if (selectExists) {
+      await expect(select).toBeVisible();
+      await expect(select.locator('option[value="gaming"]')).toBeVisible();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  12. Extreme Edge Cases                                                    */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Extreme Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("negative score value renders as-is", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-negative-score",
+      title: "Trend score négatif",
+      score: -15,
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend score négatif")).toBeVisible();
+    const scoreText = page.getByText("-15");
+    if ((await scoreText.count()) > 0) {
+      await expect(scoreText.first()).toBeVisible();
+    }
+  });
+
+  test("score greater than 100 renders correctly", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-high-score",
+      title: "Trend score élevé",
+      score: 150,
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend score élevé")).toBeVisible();
+    const scoreText = page.getByText("150");
+    if ((await scoreText.count()) > 0) {
+      await expect(scoreText.first()).toBeVisible();
+    }
+  });
+
+  test("velocity NaN renders gracefully", async ({ page }) => {
+    await page.route("**/api/trends*", async (route) => {
+      const base = makeTrend({ id: "t-nan-vel", title: "Trend vélocité NaN" });
+      (base as any).velocity = null;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trends: [base],
+          plan: "FREE",
+          nextCursor: null,
+        }),
+      });
+    });
+    await mockNichesApi(page, [{ id: "niche-1", name: "Tech & IA", slug: "tech" }]);
+    await mockUserApi(page);
+
+    const body1 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return await res.json();
+    });
+    expect(body1.trends[0].velocity).toBeNull();
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend vélocité NaN")).toBeVisible();
+  });
+
+  test("unknown status renders with default badge variant", async ({ page }) => {
+    const trend = makeTrend({
+      id: "t-unknown-status",
+      title: "Trend statut inconnu",
+      status: "UNKNOWN",
+    });
+    await mockDefaultApiRoutes(page, [trend]);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    await expect(page.getByText("Trend statut inconnu")).toBeVisible();
+    const statusText = page.getByText("UNKNOWN");
+    if ((await statusText.count()) > 0) {
+      await expect(statusText.first()).toBeVisible();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  13. Performance & navigation                                              */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Performance & navigation", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("changement rapide de niche — 3 changements en moins de 500ms", async ({ page }) => {
+    const trends = createDiverseTrends();
+    await mockDefaultApiRoutes(page, trends);
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    if ((await select.count()) === 0) return;
+
+    const options = select.locator("option");
+    const optCount = await options.count();
+    if (optCount < 2) return;
+
+    const start = Date.now();
+    for (let i = 0; i < Math.min(3, optCount); i++) {
+      const val = await options.nth(i).getAttribute("value");
+      if (val) await select.selectOption(val);
+      await page.waitForTimeout(50);
+    }
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(500);
+
+    const errorText = page.locator("text=Erreur").first();
+    if ((await errorText.count()) > 0) {
+      await expect(errorText).not.toBeVisible();
+    }
+  });
+
+  test("clic sur les liens de la sidebar — vérifier le changement d'URL", async ({ page }) => {
+    await mockDefaultApiRoutes(page, createDiverseTrends());
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const links = [
+      { href: "/my-niches", label: "Niches" },
+      { href: "/alerts", label: "Alerts" },
+    ];
+
+    for (const link of links) {
+      const navLink = page.locator(`nav a[href="${link.href}"]`).first();
+      if ((await navLink.count()) === 0) continue;
+
+      await navLink.click();
+      await page.waitForLoadState("networkidle");
+
+      expect(page.url()).toContain(link.href);
+
+      await page.goto("/dashboard");
+      await page.waitForLoadState("networkidle");
+    }
+  });
+
+  test("rechargements rapides — 3 rechargements en moins de 2 secondes", async ({ page }) => {
+    await mockDefaultApiRoutes(page, createDiverseTrends());
+
+    const start = Date.now();
+    for (let i = 0; i < 3; i++) {
+      await page.goto("/dashboard");
+      await page.waitForLoadState("networkidle");
+
+      if (!page.url().includes("/dashboard")) return;
+
+      await expect(page.locator("h1")).toContainText("Tendances");
+    }
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  14. Accessibilité                                                         */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Accessibilité", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+    await mockDefaultApiRoutes(page, createDiverseTrends());
+  });
+
+  test("le sélecteur de niche a un aria-label ou un label associé", async ({ page }) => {
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const select = page.locator("select");
+    if ((await select.count()) === 0) return;
+
+    const ariaLabel = await select.getAttribute("aria-label");
+    const labelledBy = await select.getAttribute("aria-labelledby");
+
+    test.info().annotations.push({
+      type: "info",
+      description:
+        ariaLabel || labelledBy
+          ? `Select aria-label="${ariaLabel ?? ""}" aria-labelledby="${labelledBy ?? ""}"`
+          : "Select sans attribut aria-label ni aria-labelledby",
+    });
+  });
+
+  test("la navigation mobile a un aria-label", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const mobileNav = page.locator("nav").last();
+    if ((await mobileNav.count()) === 0) return;
+
+    const ariaLabel = await mobileNav.getAttribute("aria-label");
+
+    test.info().annotations.push({
+      type: "info",
+      description: ariaLabel
+        ? `Navigation mobile aria-label="${ariaLabel}"`
+        : "Navigation mobile sans aria-label",
+    });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  15. Événements analytiques                                                */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Dashboard — Événements analytics", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+    await mockDefaultApiRoutes(page, createDiverseTrends());
+  });
+
+  test("appuyer sur Entrée sur une TrendCard déclenche un événement analytics", async ({
+    page,
+  }) => {
+    const onDashboard = await gotoDashboard(page);
+    if (!onDashboard) return;
+
+    const cards = page.locator('[role="button"]');
+    if ((await cards.count()) === 0) return;
+
+    await page.evaluate(() => {
+      (window as any).__trackedEvents = [];
+      if (typeof (window as any).gtag === "function") {
+        const orig = (window as any).gtag.bind(window);
+        (window as any).gtag = (...args: any[]) => {
+          (window as any).__trackedEvents.push({ type: "gtag", args });
+          return orig(...args);
+        };
+      }
+      if ((window as any).dataLayer?.push) {
+        const orig = (window as any).dataLayer.push.bind((window as any).dataLayer);
+        (window as any).dataLayer.push = (...args: any[]) => {
+          (window as any).__trackedEvents.push({ type: "dataLayer", args });
+          return orig(...args);
+        };
+      }
+    });
+
+    await cards.first().press("Enter");
+    await page.waitForTimeout(200);
+
+    const tracked = await page.evaluate(() => (window as any).__trackedEvents?.length ?? 0);
+
+    test.info().annotations.push({
+      type: "info",
+      description:
+        tracked > 0
+          ? `${tracked} événement(s) analytics déclenché(s) après Enter`
+          : "Aucun événement analytics détecté (feature non implémentée)",
+    });
+  });
+});

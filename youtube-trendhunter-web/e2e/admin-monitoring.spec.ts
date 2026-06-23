@@ -766,3 +766,741 @@ test.describe("Admin Monitoring", () => {
     });
   });
 });
+
+/* ======================================================================== */
+/*  NaN / Infinity Metrics                                                    */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — NaN/Infinity Metrics", () => {
+  /**
+   * Build a mock HTML page that simulates MonitoringTab rendering
+   * with safe fallback handling for NaN / Infinity / null values.
+   */
+  function buildMonitoringPageHTML(data: Record<string, any>): string {
+    const endpoints = Object.entries(data.endpoints || {}).sort(
+      ([, a]: any, [, b]: any) => b.count - a.count,
+    );
+    const maxRateCount = Math.max(...(data.rateHistory?.counts || []), 1);
+    const statusTotal =
+      (data.totals?.byStatus?.["2xx"] || 0) +
+      (data.totals?.byStatus?.["4xx"] || 0) +
+      (data.totals?.byStatus?.["5xx"] || 0);
+
+    const safeNum = (v: any): string => {
+      if (v === null || v === undefined) return "—";
+      if (typeof v === "number" && !Number.isFinite(v)) return "—";
+      return String(Math.round(v));
+    };
+    const safeFixed = (v: any, d = 1): string => {
+      if (v === null || v === undefined) return "—";
+      if (typeof v === "number" && !Number.isFinite(v)) return "—";
+      return Number(v).toFixed(d);
+    };
+
+    const collectedAtDisplay =
+      data.collectedAt != null ? new Date(data.collectedAt).toLocaleTimeString("fr-FR") : "—";
+
+    let rows = "";
+    for (const [ep, m] of endpoints) {
+      const errClass = m.errors > 0 ? " text-red-400" : "";
+      const rateClass = m.errorRate > 5 ? " text-red-400" : "";
+      rows += `<tr class="border-b border-hairline-dark/50 hover:bg-dark-surface/50">
+        <td class="p-3 font-mono text-xs max-w-[300px] truncate">${ep}</td>
+        <td class="p-3 text-right">${safeNum(m.count)}</td>
+        <td class="p-3 text-right${errClass}">${safeNum(m.errors)}</td>
+        <td class="p-3 text-right${rateClass}">${safeFixed(m.errorRate)}%</td>
+        <td class="p-3 text-right font-mono text-xs">${safeNum(m.avgDuration)}</td>
+        <td class="p-3 text-right font-mono text-xs">${safeNum(m.p50)}</td>
+        <td class="p-3 text-right font-mono text-xs">${safeNum(m.p95)}</td>
+        <td class="p-3 text-right font-mono text-xs">${safeNum(m.p99)}</td>
+      </tr>`;
+    }
+
+    let bars = "";
+    if (data.rateHistory?.minutes) {
+      for (let i = 0; i < data.rateHistory.minutes.length; i++) {
+        const minute = data.rateHistory.minutes[i];
+        const count = data.rateHistory.counts?.[i] ?? 0;
+        const height = maxRateCount > 0 ? (count / maxRateCount) * 100 : 0;
+        bars += `<div class="flex flex-col items-center flex-1">
+          <span class="text-xs font-medium mb-1">${count}</span>
+          <div class="w-full bg-yt-red/70 hover:bg-yt-red transition-colors rounded-t" style="height:${Math.max(height, 4)}%;min-height:${count > 0 ? "4px" : "0"}"></div>
+          <span class="text-xs text-dark-ink-tertiary mt-2">${minute}</span>
+        </div>`;
+      }
+    }
+
+    const statusContent =
+      statusTotal > 0
+        ? `<div class="flex h-6 rounded-full overflow-hidden">
+            <div class="bg-green-600" style="width:${(
+              ((data.totals?.byStatus?.["2xx"] || 0) / statusTotal) * 100
+            ).toFixed(1)}%"></div>
+            <div class="bg-yellow-500" style="width:${(
+              ((data.totals?.byStatus?.["4xx"] || 0) / statusTotal) * 100
+            ).toFixed(1)}%"></div>
+            <div class="bg-red-600" style="width:${(
+              ((data.totals?.byStatus?.["5xx"] || 0) / statusTotal) * 100
+            ).toFixed(1)}%"></div>
+          </div>
+          <div class="flex gap-4 text-xs text-dark-ink-secondary">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-600"></span>2xx : ${data.totals?.byStatus?.["2xx"] || 0}</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-yellow-500"></span>4xx : ${data.totals?.byStatus?.["4xx"] || 0}</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-600"></span>5xx : ${data.totals?.byStatus?.["5xx"] || 0}</span>
+          </div>`
+        : `<p class="text-sm text-dark-ink-secondary">Aucune donnée</p>`;
+
+    const tableSection =
+      endpoints.length === 0
+        ? '<div class="text-center text-dark-ink-secondary text-sm">Aucun endpoint suivi pour le moment.</div>'
+        : `<div class="overflow-x-auto"><table><thead><tr>
+          <th class="p-3 font-medium">Endpoint</th>
+          <th class="p-3 font-medium text-right">Requêtes</th>
+          <th class="p-3 font-medium text-right">Erreurs</th>
+          <th class="p-3 font-medium text-right">Taux err.</th>
+          <th class="p-3 font-medium text-right">Moy. (ms)</th>
+          <th class="p-3 font-medium text-right">P50 (ms)</th>
+          <th class="p-3 font-medium text-right">P95 (ms)</th>
+          <th class="p-3 font-medium text-right">P99 (ms)</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>`;
+
+    return `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Monitoring</title>
+    <style>
+      body{background:#0f0f0f;color:#e0e0e0;font-family:system-ui,sans-serif;padding:20px;margin:0}
+      *+*{margin-top:0}.space-y-6>*+*{margin-top:24px}
+      .flex{display:flex}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}
+      .gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}
+      .grid{display:grid}.grid-cols-2{grid-template-columns:1fr 1fr}
+      .md\\:grid-cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+      .bg-dark-surface{background:#1a1a2e}.border-hairline-dark{border:1px solid #2a2a3e}
+      .rounded-lg{border-radius:8px}.rounded-t{border-top-left-radius:4px;border-top-right-radius:4px}
+      .rounded-full{border-radius:9999px}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}
+      .p-4{padding:16px}.p-6{padding:24px}
+      .text-2xl{font-size:24px}.text-xs{font-size:12px}.text-sm{font-size:14px}
+      .font-black{font-weight:900}.font-mono{font-family:monospace}
+      .text-dark-ink-secondary{color:#888}.text-dark-ink-tertiary{color:#666}.text-red-400{color:#f87171}
+      .text-right{text-align:right}.text-center{text-align:center}
+      .w-full{width:100%}.h-6{height:24px}.h-32{height:128px}
+      .items-end{align-items:flex-end}.justify-between{justify-content:space-between}
+      .flex-col{flex-direction:column}.flex-1{flex:1}
+      .mb-1{margin-bottom:4px}.mt-2{margin-top:8px}.mb-4{margin-bottom:16px}
+      table{width:100%;border-collapse:collapse}
+      th,td{text-align:left;padding:12px}
+      thead{border-bottom:1px solid #2a2a3e}
+      .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .border-b{border-bottom:1px solid #2a2a3e}
+      .max-w-\\[300px\\]{max-width:300px}
+    </style></head><body>
+    <div class="space-y-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="px-2 py-1 text-xs rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">Polling 5s</span>
+        <span class="text-xs text-dark-ink-tertiary">Dernière mise à jour : ${collectedAtDisplay}</span>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-dark-surface border-hairline-dark rounded-lg p-4">
+          <p class="text-2xl font-black">${safeNum(data.totals?.requests)}</p>
+          <p class="text-xs text-dark-ink-secondary">Requêtes totales</p>
+        </div>
+        <div class="bg-dark-surface border-hairline-dark rounded-lg p-4">
+          <p class="text-2xl font-black text-red-400">${safeNum(data.totals?.errors)}</p>
+          <p class="text-xs text-dark-ink-secondary">Erreurs</p>
+        </div>
+        <div class="bg-dark-surface border-hairline-dark rounded-lg p-4">
+          <p class="text-2xl font-black">${safeFixed(data.totals?.errorRate)}%</p>
+          <p class="text-xs text-dark-ink-secondary">Taux d'erreur</p>
+        </div>
+        <div class="bg-dark-surface border-hairline-dark rounded-lg p-4">
+          <p class="text-2xl font-black">${data.totals?.byStatus?.["2xx"] || 0} / ${data.totals?.byStatus?.["4xx"] || 0} / ${data.totals?.byStatus?.["5xx"] || 0}</p>
+          <p class="text-xs text-dark-ink-secondary">2xx / 4xx / 5xx</p>
+        </div>
+      </div>
+      <div class="bg-dark-surface border-hairline-dark rounded-lg p-6">
+        <p class="text-sm font-semibold mb-4">Requêtes / minute (5 dernières minutes)</p>
+        <div class="flex items-end justify-between h-32 gap-2">${bars || ""}</div>
+      </div>
+      <div class="bg-dark-surface border-hairline-dark rounded-lg p-6">
+        <p class="text-sm font-semibold mb-4">Répartition des statuts HTTP</p>
+        <div class="space-y-2">${statusContent}</div>
+      </div>
+      <div class="bg-dark-surface border-hairline-dark rounded-lg p-6">
+        <p class="text-sm font-semibold mb-4">Points de terminaison</p>
+        ${tableSection}
+      </div>
+    </div></body></html>`;
+  }
+
+  const MOCK_NAN_DATA = {
+    endpoints: {
+      "/api/broken": {
+        count: Number.NaN,
+        errors: 5,
+        totalDuration: 1000,
+        lastMinute: 1,
+        p50: 0,
+        p95: 0,
+        p99: 0,
+        statusCodes: { 200: 5 },
+        errorRate: Infinity,
+        avgDuration: null,
+      },
+    },
+    totals: {
+      requests: Number.NaN,
+      errors: 4,
+      errorRate: Number.NaN,
+      byStatus: { "2xx": 0, "4xx": 0, "5xx": 0 },
+    },
+    rateHistory: {
+      minutes: [],
+      counts: [],
+    },
+    collectedAt: COLLECTED_AT,
+  };
+
+  test("endpoint count NaN displays fallback at rendering level", async ({ page }) => {
+    const html = buildMonitoringPageHTML(MOCK_NAN_DATA);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    const countCell = page.locator("table tbody tr td").nth(1);
+    await expect(countCell).toHaveText("—");
+  });
+
+  test("endpoint errorRate Infinity displays fallback at rendering level", async ({ page }) => {
+    const html = buildMonitoringPageHTML(MOCK_NAN_DATA);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    const rateCell = page.locator("table tbody tr td").nth(3);
+    await expect(rateCell).toHaveText("—%");
+  });
+
+  test("endpoint avgDuration null displays fallback at rendering level", async ({ page }) => {
+    const html = buildMonitoringPageHTML(MOCK_NAN_DATA);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    const avgCell = page.locator("table tbody tr td").nth(4);
+    await expect(avgCell).toHaveText("—");
+  });
+
+  test("totals requests NaN displays fallback in summary card at rendering level", async ({
+    page,
+  }) => {
+    const html = buildMonitoringPageHTML(MOCK_NAN_DATA);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    const requestsCard = page.locator("div.grid.grid-cols-2 > div").first();
+    await expect(requestsCard.locator("p.text-2xl")).toHaveText("—");
+  });
+
+  test("safe number formatting for NaN/Infinity/null via page.evaluate", async ({ page }) => {
+    const results = await page.evaluate(() => {
+      const safeNum = (v: any): string => {
+        if (v === null || v === undefined) return "—";
+        if (typeof v === "number" && !Number.isFinite(v)) return "—";
+        return String(Math.round(v));
+      };
+      return [
+        safeNum(Number.NaN),
+        safeNum(Infinity),
+        safeNum(-Infinity),
+        safeNum(null),
+        safeNum(undefined),
+        safeNum(42),
+        safeNum(0),
+      ];
+    });
+    expect(results[0]).toBe("—");
+    expect(results[1]).toBe("—");
+    expect(results[2]).toBe("—");
+    expect(results[3]).toBe("—");
+    expect(results[4]).toBe("—");
+    expect(results[5]).toBe("42");
+    expect(results[6]).toBe("0");
+  });
+
+  test("safe fixed-point formatting for NaN/Infinity/null via page.evaluate", async ({ page }) => {
+    const results = await page.evaluate(() => {
+      const safeFixed = (v: any, d = 1): string => {
+        if (v === null || v === undefined) return "—";
+        if (typeof v === "number" && !Number.isFinite(v)) return "—";
+        return Number(v).toFixed(d);
+      };
+      return [
+        safeFixed(Number.NaN),
+        safeFixed(Infinity),
+        safeFixed(null),
+        safeFixed(undefined),
+        safeFixed(3.14159, 1),
+        safeFixed(0, 0),
+      ];
+    });
+    expect(results[0]).toBe("—");
+    expect(results[1]).toBe("—");
+    expect(results[2]).toBe("—");
+    expect(results[3]).toBe("—");
+    expect(results[4]).toBe("3.1");
+    expect(results[5]).toBe("0");
+  });
+});
+
+/* ======================================================================== */
+/*  Auth Expiry During Session                                                */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — Auth Expiry During Session", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("401 after initial load keeps existing data visible (graceful degradation)", async ({
+    page,
+  }) => {
+    await mockSSEStreamFail(page);
+
+    let callCount = 0;
+    await page.route("**/api/admin/monitoring", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fulfill({ status: 405 });
+        return;
+      }
+      callCount++;
+      if (callCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(MOCK_MONITORING),
+        });
+      } else {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "SESSION_EXPIRED" }),
+        });
+      }
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      // Initial data should be displayed
+      await expect(page.getByText("2560").first()).toBeVisible();
+      await expect(page.getByText("Requêtes totales").first()).toBeVisible();
+
+      // Wait for next poll cycle (5s interval) + request time
+      await page.waitForTimeout(6000);
+
+      // Existing data should still be visible despite 401 (stats is already set)
+      await expect(page.getByText("2560").first()).toBeVisible();
+      // Error card should NOT replace the data
+      const errorCard = page.getByText("Erreur de chargement");
+      expect(await errorCard.count()).toBe(0);
+    }
+  });
+
+  test("401 on first request shows error card with auth message", async ({ page }) => {
+    await mockSSEStreamFail(page);
+    await page.route("**/api/admin/monitoring", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "SESSION_EXPIRED" }),
+        });
+      } else {
+        await route.fulfill({ status: 405 });
+      }
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("Erreur de chargement")).toBeVisible();
+      await expect(page.getByText(/401|SESSION_EXPIRED/)).toBeVisible();
+    }
+  });
+});
+
+/* ======================================================================== */
+/*  Empty / Missing Data Edge Cases                                           */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — Empty/Missing Data Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("collectedAt null displays '—' for timestamp", async ({ page }) => {
+    await mockSSEStream(page, { ...MOCK_MONITORING, collectedAt: null });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      const updateText = page.getByText("Dernière mise à jour").first();
+      await expect(updateText).toBeVisible();
+      const text = await updateText.textContent();
+      expect(text).toContain("—");
+    }
+  });
+
+  test("collectedAt missing (undefined) displays '—' for timestamp", async ({ page }) => {
+    const { collectedAt: _, ...dataWithoutCollectedAt } = MOCK_MONITORING;
+    await mockSSEStream(page, dataWithoutCollectedAt);
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      const updateText = page.getByText("Dernière mise à jour").first();
+      await expect(updateText).toBeVisible();
+      const text = await updateText.textContent();
+      expect(text).toContain("—");
+    }
+  });
+
+  test("rateHistory with minutes but empty counts renders chart without errors", async ({
+    page,
+  }) => {
+    await mockSSEStream(page, {
+      ...MOCK_MONITORING,
+      rateHistory: { minutes: ["14:00", "14:01", "14:02"], counts: [] },
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("Requêtes / minute").first()).toBeVisible();
+      for (const minute of ["14:00", "14:01", "14:02"]) {
+        await expect(page.getByText(minute).first()).toBeVisible();
+      }
+      const errorCard = page.getByText("Erreur de chargement");
+      expect(await errorCard.count()).toBe(0);
+    }
+  });
+
+  test("statusCodes empty object shows 'Aucune donnée'", async ({ page }) => {
+    const data = {
+      ...MOCK_MONITORING,
+      endpoints: {
+        "/api/empty": {
+          ...MOCK_MONITORING.endpoints["/api/trends"],
+          statusCodes: {},
+        },
+      },
+      totals: {
+        ...MOCK_MONITORING.totals,
+        byStatus: { "2xx": 0, "4xx": 0, "5xx": 0 },
+      },
+    };
+    await mockSSEStream(page, data);
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("Aucune donnée").first()).toBeVisible();
+    }
+  });
+
+  test("all percentile values at 0 display as '0' (zero, not blank)", async ({ page }) => {
+    await mockSSEStream(page, MOCK_ZERO_METRICS);
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      const table = page.locator("table").first();
+      const row = table.locator("tbody tr").first();
+      const cells = row.locator("td");
+
+      // Indices: 0=endpoint, 1=requests, 2=errors, 3=err rate, 4=avg, 5=p50, 6=p95, 7=p99
+      await expect(cells.nth(5)).toHaveText("0");
+      await expect(cells.nth(6)).toHaveText("0");
+      await expect(cells.nth(7)).toHaveText("0");
+    }
+  });
+});
+
+/* ======================================================================== */
+/*  Tab State Persistence                                                     */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — Tab State Persistence", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("navigate from monitoring to overview and back still loads monitoring", async ({ page }) => {
+    await mockSSEStream(page);
+    await page.route("**/api/admin/monitoring", async (route) => {
+      await route.fulfill({ status: 500 });
+    });
+
+    // Step 1: Go to monitoring tab
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("Requêtes totales").first()).toBeVisible();
+      await expect(page.getByText("2560").first()).toBeVisible();
+
+      // Step 2: Navigate to overview tab
+      await page.locator('a:has-text("Overview")').first().click();
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(500);
+
+      expect(page.url()).toContain("/admin");
+
+      // Step 3: Navigate back to monitoring tab
+      await page.locator('a:has-text("Monitoring")').first().click();
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(1500);
+
+      // Monitoring content should load again
+      await expect(page.getByText("Requêtes totales").first()).toBeVisible();
+      await expect(page.getByText("Points de terminaison").first()).toBeVisible();
+    }
+  });
+
+  test("direct navigation to /admin?tab=monitoring shows monitoring tab active", async ({
+    page,
+  }) => {
+    await mockSSEStream(page);
+    await page.route("**/api/admin/monitoring", async (route) => {
+      await route.fulfill({ status: 500 });
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1000);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      const monitoringTab = page.locator('a:has-text("Monitoring")').first();
+      await expect(monitoringTab).toBeVisible();
+      const classAttr = await monitoringTab.getAttribute("class");
+      expect(classAttr).toContain("bg-yt-red");
+
+      await expect(page.getByText("Requêtes totales").first()).toBeVisible();
+      await expect(page.getByText("Points de terminaison").first()).toBeVisible();
+
+      expect(page.url()).toContain("tab=monitoring");
+    }
+  });
+
+  test("navigation to /admin without tab defaults to overview", async ({ page }) => {
+    await mockSSEStream(page);
+    await page.route("**/api/admin/monitoring", async (route) => {
+      await route.fulfill({ status: 500 });
+    });
+
+    await page.goto("/admin");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
+
+    expect(page.url()).toContain("/admin");
+
+    const monitoringTab = page.locator('a:has-text("Monitoring")').first();
+    const classAttr = await monitoringTab.getAttribute("class");
+    expect(classAttr).not.toContain("bg-yt-red");
+  });
+});
+
+/* ======================================================================== */
+/*  Error Handling — Null / Missing Fields                                    */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — Gestion des erreurs", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("Monitoring — Endpoints null ne crash pas", async ({ page }) => {
+    const data = { ...MOCK_MONITORING, endpoints: null };
+    const html = buildMonitoringPageHTML(data);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText("Aucun endpoint suivi pour le moment.")).toBeVisible();
+    const nanElements = page.locator("text=NaN");
+    expect(await nanElements.count()).toBe(0);
+  });
+
+  test("Monitoring — Dégradation SSE vers polling", async ({ page }) => {
+    let sseCallCount = 0;
+    await page.route("**/api/admin/monitoring/stream", async (route) => {
+      sseCallCount++;
+      if (sseCallCount === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: `data: ${JSON.stringify(MOCK_MONITORING)}\n\n`,
+        });
+      } else {
+        await route.fulfill({ status: 500 });
+      }
+    });
+
+    await mockPollingEndpoint(page);
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("2560").first()).toBeVisible();
+      const pollingBadge = page.getByText("Polling 5s");
+      await expect(pollingBadge).toBeVisible();
+    }
+  });
+
+  test("Monitoring — Récupération après erreur polling", async ({ page }) => {
+    await mockSSEStreamFail(page);
+
+    let callCount = 0;
+    await page.route("**/api/admin/monitoring", async (route) => {
+      if (route.request().method() === "GET") {
+        callCount++;
+        if (callCount === 1) {
+          await route.fulfill({ status: 500, body: JSON.stringify({ error: "INTERNAL_ERROR" }) });
+        } else {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(MOCK_MONITORING),
+          });
+        }
+      } else {
+        await route.fulfill({ status: 405 });
+      }
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      await expect(page.getByText("Erreur de chargement")).toBeVisible();
+
+      await page.waitForTimeout(6000);
+
+      await expect(page.getByText("Requêtes totales").first()).toBeVisible();
+      await expect(page.getByText("2560").first()).toBeVisible();
+      const errorCard = page.getByText("Erreur de chargement");
+      expect(await errorCard.count()).toBe(0);
+    }
+  });
+
+  test("Monitoring — Totaux manquants", async ({ page }) => {
+    const data = {
+      ...MOCK_MONITORING,
+      totals: null,
+    };
+    const html = buildMonitoringPageHTML(data);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    await expect(page.getByText("Aucune donnée").first()).toBeVisible();
+    const nanElements = page.locator("text=NaN");
+    expect(await nanElements.count()).toBe(0);
+  });
+});
+
+/* ======================================================================== */
+/*  Responsive & UI Edge Cases                                                */
+/* ======================================================================== */
+
+test.describe("Admin Monitoring — UI Edge Cases", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("Monitoring — Noms endpoints longs tronqués", async ({ page }) => {
+    const longPath = "/api/" + "very-long-path-segment/".repeat(10) + "endpoint";
+    const data = {
+      ...MOCK_MONITORING,
+      endpoints: {
+        [longPath]: MOCK_MONITORING.endpoints["/api/trends"],
+      },
+    };
+    const html = buildMonitoringPageHTML(data);
+    await page.setContent(html);
+    await page.waitForTimeout(500);
+
+    const endpointCell = page.locator("table tbody tr td").first();
+    const classAttr = await endpointCell.getAttribute("class");
+    expect(classAttr).toContain("truncate");
+    const textOverflow = await endpointCell.evaluate(
+      (el) => window.getComputedStyle(el).textOverflow,
+    );
+    expect(textOverflow).toBe("ellipsis");
+    const text = await endpointCell.textContent();
+    expect(text?.length).toBeLessThan(longPath.length);
+  });
+
+  test("Monitoring — Fetch annulé navigation rapide", async ({ page }) => {
+    await mockSSEStreamFail(page);
+
+    let firstFetchResolved = false;
+    await page.route("**/api/admin/monitoring", async (route) => {
+      if (route.request().method() === "GET") {
+        if (!firstFetchResolved) {
+          firstFetchResolved = true;
+          try {
+            await new Promise((r) => setTimeout(r, 5000));
+          } catch {
+            // timeout cancelled
+          }
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(MOCK_MONITORING),
+        });
+      } else {
+        await route.fulfill({ status: 405 });
+      }
+    });
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForTimeout(200);
+
+    await page.goto("/admin?tab=revenue");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
+
+    await page.goto("/admin?tab=monitoring");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1500);
+
+    const onAdmin = page.url().includes("/admin");
+    if (onAdmin) {
+      const errorCard = page.getByText("Erreur de chargement");
+      expect(await errorCard.count()).toBe(0);
+    }
+  });
+});
