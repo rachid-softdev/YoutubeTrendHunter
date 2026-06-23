@@ -1327,3 +1327,96 @@ test.describe("Auth renforcé — Résilience combinée", () => {
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  10. Security — CSP, callbackUrl sanitization, combined attack vectors      */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth renforcé — Sécurité des URLs et en-têtes", () => {
+  test("Auth — CSP headers on login page", async ({ page }) => {
+    const response = await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    const headers = response?.headers() ?? {};
+    expect(headers["content-security-policy"]).toBeDefined();
+  });
+
+  test("Auth — callbackUrl protocol-relative neutralisé", async ({ page }) => {
+    await page.goto("/login?callbackUrl=//evil.com");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+  });
+
+  test("Auth — callbackUrl URL absolue neutralisée", async ({ page }) => {
+    await page.goto("/login?callbackUrl=https://evil.com");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+  });
+
+  test("Auth — Erreur + callbackUrl combinés", async ({ page }) => {
+    await page.goto("/login?error=OAuthSignin&callbackUrl=javascript:alert(1)");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("Application Error");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  11. Resilience & Accessibility — Timeout, tab order, reduced motion        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth renforcé — Résilience et accessibilité", () => {
+  test("Auth — Timeout réseau session", async ({ page }) => {
+    await page.route("**/api/auth/session*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: "null",
+      });
+    });
+
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("Auth — Ordre tabulation complet", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await page.keyboard.press("Tab");
+    const firstFocused = await page.evaluate(() => document.activeElement?.tagName ?? "");
+    expect(firstFocused).toBe("A");
+
+    await page.keyboard.press("Tab");
+    const secondFocused = await page.evaluate(() => document.activeElement?.textContent ?? "");
+    expect(secondFocused).toContain("Continuer avec Google");
+
+    await page.keyboard.press("Tab");
+    const thirdFocused = await page.evaluate(() => document.activeElement?.textContent ?? "");
+    expect(thirdFocused).toContain("Conditions");
+
+    await page.keyboard.press("Tab");
+    const fourthFocused = await page.evaluate(() => document.activeElement?.textContent ?? "");
+    expect(fourthFocused).toContain("Confidentialité");
+  });
+
+  test("Auth — prefers-reduced-motion respecté", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.locator("body")).toBeVisible();
+  });
+});

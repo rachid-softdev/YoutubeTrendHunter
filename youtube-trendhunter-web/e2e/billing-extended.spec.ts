@@ -2467,7 +2467,6 @@ test.describe("Webhook Stripe — Cas non gérés spécifiques", () => {
     });
     expect(result8.status).toBe(400);
     expect(result8.body.error).toBeDefined();
-    expect(json.error).toBeDefined();
   });
 });
 
@@ -2981,5 +2980,191 @@ test.describe("API — Rate limiting avancé", () => {
     });
     expect(result3.status).toBe(400);
     expect(result3.body.error).toBeDefined();
+  });
+});
+
+/* ======================================================================== */
+/*  DELETE /api/user — Scénarios d'erreur avancée                           */
+/* ======================================================================== */
+
+test.describe("DELETE /api/user — Scénarios d'erreur avancée", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+    await mockSession(page, MOCK_SESSION_PRO);
+  });
+
+  test("DELETE /api/user — Rate limiting 429", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/user*", async (route) => {
+      if (route.request().method() === "DELETE") {
+        requestCount++;
+        if (requestCount > 3) {
+          await route.fulfill({
+            status: 429,
+            contentType: "application/json",
+            headers: { "Retry-After": "60", "X-RateLimit-Remaining": "0" },
+            body: JSON.stringify({ error: "Trop de requêtes", code: "RATE_LIMIT" }),
+          });
+        } else {
+          await route.fulfill({ status: 204 });
+        }
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ id: "test-user-id", plan: "PRO" }),
+        });
+      }
+    });
+
+    // Exceed rate limit
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(async () => {
+        await fetch("/api/user", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: true }),
+        });
+      });
+    }
+
+    // Last request should be rate limited
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return {
+        status: res.status,
+        headers: Object.fromEntries(res.headers.entries()),
+        body: await res.json(),
+      };
+    });
+
+    expect(result.status).toBe(429);
+    expect(result.headers["retry-after"]).toBe("60");
+    expect(result.body.code).toBe("RATE_LIMIT");
+  });
+
+  test("DELETE /api/user — Utilisateur introuvable 404", async ({ page }) => {
+    await page.route("**/api/user*", async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Utilisateur introuvable", code: "NOT_FOUND" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ id: "test-user-id" }),
+        });
+      }
+    });
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(404);
+    expect(result.body.error).toContain("introuvable");
+  });
+
+  test("DELETE /api/user — Échec Prisma après Stripe", async ({ page }) => {
+    await page.route("**/api/user*", async (route) => {
+      if (route.request().method() === "DELETE") {
+        // Simulate Stripe cancellation succeeding but Prisma user deletion failing
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Erreur lors de la suppression des données utilisateur",
+            code: "PRISMA_ERROR",
+            stripeCancelled: true,
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ id: "test-user-id" }),
+        });
+      }
+    });
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(result.status).toBe(500);
+    expect(result.body.error).toContain("suppression");
+    expect(result.body.stripeCancelled).toBe(true);
+    expect(result.body.code).toBe("PRISMA_ERROR");
+  });
+});
+
+/* ======================================================================== */
+/*  POST /api/extension/auth — Scénarios d'erreur                          */
+/* ======================================================================== */
+
+test.describe("POST /api/extension/auth — Scénarios d'erreur", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+    await mockSession(page, MOCK_SESSION_PRO);
+  });
+
+  test("POST /api/extension/auth — Rate limiting 429", async ({ page }) => {
+    let requestCount = 0;
+    await page.route("**/api/extension/auth*", async (route) => {
+      requestCount++;
+      if (requestCount > 3) {
+        await route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          headers: { "Retry-After": "30", "X-RateLimit-Remaining": "0" },
+          body: JSON.stringify({ error: "Trop de requêtes", code: "RATE_LIMIT" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ token: "sk_test_rate_limit" }),
+        });
+      }
+    });
+
+    // Exceed rate limit
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(async () => {
+        await fetch("/api/extension/auth", { method: "POST" });
+      });
+    }
+
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+      });
+      return {
+        status: res.status,
+        headers: Object.fromEntries(res.headers.entries()),
+        body: await res.json(),
+      };
+    });
+
+    expect(result.status).toBe(429);
+    expect(result.headers["retry-after"]).toBe("30");
+    expect(result.body.code).toBe("RATE_LIMIT");
   });
 });

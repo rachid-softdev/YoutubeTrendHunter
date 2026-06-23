@@ -224,3 +224,37 @@ test.describe("Navigation entre pages légales", () => {
     expect(errors).toHaveLength(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  15 — Legal Mobile 375px sans débordement (Responsive)                     */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Legal — Mobile responsive", () => {
+  test("à 375px la page /privacy n'a pas de débordement horizontal", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/privacy");
+
+    // Vérifier qu'il n'y a pas de scroll horizontal
+    const hasOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(hasOverflow).toBe(false);
+
+    // Le contenu principal est visible
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page.locator("h1")).toContainText("Politique de confidentialité");
+  });
+
+  test("à 375px la page /terms n'a pas de débordement horizontal", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/terms");
+
+    const hasOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(hasOverflow).toBe(false);
+
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page.locator("h1")).toContainText("Conditions Générales d'Utilisation");
+  });
+});

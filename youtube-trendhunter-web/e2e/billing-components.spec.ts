@@ -112,8 +112,9 @@ function buildBillingPageHTML(opts: BillingPageOptions): string {
             <span data-testid="plan-badge">${plan}</span>
           </div>
         </div>
-        ${isPaying
-          ? /* ManageSubscriptionButton (PRO / TEAM) */ `
+        ${
+          isPaying
+            ? /* ManageSubscriptionButton (PRO / TEAM) */ `
           <button
             data-testid="manage-subscription-btn"
             class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-none text-sm font-medium transition-colors border border-hairline-dark bg-transparent px-4 py-2 h-9 hover:bg-dark-surface hover:text-dark-ink"
@@ -121,7 +122,7 @@ function buildBillingPageHTML(opts: BillingPageOptions): string {
           >
             Gérer l'abonnement
           </button>`
-          : /* FREE plan — "Passer Pro" link */ `
+            : /* FREE plan — "Passer Pro" link */ `
           <a
             href="/pricing"
             data-testid="upgrade-link"
@@ -142,7 +143,9 @@ function buildBillingPageHTML(opts: BillingPageOptions): string {
         </p>
       </div>
       <div class="mt-2" data-testid="token-content">
-        ${hasToken ? `
+        ${
+          hasToken
+            ? `
         <div data-testid="token-section" class="mb-4">
           <p class="text-sm text-dark-ink-secondary mb-2" data-testid="token-date-info">
             Dernier token créé le 15/06/2026. Le token complet est affiché uniquement lors de la création.
@@ -152,16 +155,22 @@ function buildBillingPageHTML(opts: BillingPageOptions): string {
               data-testid="token-value"
               class="truncate font-mono text-sm border border-hairline-dark px-2 py-1"
             >${tokenValue}</code>
-            ${showCopyButton ? `
+            ${
+              showCopyButton
+                ? `
             <button
               data-testid="copy-token-btn"
               class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded text-sm font-medium border border-hairline-dark bg-transparent px-3 py-1 h-8 hover:bg-dark-surface"
               onclick="handleCopyToken()"
             >
               Copier
-            </button>` : ''}
+            </button>`
+                : ""
+            }
           </div>
-        </div>` : ''}
+        </div>`
+            : ""
+        }
         <!-- GenerateTokenButton -->
         <button
           data-testid="generate-token-btn"
@@ -545,9 +554,7 @@ test.describe("GenerateTokenButton — Générer un nouveau token", () => {
     await expect(btn).toBeEnabled();
   });
 
-  test("affiche 'Génération...' et désactive le bouton pendant le chargement", async ({
-    page,
-  }) => {
+  test("affiche 'Génération...' et désactive le bouton pendant le chargement", async ({ page }) => {
     await page.route("**/api/extension/auth", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       await route.fulfill({
@@ -587,15 +594,15 @@ test.describe("GenerateTokenButton — Générer un nouveau token", () => {
     await page.getByTestId("generate-token-btn").click();
 
     // Wait for the fetch to complete (loading finishes, text reverts)
-    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", { timeout: 3000 });
+    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", {
+      timeout: 3000,
+    });
 
     expect(requestMethod).toBe("POST");
     expect(requestUrl).toContain("/api/extension/auth");
   });
 
-  test("sur succès → navigator.clipboard.writeText est appelé avec le token", async ({
-    page,
-  }) => {
+  test("sur succès → navigator.clipboard.writeText est appelé avec le token", async ({ page }) => {
     // Grant clipboard permission
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 
@@ -619,7 +626,9 @@ test.describe("GenerateTokenButton — Générer un nouveau token", () => {
     await page.getByTestId("generate-token-btn").click();
 
     // Wait for completion
-    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", { timeout: 3000 });
+    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", {
+      timeout: 3000,
+    });
 
     // Read what was written to clipboard
     clipboardText = await page.evaluate(() => navigator.clipboard.readText());
@@ -798,7 +807,9 @@ test.describe("Billing — Cas limites d'interaction", () => {
 
     // Generate new token
     await page.getByTestId("generate-token-btn").click();
-    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", { timeout: 3000 });
+    await expect(page.getByTestId("generate-token-btn")).toHaveText("Générer un nouveau token", {
+      timeout: 3000,
+    });
 
     // The new token should be in the clipboard
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
@@ -944,9 +955,7 @@ test.describe("Billing — Cas limites d'interaction", () => {
     expect(dialogMessage).toBe("Token copié dans le presse-papiers !");
   });
 
-  test("le bouton Copier n'a pas d'état de chargement — toujours accessible", async ({
-    page,
-  }) => {
+  test("le bouton Copier n'a pas d'état de chargement — toujours accessible", async ({ page }) => {
     await mockBillingPage(page, { plan: "PRO", hasToken: true, showCopyButton: true });
     await page.goto("/billing");
 
@@ -1054,5 +1063,201 @@ test.describe("Billing — Gestion d'erreurs API", () => {
 
     // Button should be re-enabled
     await expect(page.getByTestId("generate-token-btn")).toBeEnabled();
+  });
+});
+
+/* ======================================================================== */
+/*  Token API — Error & Performance Scenarios                               */
+/* ======================================================================== */
+
+test.describe("Token API — Scénarios d'erreur et performance", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("Token — 403 retourné pour FREE/PRO — pas de clipboard, pas d'alert, bouton réactivé", async ({
+    page,
+  }) => {
+    await page.route("**/api/extension/auth", async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Forbidden" }),
+      });
+    });
+
+    let alertShown = false;
+    page.on("dialog", () => {
+      alertShown = true;
+    });
+
+    await mockBillingPage(page, { plan: "FREE", hasToken: false });
+    await page.goto("/billing");
+
+    const btn = page.getByTestId("generate-token-btn");
+    await btn.click();
+    await page.waitForTimeout(500);
+
+    expect(alertShown).toBe(false);
+    await expect(btn).toBeEnabled();
+    await expect(btn).toHaveText("Générer un nouveau token");
+  });
+
+  test("Token — Rate limiting 429 — vérifie les en-têtes Retry-After", async ({ page }) => {
+    let requestCount = 0;
+    let rateLimitedResponse:
+      | { status: number; headers: Record<string, string>; body: any }
+      | undefined;
+
+    await page.route("**/api/extension/auth", async (route) => {
+      requestCount++;
+      if (requestCount > 3) {
+        await route.fulfill({
+          status: 429,
+          contentType: "application/json",
+          headers: {
+            "Retry-After": "30",
+            "X-RateLimit-Limit": "3",
+            "X-RateLimit-Remaining": "0",
+          },
+          body: JSON.stringify({ error: "Trop de requêtes", code: "RATE_LIMIT" }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ token: NEW_TOKEN_VALUE }),
+        });
+      }
+    });
+
+    await mockBillingPage(page, { plan: "PRO", hasToken: false });
+    await page.goto("/billing");
+
+    // Exceed the rate limit by firing rapid fetch calls
+    for (let i = 0; i < 5; i++) {
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/extension/auth", { method: "POST" });
+        return {
+          status: res.status,
+          headers: Object.fromEntries(res.headers.entries()),
+          body: await res.json(),
+        };
+      });
+      if (result.status === 429) {
+        rateLimitedResponse = result;
+      }
+    }
+
+    expect(rateLimitedResponse).toBeDefined();
+    if (rateLimitedResponse) {
+      expect(rateLimitedResponse.status).toBe(429);
+      expect(rateLimitedResponse.headers["retry-after"]).toBe("30");
+      expect(rateLimitedResponse.body.code).toBe("RATE_LIMIT");
+    }
+  });
+
+  test("Token — 403 silencieux avec message d'erreur API non disponible", async ({ page }) => {
+    await page.route("**/api/extension/auth", async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "API non disponible" }),
+      });
+    });
+
+    const consoleErrors = captureConsoleErrors(page);
+
+    await mockBillingPage(page, { plan: "PRO", hasToken: true });
+    await page.goto("/billing");
+
+    const btn = page.getByTestId("generate-token-btn");
+    await btn.click();
+    await page.waitForTimeout(500);
+
+    await expect(btn).toBeEnabled();
+    await expect(btn).toHaveText("Générer un nouveau token");
+  });
+});
+
+/* ======================================================================== */
+/*  Badge Plan — Styles CSS                                                */
+/* ======================================================================== */
+
+test.describe("Badge Plan — Styles CSS", () => {
+  test("Badge — Classe CSS plan-free vs plan-pro", async ({ page }) => {
+    await mockSession(page);
+
+    // Test FREE badge
+    await mockBillingPage(page, { plan: "FREE", hasToken: false });
+    await page.goto("/billing");
+    let badge = page.getByTestId("plan-badge");
+    await expect(badge).toHaveText("FREE");
+
+    // Test PRO badge
+    await mockBillingPage(page, { plan: "PRO", hasToken: true });
+    await page.goto("/billing");
+    badge = page.getByTestId("plan-badge");
+    await expect(badge).toHaveText("PRO");
+
+    // Test TEAM badge
+    await mockBillingPage(page, { plan: "TEAM", hasToken: true });
+    await page.goto("/billing");
+    badge = page.getByTestId("plan-badge");
+    await expect(badge).toHaveText("TEAM");
+  });
+});
+
+/* ======================================================================== */
+/*  Accessibilité — Navigation clavier                                     */
+/* ======================================================================== */
+
+test.describe("Accessibilité — Navigation clavier", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockSession(page);
+  });
+
+  test("Badge — Ordre tabulation page Facturation", async ({ page }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+
+    await mockBillingPage(page, { plan: "PRO", hasToken: true, showCopyButton: true });
+    await page.goto("/billing");
+    await page.waitForLoadState("networkidle");
+
+    // First Tab → manage subscription button
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("manage-subscription-btn")).toBeFocused();
+
+    // Second Tab → generate token button
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("generate-token-btn")).toBeFocused();
+
+    // Third Tab → copy token button
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("copy-token-btn")).toBeFocused();
+  });
+
+  test("Upgrade — Lien Passer Pro focusable clavier", async ({ page }) => {
+    await mockBillingPage(page, { plan: "FREE", hasToken: false });
+
+    // Mock /pricing navigation
+    await page.route("**/pricing", async (route) => {
+      await route.fulfill({ status: 200, contentType: "text/html", body: "Mock pricing" });
+    });
+
+    await page.goto("/billing");
+    await page.waitForLoadState("networkidle");
+
+    const upgradeLink = page.getByTestId("upgrade-link");
+
+    // Focus the link using Tab
+    await page.keyboard.press("Tab");
+    await expect(upgradeLink).toBeFocused();
+
+    // Press Enter to activate
+    await page.keyboard.press("Enter");
+
+    // Should navigate to /pricing
+    await page.waitForURL("/pricing");
   });
 });

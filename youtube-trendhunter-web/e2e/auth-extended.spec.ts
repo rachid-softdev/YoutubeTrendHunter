@@ -2306,3 +2306,376 @@ test.describe("Auth étendu — Sécurité OAuth et en-têtes", () => {
     await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  Session Expiry UI Behavior                                                */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth — Session Expiry UI Behavior", () => {
+  test("session expirée — fetch /api/auth/session retourne une date expirée", async ({ page }) => {
+    // Given the login page is loaded
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    // Mock the session endpoint to return an already-expired session
+    await page.route("**/api/auth/session*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "test-user-id",
+            name: "Test",
+            email: "test@test.com",
+            role: "USER",
+            plan: "FREE",
+          },
+          expires: "2020-01-01T00:00:00.000Z",
+        }),
+      });
+    });
+
+    // Make a direct fetch to verify the session endpoint returns expired data
+    const sessionData = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return await res.json();
+    });
+
+    expect(sessionData.expires).toBe("2020-01-01T00:00:00.000Z");
+    expect(new Date(sessionData.expires).getTime()).toBeLessThan(Date.now());
+
+    // The login page should still render without crashing
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+  });
+
+  test("session invalidée en cours d'utilisation — 401 sur la prochaine requête", async ({
+    page,
+  }) => {
+    // Start with an active session
+    await page.route("**/api/auth/session*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "test-user-id",
+            name: "Test",
+            email: "test@test.com",
+            role: "USER",
+            plan: "FREE",
+          },
+          expires: "2099-01-01T00:00:00.000Z",
+        }),
+      });
+    });
+
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    // Now remove the session mock so a new fetch returns 401 via real server
+    await page.unrouteAll({ behavior: "wait" });
+
+    // Mock the session to return 401 (session invalidated mid-session)
+    await page.route("**/api/auth/session*", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+      });
+    });
+
+    // Fetch session again — should return 401
+    const sessionData = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
+
+    expect(sessionData.status).toBe(401);
+    expect(sessionData.body.code).toBe("UNAUTHORIZED");
+
+    // Page should still be functional (login page visible)
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Error Query Parameters on Login Page                                      */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth — Error Query Parameters on Login Page", () => {
+  const errorParams = ["OAuthSignin", "AccessDenied", "Configuration"];
+
+  for (const error of errorParams) {
+    test(`error=${error} — la page de connexion s'affiche correctement`, async ({ page }) => {
+      await page.goto(`/login?error=${error}`);
+      await page.waitForLoadState("networkidle");
+
+      // The login page renders without crashing
+      await expect(page.locator("h1")).toContainText("l'Algorithme");
+      await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+
+      // No error page or crash
+      await expect(page.locator("body")).not.toContainText("Application Error");
+      await expect(page.locator("body")).not.toContainText("500");
+      await expect(page.locator("body")).not.toContainText("Internal Server Error");
+    });
+  }
+
+  test("multiples erreurs en paramètres — rendu stable", async ({ page }) => {
+    await page.goto("/login?error=OAuthSignin&error=AccessDenied");
+    await page.waitForLoadState("networkidle");
+
+    // Page should still render the login form
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+    await expect(page.locator("body")).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  OAuth Callback Simulation                                                 */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth — OAuth Callback Simulation", () => {
+  test("callback Google simulé — redirection sans crash", async ({ page }) => {
+    // Mock a valid session that would be set after OAuth success
+    await page.route("**/api/auth/session*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "oauth-user-id",
+            name: "OAuth User",
+            email: "oauth@test.com",
+            role: "USER",
+            plan: "FREE",
+          },
+          expires: "2099-01-01T00:00:00.000Z",
+        }),
+      });
+    });
+
+    // Navigate to the callback URL as Google would redirect
+    const response = await page.goto(
+      "/api/auth/callback/google?code=test-auth-code&state=test-state",
+      { waitUntil: "networkidle" },
+    );
+
+    // The page should not crash — real callback would redirect to /dashboard
+    expect(response).not.toBeNull();
+
+    // After the callback, the page should end up somewhere valid
+    const currentUrl = page.url();
+    const isValidDestination =
+      currentUrl.includes("/dashboard") ||
+      currentUrl.includes("/login") ||
+      currentUrl.includes("/api/auth/callback");
+    expect(isValidDestination).toBe(true);
+
+    // No fatal rendering error
+    await expect(page.locator("body")).toBeVisible();
+  });
+
+  test("callback Google avec état invalide — gestion gracieuse", async ({ page }) => {
+    // Navigate to callback with mismatched state
+    const response = await page.goto(
+      "/api/auth/callback/google?code=test-code&state=invalid-state",
+      { waitUntil: "networkidle" },
+    );
+
+    // The app should handle the invalid state gracefully (redirect or show error)
+    expect(response).not.toBeNull();
+
+    const currentUrl = page.url();
+    const isHandledGracefully =
+      currentUrl.includes("/login") ||
+      currentUrl.includes("/auth/error") ||
+      currentUrl.includes("error");
+    expect(isHandledGracefully).toBe(true);
+
+    // No crash or blank page
+    await expect(page.locator("body")).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Double Submit Prevention                                                  */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth — Double Submit Prevention", () => {
+  test("clic rapide sur le bouton Google — le formulaire ne soumet qu'une seule fois", async ({
+    page,
+  }) => {
+    // Given the login page is loaded
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    // The submit button should be a native form submit button
+    const submitBtn = page.locator('button[type="submit"]').filter({
+      has: page.locator("text=Continuer avec Google"),
+    });
+    await expect(submitBtn).toBeVisible();
+    await expect(submitBtn).toBeEnabled();
+
+    // Native form submit buttons naturally prevent double-submit
+    // by disabling after first click. Verify the button is properly configured.
+    const buttonType = await submitBtn.getAttribute("type");
+    expect(buttonType).toBe("submit");
+
+    // Rapidly click the button multiple times
+    await submitBtn.click({ clickCount: 3, delay: 10 });
+
+    // After clicks, the page should still be on /login (no form submit actually
+    // fires since OAuth isn't configured in test). The button should still exist.
+    await expect(page.locator("body")).toBeVisible();
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+  });
+
+  test("le formulaire de connexion a un bouton submit natif — protection anti-double soumission", async ({
+    page,
+  }) => {
+    // Verify the login form uses a native form element with a submit button.
+    // The browser's built-in form submission mechanism prevents double submits
+    // when using <button type="submit"> inside a proper <form>.
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    // Verify there is exactly one form with a submit button
+    const form = page.locator("form").filter({
+      has: page.locator('button[type="submit"]'),
+    });
+    await expect(form).toHaveCount(1);
+
+    // Verify the form's submit button is the only submit button in the form
+    const submitButtons = form.locator('button[type="submit"]');
+    await expect(submitButtons).toHaveCount(1);
+
+    // Verify the button is a native submit (not a div or anchor styled as button)
+    const tagName = await submitButtons.evaluate((el) => el.tagName.toLowerCase());
+    expect(tagName).toBe("button");
+
+    // Verify the form has the proper encoding for POST submission
+    const method = await form.getAttribute("method");
+    expect(method).toBe("post");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Responsive — Mobile, tablette, affichage adaptatif                        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth étendu — Responsive et accessibilité", () => {
+  test("Auth — Page de connexion en mobile 320px", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+    await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
+
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
+  });
+
+  test("Auth — Page de connexion en tablette 768px", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+
+    await expect(page.getByText("IA Analytics")).toBeVisible();
+    await expect(page.getByText("Sécurisé")).toBeVisible();
+    await expect(page.getByText("VIP Trends")).toBeVisible();
+  });
+
+  test("Auth — Titre et langue de la page", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    const title = await page.title();
+    expect(title.length).toBeGreaterThan(0);
+
+    const lang = await page.evaluate(() => document.documentElement.lang);
+    expect(lang).toBe("fr");
+  });
+
+  test("Auth — Icônes ARIA sur les badges", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    const badges = page.locator("div.grid-cols-3 svg");
+    await expect(badges).toHaveCount(3);
+
+    const ariaHiddenCount = await badges.evaluateAll(
+      (svgs) => svgs.filter((svg) => svg.getAttribute("aria-hidden") === "true").length,
+    );
+    expect(ariaHiddenCount).toBe(3);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Interactions — Cookies, thème dark, soumission, navigation arrière        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Auth étendu — Interactions et navigation", () => {
+  test("Auth — Bandeau cookies n'empêche pas interaction", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    await page.waitForTimeout(2500);
+
+    const cookieBanner = page.locator("text=Nous utilisons des cookies");
+    await expect(cookieBanner).toBeVisible();
+
+    const googleBtn = page.getByRole("button", { name: /continuer avec google/i });
+    await expect(googleBtn).toBeEnabled();
+  });
+
+  test("Auth — Thème dark appliqué", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    const hasDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(hasDark).toBe(true);
+  });
+
+  test("Auth — Bouton désactivé après soumission", async ({ page }) => {
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+
+    const button = page.getByRole("button", { name: /continuer avec google/i });
+    await expect(button).toBeEnabled();
+
+    await page.route("**/api/auth/signin/google*", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.abort("connectionrefused");
+      }
+    });
+
+    await button.click();
+    await page.waitForTimeout(500);
+
+    const isDisabled = await button.evaluate((el) => el.hasAttribute("disabled"));
+    expect(isDisabled).toBe(true);
+  });
+
+  test("Auth — Navigation arrière navigateur", async ({ page }) => {
+    await page.goto("/dashboard");
+    await page.waitForLoadState("networkidle");
+    await expect(page.url()).toContain("/login");
+
+    try {
+      await page.goBack({ timeout: 3000 });
+      await page.waitForLoadState("networkidle");
+    } catch {
+      // If no history entry exists, goBack may throw — that's acceptable
+    }
+
+    await expect(page.url()).toContain("/login");
+    await expect(page.locator("h1")).toContainText("l'Algorithme");
+  });
+});

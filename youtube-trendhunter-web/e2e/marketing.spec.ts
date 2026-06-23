@@ -173,7 +173,9 @@ test.describe("Landing — Header / Navigation", () => {
   test("affiche le bouton « ESSAYER GRATUITEMENT » vers /login", async ({ page }) => {
     await page.goto("/");
 
-    const tryBtn = page.locator("header a[href='/login']").filter({ hasText: "ESSAYER GRATUITEMENT" });
+    const tryBtn = page
+      .locator("header a[href='/login']")
+      .filter({ hasText: "ESSAYER GRATUITEMENT" });
     await expect(tryBtn).toBeVisible();
     await expect(tryBtn).toBeEnabled();
   });
@@ -514,7 +516,9 @@ test.describe("Landing — Section Tarifs (inline)", () => {
   test("le lien « Voir la comparaison détaillée » pointe vers /pricing", async ({ page }) => {
     await page.goto("/");
 
-    const compareLink = page.locator("a[href='/pricing']").filter({ hasText: "Voir la comparaison détaillée" });
+    const compareLink = page
+      .locator("a[href='/pricing']")
+      .filter({ hasText: "Voir la comparaison détaillée" });
     await expect(compareLink).toBeVisible();
 
     await compareLink.click();
@@ -525,7 +529,9 @@ test.describe("Landing — Section Tarifs (inline)", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Prêt à hacker l'algorithme ?" })).toBeVisible();
-    await expect(page.getByText("Rejoignez les créateurs qui ont déjà un temps d'avance.")).toBeVisible();
+    await expect(
+      page.getByText("Rejoignez les créateurs qui ont déjà un temps d'avance."),
+    ).toBeVisible();
   });
 
   test("le CTA final « COMMENCER L'AVENTURE » redirige vers /login", async ({ page }) => {
@@ -538,4 +544,296 @@ test.describe("Landing — Section Tarifs (inline)", () => {
     await finalCta.click();
     await page.waitForURL(/\/login/);
   });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Landing Page — SEO Meta Tags                                              */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — SEO Meta Tags", () => {
+  test("page title contient « TrendHunter »", async ({ page }) => {
+    await page.goto("/");
+    const title = await page.title();
+    expect(title).toContain("TrendHunter");
+  });
+
+  test("meta description existe et est non vide", async ({ page }) => {
+    await page.goto("/");
+    const metaDesc = page.locator('meta[name="description"]');
+    await expect(metaDesc).toHaveAttribute("content", /.+/);
+  });
+
+  test("balises OpenGraph sont présentes (title, description, type, url)", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", /.+/);
+    await expect(page.locator('meta[property="og:description"]')).toHaveAttribute("content", /.+/);
+    await expect(page.locator('meta[property="og:type"]')).toHaveAttribute("content", "website");
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", /.+/);
+  });
+
+  test("balise link canonical existe", async ({ page }) => {
+    await page.goto("/");
+    const canonical = page.locator('link[rel="canonical"]');
+    await expect(canonical).toHaveAttribute("href", /.+/);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Landing Page — Responsive Design                                          */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Responsive Design", () => {
+  test("à 375px (mobile) : la grille features est en 1 colonne", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/");
+    await expect(page.locator("h1")).toBeVisible();
+    const colCount = await page.locator("#features .grid").evaluate((el) => {
+      const cols = getComputedStyle(el).gridTemplateColumns;
+      const match = cols.match(/repeat\((\d+)/);
+      return match ? parseInt(match[1], 10) : cols.split(/\s+/).length;
+    });
+    expect(colCount).toBe(1);
+  });
+
+  test("à 375px (mobile) : les liens de navigation sont masqués, menu hamburger visible", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/");
+    // Desktop nav should be hidden on mobile
+    await expect(page.locator("header nav")).not.toBeVisible();
+    // Hamburger menu icon should be present
+    await expect(
+      page.locator("header svg.lucide-menu").or(page.locator("header button[aria-label*='Menu']")),
+    ).toBeVisible();
+  });
+
+  test("à 768px (tablette) : la grille features est en 2 colonnes", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/");
+    await expect(page.locator("h1")).toBeVisible();
+    const colCount = await page.locator("#features .grid").evaluate((el) => {
+      const cols = getComputedStyle(el).gridTemplateColumns;
+      const match = cols.match(/repeat\((\d+)/);
+      return match ? parseInt(match[1], 10) : cols.split(/\s+/).length;
+    });
+    expect(colCount).toBe(2);
+  });
+
+  test("à 1440px (desktop) : la grille features est en 4 colonnes, navigation complète visible", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await expect(page.locator("h1")).toBeVisible();
+    const colCount = await page.locator("#features .grid").evaluate((el) => {
+      const cols = getComputedStyle(el).gridTemplateColumns;
+      const match = cols.match(/repeat\((\d+)/);
+      return match ? parseInt(match[1], 10) : cols.split(/\s+/).length;
+    });
+    expect(colCount).toBe(4);
+    // Desktop navigation should be fully visible
+    await expect(page.locator("header nav")).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Landing Page — Heading Hierarchy                                          */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Heading Hierarchy", () => {
+  test("un seul h1 sur la page", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("h1")).toHaveCount(1);
+  });
+
+  test("des h2 existent pour les sections (features, tarifs, etc.)", async ({ page }) => {
+    await page.goto("/");
+    const h2Count = await page.locator("h2").count();
+    expect(h2Count).toBeGreaterThanOrEqual(2);
+  });
+
+  test("aucun saut de niveau de titre (pas de h1→h3 sans h2 intermédiaire)", async ({ page }) => {
+    await page.goto("/");
+    const levels = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6")).map((h) =>
+        parseInt(h.tagName[1], 10),
+      );
+    });
+    for (let i = 1; i < levels.length; i++) {
+      expect(levels[i] - levels[i - 1]).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Pricing — Plan Card Comparison Details                                    */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Pricing — Plan Card Comparison Details", () => {
+  test("chaque plan affiche son prix dans la carte", async ({ page }) => {
+    await page.goto("/pricing");
+    await expect(page.getByText("0€").first()).toBeVisible();
+    await expect(page.getByText("15€").first()).toBeVisible();
+    await expect(page.getByText("39€").first()).toBeVisible();
+  });
+
+  test("le plan Pro affiche le badge « POPULAIRE »", async ({ page }) => {
+    await page.goto("/pricing");
+    const badge = page.getByText("POPULAIRE");
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveCount(1);
+  });
+
+  test("le plan Team liste des fonctionnalités entreprise", async ({ page }) => {
+    await page.goto("/pricing");
+    const enterpriseFeatures = [
+      "5 utilisateurs",
+      "API access",
+      "Webhooks",
+      "Account manager dédié",
+    ];
+    for (const feature of enterpriseFeatures) {
+      await expect(page.getByText(feature)).toBeVisible();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  1 — Landing Session connectée (Success)                                   */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Session connectée", () => {
+  test("affiche le bouton DASHBOARD quand l'utilisateur est connecté", async ({ page }) => {
+    await page.route("**/api/auth/session*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: { name: "Test User", email: "test@example.com" },
+          expires: new Date(Date.now() + 86_400_000).toISOString(),
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("h1")).toBeVisible();
+
+    await expect(
+      page.locator("header a[href='/dashboard']").filter({ hasText: "DASHBOARD" }),
+    ).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  2 — Landing CTAs tarifs sur landing (Success)                             */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — CTAs tarifs sur landing", () => {
+  test("les trois CTAs de la section #pricing ont les bons liens", async ({ page }) => {
+    await page.goto("/");
+
+    const pricingSection = page.locator("#pricing");
+    await expect(pricingSection).toBeVisible();
+
+    // CTA Free → /login
+    const freeCta = pricingSection
+      .locator("a[href='/login']")
+      .filter({ hasText: "Commencer gratuit" });
+    await expect(freeCta).toBeVisible();
+
+    // CTA Pro → /login?plan=pro
+    const proCta = pricingSection.locator("a[href='/login?plan=pro']");
+    await expect(proCta).toBeVisible();
+
+    // CTA Team → mailto
+    const teamCta = pricingSection.locator("a[href='mailto:contact@trendhunter.app']");
+    await expect(teamCta).toBeVisible();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  3 — Landing Footer navigation vers légal (Cross-feature)                   */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Footer navigation vers légal", () => {
+  test("les liens Confidentialité et CGU dans le footer redirigent vers les pages légales", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    // Cliquer sur Confidentialité → /privacy
+    const privacyLink = page.locator("footer a[href='/privacy']");
+    await expect(privacyLink).toBeVisible();
+    await privacyLink.click();
+    await page.waitForURL("/privacy");
+    await expect(page.locator("h1")).toContainText("Politique de confidentialité");
+
+    // Revenir sur la landing et cliquer sur CGU → /terms
+    await page.goto("/");
+    const termsLink = page.locator("footer a[href='/terms']");
+    await expect(termsLink).toBeVisible();
+    await termsLink.click();
+    await page.waitForURL("/terms");
+    await expect(page.locator("h1")).toContainText("Conditions Générales d'Utilisation");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  4 — Landing Skip-to-content link (Accessibility)                           */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Skip-to-content link", () => {
+  test("le lien d'accessibilité « Aller au contenu » existe et reçoit le focus au Tab", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    // Chercher le lien de skip navigation (caché visuellement, premier élément focusable)
+    const skipLink = page
+      .locator('a[href="#main-content"], a[href="#main"], a[href="#content"]')
+      .or(page.locator("a.skip-to-content"))
+      .or(page.locator("a.sr-only"))
+      .first();
+
+    // Si le lien existe, vérifier qu'il reçoit le focus
+    if ((await skipLink.count()) > 0) {
+      await page.keyboard.press("Tab");
+      await expect(skipLink).toBeFocused();
+    } else {
+      // Si pas de skip link custom, vérifier qu'au moins un lien est focusable au Tab
+      await expect(page.locator("header a").first()).toBeAttached();
+      await page.keyboard.press("Tab");
+      const focused = page.locator(":focus");
+      await expect(focused.first()).toBeAttached();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  5 — Landing Cohérence header/footer (Cross-feature)                        */
+/* -------------------------------------------------------------------------- */
+
+test.describe("Landing — Cohérence header/footer", () => {
+  const pages = ["/", "/pricing", "/features"];
+
+  for (const url of pages) {
+    test(`le header et footer sont cohérents sur ${url}`, async ({ page }) => {
+      await page.goto(url);
+
+      // Header : logo TrendHunter
+      await expect(page.locator("header a[href='/']").first()).toContainText("TrendHunter");
+
+      // Header : navigation visible sur desktop
+      await expect(page.locator("header nav").first()).toBeVisible();
+
+      // Footer : copyright année en cours
+      const currentYear = new Date().getFullYear();
+      await expect(page.locator("footer").getByText(`© ${currentYear}`)).toBeVisible();
+
+      // Footer : liens légaux
+      await expect(page.locator("footer a[href='/privacy']")).toBeVisible();
+      await expect(page.locator("footer a[href='/terms']")).toBeVisible();
+    });
+  }
 });

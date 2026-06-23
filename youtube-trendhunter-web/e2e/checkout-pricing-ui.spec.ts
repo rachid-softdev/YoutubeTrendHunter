@@ -265,3 +265,29 @@ test.describe("UI Tarifs — Navigation URL", () => {
     await expect(page.locator("h1")).toContainText("Investissez");
   });
 });
+
+/* ========================================================================== */
+/*  13 — Pricing Tablette 768px 3 colonnes (Responsive)                       */
+/* ========================================================================== */
+
+test.describe("UI Tarifs — Tablette responsive", () => {
+  test("13b - à 768px la grille affiche 3 colonnes", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/pricing");
+
+    // Vérifier que la grille utilise 3 colonnes à 768px (md:grid-cols-3)
+    const colCount = await page.evaluate(() => {
+      const grid = document.querySelector("main > div > div.grid");
+      if (!grid) return 0;
+      const cols = getComputedStyle(grid).gridTemplateColumns;
+      const match = cols.match(/repeat\((\d+)/);
+      return match ? parseInt(match[1], 10) : cols.split(/\s+/).length;
+    });
+    expect(colCount).toBe(3);
+
+    // Les 3 cartes sont visibles
+    await expect(page.getByText("Free").first()).toBeVisible();
+    await expect(page.getByText("Pro").first()).toBeVisible();
+    await expect(page.getByText("Team").first()).toBeVisible();
+  });
+});
