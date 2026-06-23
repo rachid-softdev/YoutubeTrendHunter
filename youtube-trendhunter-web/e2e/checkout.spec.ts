@@ -28,7 +28,7 @@ const MOCK_SESSION = {
 };
 
 async function mockSession(page: Page) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -205,7 +205,7 @@ test.describe("Checkout Stripe", () => {
 
   test("POST /api/stripe/checkout retourne une URL de redirection", async ({ page }) => {
     // Mock the Stripe checkout endpoint
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       expect(route.request().method()).toBe("POST");
 
       const body = JSON.parse(route.request().postData() || "{}");
@@ -220,19 +220,24 @@ test.describe("Checkout Stripe", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
+    await page.goto("/pricing");
+    const result = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, PRO_PRICE_ID);
 
-    expect(response.status()).toBe(200);
+    expect(result.status).toBe(200);
 
-    const json = await response.json();
-    expect(json).toHaveProperty("url");
-    expect(json.url).toContain("checkout.stripe.com");
+    expect(result.body).toHaveProperty("url");
+    expect(result.body.url).toContain("checkout.stripe.com");
   });
 
   test("POST /api/stripe/checkout rejette les priceId invalides", async ({ page }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
 
       if (!body.priceId || typeof body.priceId !== "string") {
@@ -253,36 +258,47 @@ test.describe("Checkout Stripe", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: {},
+    await page.goto("/pricing");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
 
-    const json = await response.json();
-    expect(json.error).toContain("invalide");
+    expect(result.body.error).toContain("invalide");
   });
 
   test("POST /api/stripe/checkout rejette les requêtes non authentifiées", async ({ page }) => {
     // Don't mock session — test with no auth
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       // Let it pass through to the real endpoint which will check auth
       await route.continue();
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
+    await page.goto("/pricing");
+    const result = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status };
+    }, PRO_PRICE_ID);
 
     // Without auth, the endpoint should return 401
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   /* ----- Nouveaux tests Checkout Stripe (fetch native via page.evaluate) ----- */
 
   test("4 - le priceId Pro retourne une URL de checkout", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.priceId).toBe(PRO_PRICE_ID);
       await route.fulfill({
@@ -305,7 +321,7 @@ test.describe("Checkout Stripe", () => {
 
   test("5 - le priceId Team retourne une URL de checkout", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.priceId).toBe(TEAM_PRICE_ID);
       await route.fulfill({
@@ -328,7 +344,7 @@ test.describe("Checkout Stripe", () => {
 
   test("6 - utilisateur sans stripeCustomerId crée un nouveau client Stripe", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -349,7 +365,7 @@ test.describe("Checkout Stripe", () => {
 
   test("7 - utilisateur en session mais pas en DB → 404", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 404,
         contentType: "application/json",
@@ -370,7 +386,7 @@ test.describe("Checkout Stripe", () => {
 
   test("8 - Stripe adapter PRICE_NOT_FOUND → 500", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -390,7 +406,7 @@ test.describe("Checkout Stripe", () => {
 
   test("9 - corps de requête non-JSON → 500", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -410,7 +426,7 @@ test.describe("Checkout Stripe", () => {
 
   test("10 - échec Redis → 503 Service temporairement indisponible", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -430,7 +446,7 @@ test.describe("Checkout Stripe", () => {
   });
 
   test("11 - token de session expiré → 401", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -438,7 +454,7 @@ test.describe("Checkout Stripe", () => {
       });
     });
     await page.goto("/pricing");
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
@@ -459,7 +475,7 @@ test.describe("Checkout Stripe", () => {
   test("12 - 6 requêtes rapides → 7e retourne 429", async ({ page }) => {
     await page.goto("/pricing");
     let callCount = 0;
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       callCount++;
       if (callCount > 6) {
         await route.fulfill({
@@ -506,7 +522,7 @@ test.describe("Portail de facturation", () => {
   });
 
   test("POST /api/stripe/portal retourne une URL", async ({ page }) => {
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -516,18 +532,25 @@ test.describe("Portail de facturation", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(200);
+    await page.goto("/pricing");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const json = await response.json();
-    expect(json).toHaveProperty("url");
+    expect(result.body).toHaveProperty("url");
   });
 
   /* ----- Nouveaux tests Portail de facturation (fetch native via page.evaluate) ----- */
 
   test("2 - returnUrl par défaut est /billing", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.returnUrl).toBeUndefined();
       await route.fulfill({
@@ -551,7 +574,7 @@ test.describe("Portail de facturation", () => {
   test("3 - returnUrl personnalisé écrase la valeur par défaut", async ({ page }) => {
     const customUrl = "https://example.com/custom-billing";
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       expect(body.returnUrl).toBe(customUrl);
       await route.fulfill({
@@ -573,7 +596,7 @@ test.describe("Portail de facturation", () => {
 
   test("4 - utilisateur absent de la DB → 400 Aucun abonnement", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 400,
         contentType: "application/json",
@@ -594,7 +617,7 @@ test.describe("Portail de facturation", () => {
 
   test("5 - returnUrl avec protocole data: → 400", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       if (typeof body.returnUrl === "string" && body.returnUrl.startsWith("data:")) {
         await route.fulfill({
@@ -623,7 +646,7 @@ test.describe("Portail de facturation", () => {
 
   test("6 - limite de débit dépassée → 429", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 429,
         contentType: "application/json",
@@ -646,7 +669,7 @@ test.describe("Portail de facturation", () => {
 
   test("7 - Stripe adapter CUSTOMER_NOT_FOUND → 500", async ({ page }) => {
     await page.goto("/pricing");
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",

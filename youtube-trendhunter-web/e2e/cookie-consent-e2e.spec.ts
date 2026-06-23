@@ -363,3 +363,165 @@ test.describe("CookieConsent — Cas limites", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 });
+
+// ========================================================================== //
+//  CookieConsent — Réapparition de la bannière                                //
+//  Verifies that the banner reappears after the user clears localStorage,     //
+//  as required for legal compliance (consent must be re-obtainable).          //
+// ========================================================================== //
+
+test.describe("CookieConsent — Réapparition de la bannière", () => {
+  test("après acceptation et effacement localStorage → bannière réapparaît au prochain chargement", async ({
+    page,
+  }) => {
+    // Step 1: Accept cookies
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+    await page.getByRole("button", { name: "Tout accepter" }).click();
+    await page.waitForTimeout(500);
+
+    // Verify it was accepted
+    const consent = await page.evaluate(() => localStorage.getItem("cookie_consent"));
+    expect(consent).toBe("accepted");
+
+    // Step 2: Clear localStorage (simulate user clearing data)
+    await page.evaluate(() => localStorage.removeItem("cookie_consent"));
+
+    // Step 3: Reload the page — banner should reappear
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    await expect(
+      page.getByText("Nous utilisons des cookies pour analyser le trafic"),
+    ).toBeVisible();
+  });
+
+  test("après 'Essentiels seulement' et effacement → bannière réapparaît", async ({ page }) => {
+    // Step 1: Choose essential only
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+    await page.getByRole("button", { name: "Essentiels seulement" }).click();
+    await page.waitForTimeout(500);
+
+    // Verify it was set to essential
+    const consent = await page.evaluate(() => localStorage.getItem("cookie_consent"));
+    expect(consent).toBe("essential");
+
+    // Step 2: Clear localStorage
+    await page.evaluate(() => localStorage.removeItem("cookie_consent"));
+
+    // Step 3: Reload the page — banner should reappear
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    await expect(
+      page.getByText("Nous utilisons des cookies pour analyser le trafic"),
+    ).toBeVisible();
+  });
+});
+
+// ========================================================================== //
+//  CookieConsent — Valeurs localStorage invalides                             //
+//  Verifies that unrecognized localStorage values are treated as "not         //
+//  consented", so the banner appears.                                         //
+// ========================================================================== //
+
+test.describe("CookieConsent — Valeurs localStorage invalides", () => {
+  test("localStorage avec valeur 'xyz' → bannière visible (traitée comme non consentie)", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("cookie_consent", "xyz");
+    });
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    await expect(
+      page.getByText("Nous utilisons des cookies pour analyser le trafic"),
+    ).toBeVisible();
+  });
+
+  test("localStorage avec valeur vide '' → bannière visible", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("cookie_consent", "");
+    });
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    await expect(
+      page.getByText("Nous utilisons des cookies pour analyser le trafic"),
+    ).toBeVisible();
+  });
+});
+
+// ========================================================================== //
+//  CookieConsent — Navigation entre pages                                     //
+//  Verifies that consent persists across navigations and the banner does not  //
+//  reappear on subsequent pages once the user has consented.                  //
+// ========================================================================== //
+
+test.describe("CookieConsent — Navigation entre pages", () => {
+  test("consentement persisté → bannière NON visible après navigation vers /pricing", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("cookie_consent", "accepted");
+    });
+    await page.goto("/pricing");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    await expect(page.getByText("Nous utilisons des cookies pour analyser le trafic")).toHaveCount(
+      0,
+    );
+  });
+
+  test("navigation vers /features puis retour → bannière ne réapparaît pas si déjà consentie", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("cookie_consent", "essential");
+    });
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    // Banner should NOT be visible
+    await expect(page.getByText("Nous utilisons des cookies pour analyser le trafic")).toHaveCount(
+      0,
+    );
+
+    // Navigate away and back
+    await page.goto("/features");
+    await page.waitForLoadState("networkidle");
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    // Still no banner
+    await expect(page.getByText("Nous utilisons des cookies pour analyser le trafic")).toHaveCount(
+      0,
+    );
+  });
+});
+
+// ========================================================================== //
+//  CookieConsent — Clics multiples                                            //
+//  Verifies that rapid or multiple clicks on accept buttons do not cause      //
+//  inconsistent localStorage state.                                           //
+// ========================================================================== //
+
+test.describe("CookieConsent — Clics multiples", () => {
+  test("double-clic rapide sur 'Tout accepter' → localStorage est 'accepted'", async ({ page }) => {
+    await injectPostHogMock(page);
+    await gotoHome(page);
+    await page.waitForTimeout(CONSENT_DELAY + ANIMATION_DURATION + 200);
+
+    const acceptBtn = page.getByRole("button", { name: "Tout accepter" });
+    await acceptBtn.click();
+    await acceptBtn.click({ force: true }); // second click (banner may be disappearing)
+
+    const consent = await page.evaluate(() => localStorage.getItem("cookie_consent"));
+    expect(consent).toBe("accepted");
+  });
+});

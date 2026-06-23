@@ -8,14 +8,33 @@ import { test, expect, type Page } from "@playwright/test";
  * in dashboard.spec.ts.
  *
  * Tests use mocked API routes for deterministic, database-free execution.
- * Server-side auth() will redirect page loads to /login; API calls via
- * page.request work with route mocking or fall through to real handlers
- * when no mock is set (testing 401 responses).
+ * All API calls use page.evaluate() + fetch() so that page.route()
+ * interceptors are properly hit.
  */
 
 /* -------------------------------------------------------------------------- */
 /*  Constants & helpers                                                        */
 /* -------------------------------------------------------------------------- */
+
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
 
 const MOCK_SESSION = {
   user: {
@@ -51,7 +70,7 @@ const MOCK_SESSION_TEAM = {
 };
 
 async function mockSession(page: Page, session = MOCK_SESSION) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -226,7 +245,8 @@ function buildNichesSuccessHandler(
           status: 403,
           contentType: "application/json",
           body: JSON.stringify({
-            error: "Limite du plan FREE atteinte (1 niche). Passez à Pro pour suivre des niches illimitées.",
+            error:
+              "Limite du plan FREE atteinte (1 niche). Passez à Pro pour suivre des niches illimitées.",
             code: "FORBIDDEN",
           }),
         });
@@ -314,64 +334,78 @@ function buildServerErrorHandler() {
 
 test.describe("Niches — Structure & données", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page);
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
     await page.route("**/api/niches/**", buildNicheByIdHandler());
   });
 
   test("renvoie la liste complète des niches disponibles avec leur statut", async ({ page }) => {
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body.allNiches).toBeDefined();
     expect(Array.isArray(body.allNiches)).toBe(true);
     expect(body.allNiches.length).toBe(3);
 
     // Each niche has required fields
-    for (const niche of body.allNiches) {
+    for (const niche of body.allNiches as Array<Record<string, unknown>>) {
       expect(niche).toHaveProperty("id");
       expect(niche).toHaveProperty("name");
       expect(niche).toHaveProperty("slug");
       expect(niche).toHaveProperty("isActive");
       expect(niche).toHaveProperty("_count");
-      expect(niche._count).toHaveProperty("trends");
-      expect(typeof niche._count.trends).toBe("number");
+      expect(niche._count as Record<string, unknown>).toHaveProperty("trends");
+      expect(typeof (niche._count as Record<string, number>).trends).toBe("number");
     }
   });
 
   test("chaque niche expose un compteur de tendances", async ({ page }) => {
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    const tech = body.allNiches.find((n: { slug: string }) => n.slug === "tech");
-    const gaming = body.allNiches.find((n: { slug: string }) => n.slug === "gaming");
-    const musique = body.allNiches.find((n: { slug: string }) => n.slug === "musique");
+    const body = result.body as Record<string, unknown>;
+    const niches = body.allNiches as Array<{ slug: string; _count: { trends: number } }>;
+    const tech = niches.find((n) => n.slug === "tech");
+    const gaming = niches.find((n) => n.slug === "gaming");
+    const musique = niches.find((n) => n.slug === "musique");
 
-    expect(tech._count.trends).toBe(2);
-    expect(gaming._count.trends).toBe(0);
-    expect(musique._count.trends).toBe(5);
+    expect(tech!._count.trends).toBe(2);
+    expect(gaming!._count.trends).toBe(0);
+    expect(musique!._count.trends).toBe(5);
   });
 
   test("indique quelles niches l'utilisateur suit", async ({ page }) => {
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { userNiches: Array<{ niche: { id: string } }> };
     expect(body.userNiches).toBeDefined();
     expect(Array.isArray(body.userNiches)).toBe(true);
 
-    const followedIds = body.userNiches.map((un: { niche: { id: string } }) => un.niche.id);
+    const followedIds = body.userNiches.map((un) => un.niche.id);
     expect(followedIds).toContain("niche-1");
     expect(followedIds).not.toContain("niche-2");
   });
 
   test("renvoie le compteur currentCount et maxCount", async ({ page }) => {
-    const response = await page.request.get("/api/niches");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { currentCount: number; maxCount: number };
     expect(body).toHaveProperty("currentCount");
     expect(body).toHaveProperty("maxCount");
     expect(body.currentCount).toBe(1);
@@ -400,10 +434,13 @@ test.describe("Niches — Structure & données", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches?limit=10");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches?limit=10");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toHaveProperty("niches");
     expect(body).toHaveProperty("followed");
     expect(body).toHaveProperty("available");
@@ -417,42 +454,51 @@ test.describe("Niches — Structure & données", () => {
 
 test.describe("Niches — Souscription", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page);
   });
 
   test("permet de suivre une nouvelle niche (POST 201)", async ({ page }) => {
     // FREE user with no followed niches yet (currentCount=0, maxCount=1)
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, [], 0, 1));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, [], 0, 1));
     await page.route("**/api/niches/**", buildNicheByIdHandler());
 
     // niche-1 is not yet followed → should succeed
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(201);
+    expect(result.status).toBe(201);
 
-    const body = await response.json();
+    const body = result.body as { userNiche: { niche: { id: string } } };
     expect(body.userNiche).toBeDefined();
     expect(body.userNiche.niche.id).toBe("niche-1");
   });
 
   test("permet de ne plus suivre une niche (DELETE 204)", async ({ page }) => {
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
-    await page.route("**/api/niches/niche-1", async (route) => {
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
+    await page.route("**/api/niches/niche-1*", async (route) => {
       expect(route.request().method()).toBe("DELETE");
       await route.fulfill({ status: 204 });
     });
 
-    const response = await page.request.delete("/api/niches/niche-1");
-    expect(response.status()).toBe(204);
-    expect(response.statusText()).toBe("No Content");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-1", { method: "DELETE" });
+      return { status: res.status, statusText: res.statusText };
+    });
+    expect(result.status).toBe(204);
+    expect(result.statusText).toBe("No Content");
   });
 
   test("le compteur de niches suivies est mis à jour après souscription", async ({ page }) => {
     // Simulate: user follows niche-2, currentCount goes from 1 to 2
     let followedIds = ["niche-1"];
 
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       if (route.request().method() === "POST") {
         followedIds = [...followedIds, "niche-2"];
         await route.fulfill({
@@ -480,16 +526,26 @@ test.describe("Niches — Souscription", () => {
     });
 
     // Follow niche-2
-    const postResp = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(postResp.status()).toBe(201);
+    const postResult = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(postResult.status).toBe(201);
 
     // Verify GET shows updated count
-    const getResp = await page.request.get("/api/niches");
-    const body = await getResp.json();
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = getResult.body as { userNiches: Array<{ niche: { slug: string } }> };
 
     // With FREE plan max=1, but POST succeeded (bypass limit for test)
     expect(body.userNiches.length).toBe(2);
-    const slugs = body.userNiches.map((un: { niche: { slug: string } }) => un.niche.slug);
+    const slugs = body.userNiches.map((un) => un.niche.slug);
     expect(slugs).toContain("tech");
     expect(slugs).toContain("gaming");
   });
@@ -500,14 +556,23 @@ test.describe("Niches — Souscription", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Gestion d'erreurs", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("POST /api/niches retourne 401 sans authentification", async ({ page }) => {
     // No session mock → auth() returns null → 401
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
@@ -515,10 +580,13 @@ test.describe("Niches — Gestion d'erreurs", () => {
   });
 
   test("DELETE /api/niches/:id retourne 401 sans authentification", async ({ page }) => {
-    const response = await page.request.delete("/api/niches/niche-1");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-1", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
@@ -527,14 +595,19 @@ test.describe("Niches — Gestion d'erreurs", () => {
 
   test("POST /api/niches retourne 500 en cas d'erreur serveur", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", buildServerErrorHandler());
+    await page.route("**/api/niches*", buildServerErrorHandler());
 
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(500);
+    expect(result.status).toBe(500);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Erreur interne",
       code: "INTERNAL_ERROR",
@@ -543,7 +616,7 @@ test.describe("Niches — Gestion d'erreurs", () => {
 
   test("DELETE /api/niches/:id retourne 500 en cas d'erreur serveur", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches/niche-1", async (route) => {
+    await page.route("**/api/niches/niche-1*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -554,10 +627,13 @@ test.describe("Niches — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.delete("/api/niches/niche-1");
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-1", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(500);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Erreur interne",
       code: "INTERNAL_ERROR",
@@ -567,25 +643,33 @@ test.describe("Niches — Gestion d'erreurs", () => {
   test("suivre une niche déjà suivie retourne une erreur", async ({ page }) => {
     await mockSession(page);
     // niche-1 is already followed
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
 
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
 
-    const body = await response.json();
+    const body = result.body as { error: string };
     expect(body.error).toContain("suive déjà");
   });
 
   test("ne plus suivre une niche non suivie retourne 404", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches/niche-99", buildNicheByIdHandler(["niche-1"]));
+    await page.route("**/api/niches/niche-99*", buildNicheByIdHandler(["niche-1"]));
 
-    const response = await page.request.delete("/api/niches/niche-99");
-    expect(response.status()).toBe(404);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-99", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(404);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Vous ne suivez pas cette niche",
       code: "NOT_FOUND",
@@ -594,36 +678,51 @@ test.describe("Niches — Gestion d'erreurs", () => {
 
   test("POST avec un ID de niche vide retourne 400", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
 
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toHaveProperty("error");
     expect(body).toHaveProperty("code", "VALIDATION_ERROR");
   });
 
   test("POST avec un ID de niche null retourne 400", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
 
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: null },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: null }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
   });
 
   test("POST avec un body vide retourne 400", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 5));
 
-    const response = await page.request.post("/api/niches", {
-      data: {},
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
+    expect(result.status).toBe(400);
   });
 });
 
@@ -632,21 +731,27 @@ test.describe("Niches — Gestion d'erreurs", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Plan FREE & Limites", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("plan FREE limité à 1 niche", async ({ page }) => {
     await mockSession(page);
     // currentCount=1, maxCount=1 → FREE user already at limit
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
 
     // Trying to follow a 2nd niche
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-2" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(403);
+    expect(result.status).toBe(403);
 
-    const body = await response.json();
+    const body = result.body as { error: string; code: string };
     expect(body.error).toContain("Limite du plan FREE");
     expect(body.error).toContain("Passez à Pro");
     expect(body.code).toBe("FORBIDDEN");
@@ -654,13 +759,13 @@ test.describe("Niches — Plan FREE & Limites", () => {
 
   test("plan FREE affiche le compteur 1/1 dans les données", async ({ page }) => {
     await mockSession(page);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { currentCount: number; maxCount: number };
     expect(body.currentCount).toBe(1);
     expect(body.maxCount).toBe(1);
   });
@@ -668,15 +773,17 @@ test.describe("Niches — Plan FREE & Limites", () => {
   test("plan FREE avec 0 niche permet d'en ajouter une", async ({ page }) => {
     await mockSession(page);
     // currentCount=0, maxCount=1 → user has room
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, [], 0, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, [], 0, 1));
 
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(201);
+    expect(result.status).toBe(201);
   });
 });
 
@@ -685,43 +792,65 @@ test.describe("Niches — Plan FREE & Limites", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Plan PRO / TEAM (illimité)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("plan PRO permet de suivre des niches illimitées", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     // PRO plan: maxCount = -1 (unlimited)
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1));
 
     // Add 2nd niche → should succeed (PRO has no limit)
-    const resp1 = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(resp1.status()).toBe(201);
+    const resp1 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp1.status).toBe(201);
 
     // Add 3rd niche → should also succeed
-    const resp2 = await page.request.post("/api/niches", { data: { nicheId: "niche-3" } });
-    expect(resp2.status()).toBe(201);
+    const resp2 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-3" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp2.status).toBe(201);
   });
 
   test("plan TEAM permet de suivre des niches illimitées", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_TEAM);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1));
 
-    const response = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(response.status()).toBe(201);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(201);
   });
 
   test("plan PRO n'affiche pas de limite dans les métadonnées", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
     await page.route(
-      "**/api/niches",
+      "**/api/niches*",
       buildNichesSuccessHandler(BASE_NICHES, ["niche-1", "niche-2"], 2, -1),
     );
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { currentCount: number; maxCount: number };
     expect(body.currentCount).toBe(2);
     expect(body.maxCount).toBe(-1);
   });
@@ -732,9 +861,13 @@ test.describe("Niches — Plan PRO / TEAM (illimité)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Cas limites", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("liste vide de niches disponibles", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -747,8 +880,15 @@ test.describe("Niches — Cas limites", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as {
+      allNiches: unknown[];
+      userNiches: unknown[];
+      currentCount: number;
+    };
     expect(body.allNiches).toEqual([]);
     expect(body.userNiches).toEqual([]);
     expect(body.currentCount).toBe(0);
@@ -756,7 +896,7 @@ test.describe("Niches — Cas limites", () => {
 
   test("nom de niche très long est correctement retourné", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -769,15 +909,18 @@ test.describe("Niches — Cas limites", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { allNiches: Array<{ name: string }> };
     expect(body.allNiches[0].name.length).toBeGreaterThan(80);
     expect(body.allNiches[0].name).toContain("Technologies émergentes");
   });
 
   test("niche avec caractères spéciaux dans le nom", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -790,8 +933,11 @@ test.describe("Niches — Cas limites", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { allNiches: Array<{ name: string; description: string }> };
     expect(body.allNiches[0].name).toContain("☕");
     expect(body.allNiches[0].name).toContain("100%");
     expect(body.allNiches[0].description).toContain("<script>");
@@ -800,7 +946,7 @@ test.describe("Niches — Cas limites", () => {
 
   test("slug avec tirets et chiffres", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -813,8 +959,11 @@ test.describe("Niches — Cas limites", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { allNiches: Array<{ slug: string }> };
     expect(body.allNiches[0].slug).toBe("iot-smart-home-v2");
     expect(body.allNiches[0].slug).toMatch(/^[a-z0-9-]+$/);
   });
@@ -822,22 +971,24 @@ test.describe("Niches — Cas limites", () => {
   test("toutes les niches déjà suivies (aucune disponible)", async ({ page }) => {
     await mockSession(page);
     const singleNiche = BASE_NICHES.slice(0, 1);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(singleNiche, ["niche-1"], 1, -1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(singleNiche, ["niche-1"], 1, -1));
 
     // Trying to follow the only niche again → already following error
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-1" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-1" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    expect((await response.json()).error).toContain("suive déjà");
+    expect(result.status).toBe(400);
+    expect((result.body as { error: string }).error).toContain("suive déjà");
   });
 
   test("des niches en double dans la réponse API sont gérables", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       const dupes = [...BASE_NICHES, { ...BASE_NICHES[0], id: "niche-1-dupe" }];
       await route.fulfill({
         status: 200,
@@ -851,21 +1002,27 @@ test.describe("Niches — Cas limites", () => {
       });
     });
 
-    const response = await page.request.get("/api/niches");
-    const body = await response.json();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = result.body as { allNiches: Array<{ id: string }> };
     // Response contains duplicates but still parses as valid JSON
     expect(body.allNiches.length).toBe(4);
     // Filter unique by id
-    const uniqueIds = new Set(body.allNiches.map((n: { id: string }) => n.id));
+    const uniqueIds = new Set(body.allNiches.map((n) => n.id));
     expect(uniqueIds.size).toBe(3); // niche-1 appears twice
   });
 
   test("niche avec ID invalide retourne 404", async ({ page }) => {
     await mockSession(page);
-    await page.route("**/api/niches/invalid-id-!@#", buildNicheByIdHandler(["niche-1"]));
+    await page.route("**/api/niches/invalid-id-!@#*", buildNicheByIdHandler(["niche-1"]));
 
-    const response = await page.request.delete("/api/niches/invalid-id-!@#");
-    expect(response.status()).toBe(404);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/invalid-id-!@#", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(404);
   });
 });
 
@@ -874,6 +1031,10 @@ test.describe("Niches — Cas limites", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Filtrage des tendances", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("l'API /api/trends accepte un paramètre niche pour filtrer", async ({ page }) => {
     await mockSession(page);
     await page.route("**/api/trends*", async (route) => {
@@ -907,15 +1068,21 @@ test.describe("Niches — Filtrage des tendances", () => {
     });
 
     // Test filtering by "gaming"
-    const resp = await page.request.get("/api/trends?niche=gaming");
-    expect(resp.status()).toBe(200);
-    const body = await resp.json();
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=gaming");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(200);
+    const body = resp.body as { trends: Array<{ title: string }> };
     expect(body.trends[0].title).toContain("gaming");
 
     // Test filtering by "tech"
-    const resp2 = await page.request.get("/api/trends?niche=tech");
-    expect(resp2.status()).toBe(200);
-    const body2 = await resp2.json();
+    const resp2 = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp2.status).toBe(200);
+    const body2 = resp2.body as { trends: Array<{ title: string }> };
     expect(body2.trends[0].title).toContain("tech");
   });
 
@@ -923,7 +1090,7 @@ test.describe("Niches — Filtrage des tendances", () => {
     await mockSession(page);
 
     // Mock the dashboard server page for niche filtering
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -958,12 +1125,16 @@ test.describe("Niches — Filtrage des tendances", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Changement rapide", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("follow et unfollow séquentiels rapides ne causent pas d'erreur", async ({ page }) => {
     await mockSession(page);
 
     let followedIds = ["niche-1"];
 
-    await page.route("**/api/niches", async (route) => {
+    await page.route("**/api/niches*", async (route) => {
       if (route.request().method() === "POST") {
         const body = JSON.parse(route.request().postData() || "{}");
         const { nicheId } = body;
@@ -971,7 +1142,10 @@ test.describe("Niches — Changement rapide", () => {
           await route.fulfill({
             status: 400,
             contentType: "application/json",
-            body: JSON.stringify({ error: "Vous suive déjà cette niche", code: "VALIDATION_ERROR" }),
+            body: JSON.stringify({
+              error: "Vous suive déjà cette niche",
+              code: "VALIDATION_ERROR",
+            }),
           });
           return;
         }
@@ -998,7 +1172,7 @@ test.describe("Niches — Changement rapide", () => {
       }
     });
 
-    await page.route("**/api/niches/niche-2", async (route) => {
+    await page.route("**/api/niches/niche-2*", async (route) => {
       if (route.request().method() === "DELETE") {
         followedIds = followedIds.filter((id) => id !== "niche-2");
         await route.fulfill({ status: 204 });
@@ -1006,21 +1180,41 @@ test.describe("Niches — Changement rapide", () => {
     });
 
     // Follow niche-2
-    const r1 = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(r1.status()).toBe(201);
+    const r1 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(r1.status).toBe(201);
 
     // Immediately unfollow niche-2
-    const r2 = await page.request.delete("/api/niches/niche-2");
-    expect(r2.status()).toBe(204);
+    const r2 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches/niche-2", { method: "DELETE" });
+      return { status: res.status };
+    });
+    expect(r2.status).toBe(204);
 
     // Follow niche-2 again
-    const r3 = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(r3.status()).toBe(201);
+    const r3 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(r3.status).toBe(201);
 
     // Verify final state
-    const r4 = await page.request.get("/api/niches");
-    const body = await r4.json();
-    const slugs = body.userNiches.map((un: { niche: { slug: string } }) => un.niche.slug);
+    const r4 = await page.evaluate(async () => {
+      const res = await fetch("/api/niches");
+      return { status: res.status, body: await res.json() };
+    });
+    const body = r4.body as { userNiches: Array<{ niche: { slug: string } }> };
+    const slugs = body.userNiches.map((un) => un.niche.slug);
     expect(slugs).toContain("tech");
     expect(slugs).toContain("gaming");
   });
@@ -1059,17 +1253,22 @@ test.describe("Niches — Changement rapide", () => {
     // Rapidly request different niche filters
     const niches = ["tech", "gaming", "musique", "tech", "gaming"];
     const results = await Promise.all(
-      niches.map((n) => page.request.get(`/api/trends?niche=${n}`)),
+      niches.map((n) =>
+        page.evaluate(async (niche) => {
+          const res = await fetch(`/api/trends?niche=${niche}`);
+          return { status: res.status, body: await res.json() };
+        }, n),
+      ),
     );
 
     for (const res of results) {
-      expect(res.status()).toBe(200);
-      const body = await res.json();
+      expect(res.status).toBe(200);
+      const body = res.body as { trends: unknown[] };
       expect(body.trends.length).toBe(1);
     }
 
     // Verify last response is correct
-    const last = await results[results.length - 1].json();
+    const last = results[results.length - 1].body as { trends: Array<{ title: string }> };
     expect(last.trends[0].title).toContain("gaming");
   });
 });
@@ -1079,51 +1278,77 @@ test.describe("Niches — Changement rapide", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Niches — Plan enforcement (upgrade/downgrade)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("plan FREE → PRO permet de suivre plus de niches", async ({ page }) => {
     // Start as FREE with 1 niche at limit
     await mockSession(page, MOCK_SESSION);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
 
-    const limitResp = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(limitResp.status()).toBe(403);
+    const limitResp = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(limitResp.status).toBe(403);
 
     // Upgrade to PRO
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1));
 
-    const upgradeResp = await page.request.post("/api/niches", { data: { nicheId: "niche-2" } });
-    expect(upgradeResp.status()).toBe(201);
+    const upgradeResp = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(upgradeResp.status).toBe(201);
   });
 
   test("plan PRO → FREE (downgrade) applique la limite", async ({ page }) => {
     // Start as PRO with 2 niches followed
     await mockSession(page, MOCK_SESSION_PRO);
     await page.route(
-      "**/api/niches",
+      "**/api/niches*",
       buildNichesSuccessHandler(BASE_NICHES, ["niche-1", "niche-2"], 2, -1),
     );
 
     // Verify PRO can still add
-    const proResp = await page.request.post("/api/niches", { data: { nicheId: "niche-3" } });
-    expect(proResp.status()).toBe(201);
+    const proResp = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-3" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(proResp.status).toBe(201);
 
     // Downgrade to FREE — currentCount=2 > maxCount=1
     await mockSession(page, MOCK_SESSION);
     await page.route(
-      "**/api/niches",
+      "**/api/niches*",
       buildNichesSuccessHandler(BASE_NICHES, ["niche-1", "niche-2"], 2, 1),
     );
 
     // FREE user at limit cannot add more
-    const freeResp = await page.request.post("/api/niches", { data: { nicheId: "niche-3" } });
-    expect(freeResp.status()).toBe(403);
-    const body = await freeResp.json();
+    const freeResp = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-3" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(freeResp.status).toBe(403);
+    const body = freeResp.body as { error: string };
     expect(body.error).toContain("Limite du plan FREE");
   });
 });
@@ -1134,11 +1359,9 @@ test.describe("Niches — Plan enforcement (upgrade/downgrade)", () => {
 
 test.describe("Niches — Page /my-niches (UI)", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
   });
 
   test("la page /my-niches se charge sans erreur", async ({ page }) => {
@@ -1216,10 +1439,7 @@ test.describe("Niches — Page /my-niches (UI)", () => {
 
   test("le bouton 'Suivre' est désactivé pour FREE à la limite", async ({ page }) => {
     // Mock with FREE user at limit
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, 1));
 
     await page.goto("/my-niches");
     await page.waitForLoadState("networkidle");
@@ -1235,7 +1455,7 @@ test.describe("Niches — Page /my-niches (UI)", () => {
   });
 
   test("affiche un état vide quand l'utilisateur ne suit aucune niche", async ({ page }) => {
-    await page.route("**/api/niches", buildNichesSuccessHandler(BASE_NICHES, [], 0, 1));
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, [], 0, 1));
 
     await page.goto("/my-niches");
     await page.waitForLoadState("networkidle");
@@ -1248,10 +1468,7 @@ test.describe("Niches — Page /my-niches (UI)", () => {
 
   test("PRO plan n'affiche pas la bannière de limite", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route(
-      "**/api/niches",
-      buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1),
-    );
+    await page.route("**/api/niches*", buildNichesSuccessHandler(BASE_NICHES, ["niche-1"], 1, -1));
 
     await page.goto("/my-niches");
     await page.waitForLoadState("networkidle");

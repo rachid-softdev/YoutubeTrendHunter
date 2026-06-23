@@ -1,5 +1,25 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * Hardened Auth E2E tests for YouTube TrendHunter
  *
@@ -64,7 +84,7 @@ const MOCK_RATE_LIMIT_RESPONSE = {
 /* -------------------------------------------------------------------------- */
 
 async function mockSession(page: Page, session = ACTIVE_SESSION) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -100,6 +120,10 @@ async function waitForCookie(
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — Rate Limiting", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("tentatives de connexion rapides (5+ en 1s) déclenchent un rate limit simulé", async ({
     page,
   }) => {
@@ -107,7 +131,7 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     // We simulate what the server returns when rate-limited
     let attemptCount = 0;
 
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       attemptCount++;
       if (attemptCount > 3) {
         // Simulate rate limit after 3 rapid attempts
@@ -122,22 +146,31 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     });
 
     // When making rapid attempts
-    const results = await Promise.all(
-      Array.from({ length: 6 }, () =>
-        page.request.post("/api/extension/auth", { data: { name: "Test" } }),
-      ),
-    );
+    const results = await page.evaluate(async () => {
+      const results = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          fetch("/api/extension/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "Test" }),
+          }).then(async (res) => ({
+            status: res.status,
+            body: await res.json(),
+          })),
+        ),
+      );
+      return results;
+    });
 
     // Then at least one response should be 429 (rate limited)
-    const rateLimited = results.some((r) => r.status() === 429);
+    const rateLimited = results.some((r) => r.status === 429);
     expect(rateLimited).toBe(true);
 
     // The rate limited response has the proper error code
     for (const res of results) {
-      if (res.status() === 429) {
-        const body = await res.json();
-        expect(body.code).toBe("RATE_LIMIT");
-        expect(body.error).toContain("Trop de requêtes");
+      if (res.status === 429) {
+        expect(res.body.code).toBe("RATE_LIMIT");
+        expect(res.body.error).toContain("Trop de requêtes");
       }
     }
   });
@@ -146,20 +179,29 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     page,
   }) => {
     // When a rate-limited response is returned
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       await route.fulfill(MOCK_RATE_LIMIT_RESPONSE);
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "RateTest" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "RateTest" }),
+      });
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      return { status: res.status, headers };
     });
 
     // Then all rate limit headers should be present
-    expect(response.status()).toBe(429);
-    expect(response.headers()["x-ratelimit-limit"]).toBe("5");
-    expect(response.headers()["x-ratelimit-remaining"]).toBe("0");
-    expect(response.headers()["x-ratelimit-reset"]).toBeDefined();
-    expect(response.headers()["retry-after"]).toBe("55");
+    expect(result.status).toBe(429);
+    expect(result.headers["x-ratelimit-limit"]).toBe("5");
+    expect(result.headers["x-ratelimit-remaining"]).toBe("0");
+    expect(result.headers["x-ratelimit-reset"]).toBeDefined();
+    expect(result.headers["retry-after"]).toBe("55");
   });
 
   test("après rate limit, le formulaire de connexion reste accessible", async ({ page }) => {
@@ -192,7 +234,7 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     };
 
     let callIndex = 0;
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       callIndex++;
       // First call: rate limited. Second call: reset (simulating window expiry).
       if (callIndex === 1) {
@@ -207,22 +249,32 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     });
 
     // First call — rate limited
-    const first = await page.request.post("/api/extension/auth", {
-      data: { name: "ResetTest" },
+    const first = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "ResetTest" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(first.status()).toBe(429);
+    expect(first.status).toBe(429);
 
     // Second call — simulates that the window has elapsed
-    const second = await page.request.post("/api/extension/auth", {
-      data: { name: "ResetTest" },
+    const second = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "ResetTest" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(second.status()).toBe(401);
-    expect(first.status()).toBe(429);
+    expect(second.status).toBe(401);
+    expect(first.status).toBe(429);
   });
 
   test("le rate limit IP-based est distinct du rate limit session-based", async ({ page }) => {
     // Simulate that different identifiers have independent rate limit counters
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       // Check the request headers to simulate IP-based vs session-based
       const headers = route.request().headers();
       const hasSession = headers["cookie"]?.includes("next-auth.session-token");
@@ -241,10 +293,15 @@ test.describe("Auth renforcé — Rate Limiting", () => {
     });
 
     // Request without session cookie → IP rate limited
-    const withoutSession = await page.request.post("/api/extension/auth", {
-      data: { name: "IPTest" },
+    const withoutSession = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "IPTest" }),
+      });
+      return { status: res.status };
     });
-    expect(withoutSession.status()).toBe(429);
+    expect(withoutSession.status).toBe(429);
 
     // Request with session cookie → allowed
     await page.context().addCookies([
@@ -255,10 +312,15 @@ test.describe("Auth renforcé — Rate Limiting", () => {
         path: "/",
       },
     ]);
-    const withSession = await page.request.post("/api/extension/auth", {
-      data: { name: "SessionTest" },
+    const withSession = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "SessionTest" }),
+      });
+      return { status: res.status };
     });
-    expect(withSession.status()).not.toBe(429);
+    expect(withSession.status).not.toBe(429);
   });
 });
 
@@ -267,6 +329,10 @@ test.describe("Auth renforcé — Rate Limiting", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — CSRF et validation d'état", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("callback OAuth sans paramètre state — page d'erreur sécurisée", async ({ page }) => {
     // Simulate an OAuth callback without the state parameter (CSRF manipulation)
     // NextAuth v5 redirects to /login?error=... when state is missing/invalid
@@ -308,22 +374,26 @@ test.describe("Auth renforcé — CSRF et validation d'état", () => {
   test("endpoint CSRF token validation — formulaire sans token rejeté", async ({ page }) => {
     // Attempt to POST to the sign-in endpoint without a proper CSRF token
     // NextAuth v5 requires a valid csrfToken for sign-in POSTs
-    const response = await page.request.post("/api/auth/signin/google", {
-      data: {}, // No csrfToken
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/signin/google", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      });
+      return { status: res.status };
     });
 
     // Should be rejected — either 403, 400, or redirect to error page
-    const status = response.status();
+    const status = result.status;
     const validResponses = [400, 403, 404, 405];
     expect(validResponses).toContain(status);
   });
 
   test("soumission de formulaire sans jeton CSRF — 403 simulé", async ({ page }) => {
     // Intercept CSRF endpoint to test graceful handling of CSRF failures
-    await page.route("**/api/auth/csrf", async (route: Route) => {
+    await page.route("**/api/auth/csrf*", async (route: Route) => {
       await route.fulfill({
         status: 403,
         contentType: "application/json",
@@ -334,11 +404,13 @@ test.describe("Auth renforcé — CSRF et validation d'état", () => {
       });
     });
 
-    const response = await page.request.get("/api/auth/csrf");
-    expect(response.status()).toBe(403);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/csrf");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(403);
 
-    const body = await response.json();
-    expect(body.code).toBe("CSRF_TOKEN_INVALID");
+    expect(result.body.code).toBe("CSRF_TOKEN_INVALID");
   });
 });
 
@@ -356,10 +428,7 @@ test.describe("Auth renforcé — Sécurité de session", () => {
     const cookies = await page.context().cookies();
     const sessionCookies = cookies.filter(
       (c) =>
-        c.name.includes("next-auth") ||
-        c.name.includes("session") ||
-        c.name.includes("__Secure"),
-
+        c.name.includes("next-auth") || c.name.includes("session") || c.name.includes("__Secure"),
     );
 
     if (sessionCookies.length > 0) {
@@ -381,9 +450,7 @@ test.describe("Auth renforcé — Sécurité de session", () => {
     const cookies = await page.context().cookies();
     const sessionCookies = cookies.filter(
       (c) =>
-        c.name.includes("next-auth") ||
-        c.name.includes("session") ||
-        c.name.includes("__Secure"),
+        c.name.includes("next-auth") || c.name.includes("session") || c.name.includes("__Secure"),
     );
 
     if (sessionCookies.length > 0) {
@@ -547,7 +614,7 @@ test.describe("Auth renforcé — Sessions concurrentes (multi-onglet)", () => {
     try {
       // When: simulate logout in tab A by removing the mock and setting expired session
       await clearMocks(page);
-      await page.route("**/api/auth/session", async (route) => {
+      await page.route("**/api/auth/session*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -635,7 +702,7 @@ test.describe("Auth renforcé — Sessions concurrentes (multi-onglet)", () => {
     try {
       // Simulate logout in tab A
       await clearMocks(page);
-      await page.route("**/api/auth/session", async (route) => {
+      await page.route("**/api/auth/session*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -676,6 +743,10 @@ test.describe("Auth renforcé — Sessions concurrentes (multi-onglet)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — Liaison de comptes et identité", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("erreur OAuthAccountNotLinked — gérée sans crash", async ({ page }) => {
     // NextAuth v5 shows this error when a Google account with an existing
     // email tries to sign in but isn't linked
@@ -698,12 +769,17 @@ test.describe("Auth renforcé — Liaison de comptes et identité", () => {
     await mockSession(page, ACTIVE_SESSION);
 
     // Attempt to access a password-based endpoint (not available in this app)
-    const response = await page.request.post("/api/auth/callback/credentials", {
-      data: { email: "test@test.com", password: "somepassword" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/callback/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "test@test.com", password: "somepassword" }),
+      });
+      return { status: res.status };
     });
 
     // Should be rejected — credentials provider doesn't exist
-    const status = response.status();
+    const status = result.status;
     const validResponses = [404, 405, 400, 403];
     expect(validResponses).toContain(status);
   });
@@ -748,6 +824,10 @@ test.describe("Auth renforcé — Liaison de comptes et identité", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("les tokens API ont un format sécurisé (préfixe th_ + hash)", async ({ page }) => {
     // The API tokens use format: th_<raw>.<hashPrefix>
     // We verify the token creation endpoint validates this format
@@ -755,7 +835,7 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
     await mockSession(page, ACTIVE_SESSION);
 
     // Mock the extension auth endpoint to return a properly formatted token
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       if (route.request().method() === "POST") {
         await route.fulfill({
           status: 200,
@@ -771,29 +851,31 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
       }
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Test Token" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Test Token" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    if (response.status() === 200) {
-      const body = await response.json();
+    if (result.status === 200) {
       // Token should start with th_ prefix
-      expect(body.token).toMatch(/^th_[a-f0-9]+\./);
+      expect(result.body.token).toMatch(/^th_[a-f0-9]+\./);
     } else {
       // If real auth redirects, that's fine — token creation requires real DB
       const validStatuses = [200, 401, 403];
-      expect(validStatuses).toContain(response.status());
+      expect(validStatuses).toContain(result.status);
     }
   });
 
-  test("révocation de token API — les requêtes avec l'ancien token échouent", async ({
-    page,
-  }) => {
+  test("révocation de token API — les requêtes avec l'ancien token échouent", async ({ page }) => {
     // Simulate token revocation: first create, then revoke, then use
 
-    let tokens: { id: string; token: string }[] = [];
+    const tokens: { id: string; token: string }[] = [];
 
-    await page.route("**/api/extension/auth", async (route: Route) => {
+    await page.route("**/api/extension/auth*", async (route: Route) => {
       if (route.request().method() === "POST") {
         // Create token
         tokens.push({
@@ -815,14 +897,19 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
     });
 
     // Create a token
-    const createResponse = await page.request.post("/api/extension/auth", {
-      data: { name: "My Token" },
+    const createResponse = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "My Token" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    if (createResponse.status() === 200) {
+    if (createResponse.status === 200) {
       // Now simulate the token being revoked — next POST returns error
       await clearMocks(page);
-      await page.route("**/api/extension/auth", async (route: Route) => {
+      await page.route("**/api/extension/auth*", async (route: Route) => {
         if (route.request().method() === "POST") {
           await route.fulfill({
             status: 401,
@@ -838,12 +925,16 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
       });
 
       // Use same token again after revocation
-      const revokedResponse = await page.request.post("/api/extension/auth", {
-        data: { name: "My Token" },
+      const revokedResponse = await page.evaluate(async () => {
+        const res = await fetch("/api/extension/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "My Token" }),
+        });
+        return { status: res.status, body: await res.json() };
       });
-      expect(revokedResponse.status()).toBe(401);
-      const body = await revokedResponse.json();
-      expect(body.code).toBe("TOKEN_REVOKED");
+      expect(revokedResponse.status).toBe(401);
+      expect(revokedResponse.body.code).toBe("TOKEN_REVOKED");
     }
   });
 
@@ -857,7 +948,7 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
 
     // Now simulate user being banned — session returns 403 with BANNED error
     await clearMocks(page);
-    await page.route("**/api/auth/session", async (route: Route) => {
+    await page.route("**/api/auth/session*", async (route: Route) => {
       await route.fulfill({
         status: 403,
         contentType: "application/json",
@@ -869,16 +960,18 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
     });
 
     // Trigger a session re-check
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(403);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(403);
 
-    const body = await response.json();
-    expect(body.code).toBe("ACCOUNT_DISABLED");
+    expect(result.body.code).toBe("ACCOUNT_DISABLED");
   });
 
   test("indicateur de fraîcheur de session dans la réponse API", async ({ page }) => {
     // Verify the session response structure includes expiry info
-    await page.route("**/api/auth/session", async (route: Route) => {
+    await page.route("**/api/auth/session*", async (route: Route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -889,13 +982,15 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
       });
     });
 
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
     // Session should have an expires field (freshness indicator)
-    expect(body).toHaveProperty("expires");
-    expect(new Date(body.expires).getTime()).toBeGreaterThan(Date.now());
+    expect(result.body).toHaveProperty("expires");
+    expect(new Date(result.body.expires).getTime()).toBeGreaterThan(Date.now());
   });
 
   test("rotation du token de session — l'ancien token devient invalide", async ({ page }) => {
@@ -904,8 +999,11 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
 
     // First, mock an active session
     await mockSession(page, ACTIVE_SESSION);
-    const firstResponse = await page.request.get("/api/auth/session");
-    expect(firstResponse.status()).toBe(200);
+    const firstResult = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(firstResult.status).toBe(200);
 
     // Simulate token rotation — clear old mock, set new session (different ID)
     await clearMocks(page);
@@ -920,7 +1018,7 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
       expires: "2099-06-01T00:00:00.000Z",
     };
 
-    await page.route("**/api/auth/session", async (route: Route) => {
+    await page.route("**/api/auth/session*", async (route: Route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -929,10 +1027,12 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
     });
 
     // After rotation, the old session data is gone
-    const rotatedResponse = await page.request.get("/api/auth/session");
-    expect(rotatedResponse.status()).toBe(200);
-    const rotatedBody = await rotatedResponse.json();
-    expect(rotatedBody.user.id).not.toBe(ACTIVE_SESSION.user.id);
+    const rotatedResult = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(rotatedResult.status).toBe(200);
+    expect(rotatedResult.body.user.id).not.toBe(ACTIVE_SESSION.user.id);
   });
 });
 
@@ -941,6 +1041,10 @@ test.describe("Auth renforcé — Rotation des tokens et clés API", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — 2FA / MFA (non implémenté)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("le flux 2FA n'existe pas — accès à /login?error=2FARequired géré", async ({ page }) => {
     // The app does not implement 2FA. Verify graceful handling if 2FA error is passed.
     await page.goto("/login?error=2FARequired");
@@ -961,8 +1065,11 @@ test.describe("Auth renforcé — 2FA / MFA (non implémenté)", () => {
     ];
 
     for (const endpoint of twoFaEndpoints) {
-      const response = await page.request.get(endpoint);
-      expect(response.status()).toBe(404);
+      const result = await page.evaluate(async (ep) => {
+        const res = await fetch(ep);
+        return { status: res.status };
+      }, endpoint);
+      expect(result.status).toBe(404);
     }
   });
 
@@ -984,6 +1091,10 @@ test.describe("Auth renforcé — 2FA / MFA (non implémenté)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — Magic Link (non implémenté)", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("le flux magic link n'existe pas — erreur gérée", async ({ page }) => {
     // The app does not implement passwordless/magic link auth.
     // Verify graceful handling of related errors.
@@ -1005,10 +1116,13 @@ test.describe("Auth renforcé — Magic Link (non implémenté)", () => {
     ];
 
     for (const endpoint of magicLinkEndpoints) {
-      const response = await page.request.get(endpoint);
+      const result = await page.evaluate(async (ep) => {
+        const res = await fetch(ep);
+        return { status: res.status, url: res.url };
+      }, endpoint);
       // Should 404 and not crash
-      if (!response.url().includes("/login")) {
-        expect(response.status()).toBe(404);
+      if (!result.url.includes("/login")) {
+        expect(result.status).toBe(404);
       }
     }
   });
@@ -1026,9 +1140,7 @@ test.describe("Auth renforcé — Magic Link (non implémenté)", () => {
 
   test("callback magic link avec email non correspondant — rejeté", async ({ page }) => {
     // Simulate magic link with email mismatch
-    await page.goto(
-      "/api/auth/callback/magic-link?token=valid-token&email=wrong@email.com",
-    );
+    await page.goto("/api/auth/callback/magic-link?token=valid-token&email=wrong@email.com");
     await page.waitForLoadState("networkidle");
 
     // Should not crash — redirect to login or 404
@@ -1062,9 +1174,11 @@ test.describe("Auth renforcé — Magic Link (non implémenté)", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Auth renforcé — Résilience combinée", () => {
-  test("enchaînement: rate limit + redirection protégée + refresh = stable", async ({
-    page,
-  }) => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("enchaînement: rate limit + redirection protégée + refresh = stable", async ({ page }) => {
     // Scenario: User gets rate limited, navigates to protected page,
     // gets redirected to login, refreshes — all should be stable.
 
@@ -1087,9 +1201,7 @@ test.describe("Auth renforcé — Résilience combinée", () => {
     await expect(page.getByRole("button", { name: /continuer avec google/i })).toBeVisible();
   });
 
-  test("enchaînement: session invalide + OAuth error + navigation = stable", async ({
-    page,
-  }) => {
+  test("enchaînement: session invalide + OAuth error + navigation = stable", async ({ page }) => {
     // Step 1: Navigate with an invalid session cookie
     await page.context().addCookies([
       {
@@ -1124,29 +1236,24 @@ test.describe("Auth renforcé — Résilience combinée", () => {
     // Mock session as active initially
     await mockSession(page, ACTIVE_SESSION);
 
-    // Make several concurrent API calls while changing the session mock
-    const results = await Promise.all([
-      (async () => {
-        const r = await page.request.get("/api/auth/session");
-        return { endpoint: "/api/auth/session", status: r.status() };
-      })(),
-      (async () => {
-        await clearMocks(page);
-        await page.route("**/api/auth/session", async (route: Route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: "null",
-          });
-        });
-        const r = await page.request.get("/api/auth/session");
-        return { endpoint: "/api/auth/session#2", status: r.status() };
-      })(),
-      (async () => {
-        const r = await page.request.get("/api/auth/session");
-        return { endpoint: "/api/auth/session#3", status: r.status() };
-      })(),
-    ]);
+    // Make several concurrent API calls
+    const results = await page.evaluate(async () => {
+      const results = await Promise.all([
+        (async () => {
+          const r = await fetch("/api/auth/session");
+          return { endpoint: "/api/auth/session", status: r.status };
+        })(),
+        (async () => {
+          const r = await fetch("/api/auth/session");
+          return { endpoint: "/api/auth/session#2", status: r.status };
+        })(),
+        (async () => {
+          const r = await fetch("/api/auth/session");
+          return { endpoint: "/api/auth/session#3", status: r.status };
+        })(),
+      ]);
+      return results;
+    });
 
     // All calls should return without crashing
     for (const result of results) {
@@ -1154,14 +1261,19 @@ test.describe("Auth renforcé — Résilience combinée", () => {
     }
   });
 
-  test("manipulation des en-têtes de session — pas de fuite d'information", async ({
-    page,
-  }) => {
+  test("manipulation des en-têtes de session — pas de fuite d'information", async ({ page }) => {
     // When accessing the session endpoint, verify no sensitive headers leak
-    const response = await page.request.get("/api/auth/session");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      return { status: res.status, headers };
+    });
 
     // Response should not contain internal headers
-    const headers = response.headers();
+    const headers = result.headers;
     const sensitiveHeaders = ["x-powered-by", "server", "x-aspnet-version"];
     for (const header of sensitiveHeaders) {
       // If present, these should not reveal version info
@@ -1197,10 +1309,17 @@ test.describe("Auth renforcé — Résilience combinée", () => {
 
   test("cache de session — réponse non mise en cache", async ({ page }) => {
     // Session responses should not be cached by the browser
-    const response = await page.request.get("/api/auth/session");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      return { status: res.status, headers };
+    });
 
     // Check cache-control headers
-    const cacheControl = response.headers()["cache-control"];
+    const cacheControl = result.headers["cache-control"];
     if (cacheControl) {
       expect(cacheControl).toContain("no-cache");
       expect(cacheControl).toContain("no-store");

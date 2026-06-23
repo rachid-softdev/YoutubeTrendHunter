@@ -1,5 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * Extension↔Web API Integration E2E tests for YouTube TrendHunter
  *
@@ -16,14 +36,16 @@ import { test, expect, type Page } from "@playwright/test";
  * All tests use page.route() to mock database-backed responses, making them
  * deterministic and environment-independent. They validate the full HTTP
  * integration contract: request format → status code → response shape.
+ *
+ * All API calls use page.evaluate() + fetch() so that page.route()
+ * interceptors are properly hit.
  */
 
 /* ========================================================================== */
 /*  Constants & Helpers                                                       */
 /* ========================================================================== */
 
-const UUID_V4_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const TREND_REQUIRED_FIELDS = [
   "id",
@@ -159,7 +181,7 @@ async function mockAuthSession(
   options?: { plan?: string; userId?: string },
 ): Promise<void> {
   const { plan = "TEAM", userId = "test-user-id" } = options ?? {};
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -182,6 +204,10 @@ async function mockAuthSession(
 /* ========================================================================== */
 
 test.describe("Token Lifecycle — POST /api/extension/auth", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("crée un premier token pour un utilisateur sans token existant — retourne un UUID v4", async ({
     page,
   }) => {
@@ -189,7 +215,7 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
 
     await mockAuthSession(page, { plan: "TEAM" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -207,23 +233,25 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body).toHaveProperty("token");
-    expect(body).toHaveProperty("id");
-    expect(body).toHaveProperty("name", "Extension Chrome");
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty("token");
+    expect(result.body).toHaveProperty("id");
+    expect(result.body).toHaveProperty("name", "Extension Chrome");
 
     // Token MUST be a valid UUID v4
-    expect(body.token).toMatch(UUID_V4_REGEX);
+    expect(result.body.token).toMatch(UUID_V4_REGEX);
   });
 
-  test("génère un nouveau token et invalide l'ancien — UUID différent", async ({
-    page,
-  }) => {
+  test("génère un nouveau token et invalide l'ancien — UUID différent", async ({ page }) => {
     const tokenManager = createTokenManager();
     let firstToken: string | null = null;
     let secondToken: string | null = null;
@@ -231,7 +259,7 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
     await mockAuthSession(page, { plan: "TEAM" });
 
     // Mock auth endpoint — creates token and invalidates previous ones
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -255,7 +283,7 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
     });
 
     // Mock trends endpoint — validates token against manager
-    await page.route("**/api/extension/trends", async (route) => {
+    await page.route("**/api/extension/trends*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const token = extractBearerToken(authHeader);
       if (!token || !tokenManager.verifyToken(token)) {
@@ -281,58 +309,73 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
     });
 
     // Step 1: Create first token
-    const res1 = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const res1 = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(res1.status()).toBe(200);
-    const body1 = await res1.json();
-    expect(body1.token).toMatch(UUID_V4_REGEX);
-    expect(firstToken).toBe(body1.token);
+    expect(res1.status).toBe(200);
+    expect(res1.body.token).toMatch(UUID_V4_REGEX);
+    expect(firstToken).toBe(res1.body.token);
 
     // Step 2: First token works with trends
-    const resTrends1 = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${firstToken!}` },
-    });
-    expect(resTrends1.status()).toBe(200);
+    const resTrends1 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, firstToken!);
+    expect(resTrends1.status).toBe(200);
 
     // Step 3: Create second token (invalidates first)
-    const res2 = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const res2 = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(res2.status()).toBe(200);
-    const body2 = await res2.json();
-    expect(secondToken).toBe(body2.token);
+    expect(res2.status).toBe(200);
+    expect(res2.body.token).toMatch(UUID_V4_REGEX);
+    expect(secondToken).toBe(res2.body.token);
 
     // Tokens MUST be different
     expect(secondToken).not.toBe(firstToken);
 
     // Step 4: Old token is now invalid → 401
-    const resOld = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${firstToken!}` },
-    });
-    expect(resOld.status()).toBe(401);
-    const errBody = await resOld.json();
-    expect(errBody).toMatchObject({
+    const resOld = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, firstToken!);
+    expect(resOld.status).toBe(401);
+    expect(resOld.body).toMatchObject({
       error: "Token invalide",
       code: "UNAUTHORIZED",
     });
 
     // Step 5: New token works → 200
-    const resNew = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${secondToken!}` },
-    });
-    expect(resNew.status()).toBe(200);
+    const resNew = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, secondToken!);
+    expect(resNew.status).toBe(200);
   });
 
-  test("token suit le format UUID v4 (xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx)", async ({
-    page,
-  }) => {
+  test("token suit le format UUID v4 (xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx)", async ({ page }) => {
     const tokenManager = createTokenManager();
     const generatedTokens: string[] = [];
 
     await mockAuthSession(page, { plan: "TEAM" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -352,32 +395,41 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
 
     // Generate 3 tokens sequentially
     for (let i = 0; i < 3; i++) {
-      const res = await page.request.post("/api/extension/auth", {
-        data: { name: `Token ${i + 1}` },
-      });
-      expect(res.status()).toBe(200);
-      const body = await res.json();
-      expect(body.token).toMatch(UUID_V4_REGEX);
+      const result = await page.evaluate(
+        async (name) => {
+          const res = await fetch("/api/extension/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          return { status: res.status, body: await res.json() };
+        },
+        `Token ${i + 1}`,
+      );
+      expect(result.status).toBe(200);
+      expect(result.body.token).toMatch(UUID_V4_REGEX);
       // Verify the version nibble is '4'
-      expect(body.token[14]).toBe("4");
+      expect(result.body.token[14]).toBe("4");
       // Verify the variant nibble is 8, 9, a, or b
-      expect("89ab").toContain(body.token[19]);
+      expect("89ab").toContain(result.body.token[19]);
     }
 
     expect(generatedTokens.length).toBe(3);
   });
 
-  test("retourne 401 si l'utilisateur n'a pas de session authentifiée", async ({
-    page,
-  }) => {
+  test("retourne 401 si l'utilisateur n'a pas de session authentifiée", async ({ page }) => {
     // Intentionally NOT mocking the session endpoint
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
@@ -389,7 +441,7 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
     // Mock session with FREE plan — api: false in PLAN_LIMITS
     await mockAuthSession(page, { plan: "FREE" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -405,13 +457,17 @@ test.describe("Token Lifecycle — POST /api/extension/auth", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(403);
+    expect(result.status).toBe(403);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: expect.stringContaining("API non disponible"),
       code: "FORBIDDEN",
     });
@@ -426,8 +482,9 @@ test.describe("Extension Trends — En-têtes d'authentification", () => {
   const VALID_TOKEN = crypto.randomUUID();
 
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     // Shared mock: valid token verification
-    await page.route("**/api/extension/trends", async (route) => {
+    await page.route("**/api/extension/trends*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
 
       // Simulate backend auth logic faithfully
@@ -470,11 +527,13 @@ test.describe("Extension Trends — En-têtes d'authentification", () => {
   });
 
   test("retourne 401 sans header Authorization", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Token manquant",
       code: "UNAUTHORIZED",
     });
@@ -483,67 +542,80 @@ test.describe("Extension Trends — En-têtes d'authentification", () => {
   test("retourne 401 avec en-tête 'Bearer ' vide (aucun token après le préfixe)", async ({
     page,
   }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: "Bearer " },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: "Bearer " },
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Token manquant",
       code: "UNAUTHORIZED",
     });
   });
 
-  test("retourne 401 avec token invalide (inexistant en base)", async ({
-    page,
-  }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${crypto.randomUUID()}` },
+  test("retourne 401 avec token invalide (inexistant en base)", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${crypto.randomUUID()}` },
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Token invalide",
       code: "UNAUTHORIZED",
     });
   });
 
   test("accepte le préfixe 'bearer' en minuscules", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `bearer ${token}` },
+      });
+      return { status: res.status };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
   });
 
   test("accepte le préfixe 'Bearer' standard (majuscule)", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
   });
 
   test("gère correctement le header avec espaces supplémentaires autour du token", async ({
     page,
   }) => {
     // "Bearer  token" (double espace) — le token est extrait après le préfixe
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer  ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer  ${token}` },
+      });
+      return { status: res.status };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
   });
 
   test("retourne 401 pour un header Authorization malformé (sans préfixe Bearer)", async ({
     page,
   }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Token ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Token ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Token manquant",
       code: "UNAUTHORIZED",
     });
@@ -552,10 +624,13 @@ test.describe("Extension Trends — En-têtes d'authentification", () => {
   test("retourne 401 pour un token avec préfixe 'Bearer' mais token vide après trimming", async ({
     page,
   }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: "Bearer   " },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: "Bearer   " },
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 });
 
@@ -567,6 +642,7 @@ test.describe("Extension Trends — Filtrage par niche", () => {
   const VALID_TOKEN = crypto.randomUUID();
 
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await page.route("**/api/extension/trends*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const token = extractBearerToken(authHeader);
@@ -587,12 +663,7 @@ test.describe("Extension Trends — Filtrage par niche", () => {
       const nicheSlug = url.searchParams.get("niche");
 
       // Simulate niche-based lookup (same behaviour as prisma.niche.findUnique)
-      const KNOWN_NICHES = new Set([
-        "tech-ia",
-        "gaming",
-        "business",
-        "science",
-      ]);
+      const KNOWN_NICHES = new Set(["tech-ia", "gaming", "business", "science"]);
 
       if (!nicheSlug) {
         // Default fallback: "tech-ia"
@@ -634,41 +705,41 @@ test.describe("Extension Trends — Filtrage par niche", () => {
     });
   });
 
-  test("retourne les tendances pour une niche existante (tech-ia)", async ({
-    page,
-  }) => {
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+  test("retourne les tendances pour une niche existante (tech-ia)", async ({ page }) => {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
+    const body = result.body as { trends: Array<{ title: string }> };
     expect(body.trends.length).toBeGreaterThan(0);
     expect(body.trends[0].title).toContain("Tech & IA");
   });
 
-  test("retourne les tendances pour une niche existante (gaming)", async ({
-    page,
-  }) => {
-    const response = await page.request.get("/api/extension/trends?niche=gaming", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+  test("retourne les tendances pour une niche existante (gaming)", async ({ page }) => {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=gaming", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
+    const body = result.body as { trends: Array<{ title: string }> };
     expect(body.trends.length).toBeGreaterThan(0);
     expect(body.trends[0].title).toContain("gaming");
   });
 
-  test("retourne un tableau vide pour une niche inexistante (pas d'erreur)", async ({
-    page,
-  }) => {
-    const response = await page.request.get(
-      "/api/extension/trends?niche=niche-inexistante",
-      {
-        headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-      },
-    );
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+  test("retourne un tableau vide pour une niche inexistante (pas d'erreur)", async ({ page }) => {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=niche-inexistante", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
+    const body = result.body as { trends: unknown[]; plan: string; nextCursor: unknown };
     expect(body.trends).toEqual([]);
     expect(body).toHaveProperty("plan");
     expect(body).toHaveProperty("nextCursor");
@@ -677,39 +748,41 @@ test.describe("Extension Trends — Filtrage par niche", () => {
   test("utilise la niche par défaut 'tech-ia' quand aucun paramètre niche n'est fourni", async ({
     page,
   }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
+    const body = result.body as { trends: Array<{ title: string }> };
     expect(body.trends.length).toBe(3);
     expect(body.trends[0].title).toContain("Tech & IA");
   });
 
-  test("gère les niches avec caractères spéciaux (encodées URL)", async ({
-    page,
-  }) => {
-    const response = await page.request.get(
-      "/api/extension/trends?niche=ai-ml%20deep-learning",
-      {
-        headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-      },
-    );
+  test("gère les niches avec caractères spéciaux (encodées URL)", async ({ page }) => {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=ai-ml%20deep-learning", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
     // Niches inconnues → tableau vide (pas d'erreur 500)
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body as { trends: unknown[] };
     expect(body.trends).toEqual([]);
   });
 
-  test("chaque tendance retournée contient tous les champs requis", async ({
-    page,
-  }) => {
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
-    expect(response.status()).toBe(200);
+  test("chaque tendance retournée contient tous les champs requis", async ({ page }) => {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { trends: Array<Record<string, unknown>> };
     expect(body.trends.length).toBeGreaterThan(0);
 
     for (const trend of body.trends) {
@@ -720,8 +793,8 @@ test.describe("Extension Trends — Filtrage par niche", () => {
       expect(typeof trend.views).toBe("number");
       expect(typeof trend.title).toBe("string");
       // score should be a valid number between 0 and 100
-      expect(trend.score).toBeGreaterThanOrEqual(0);
-      expect(trend.score).toBeLessThanOrEqual(100);
+      expect(trend.score as number).toBeGreaterThanOrEqual(0);
+      expect(trend.score as number).toBeLessThanOrEqual(100);
     }
   });
 });
@@ -741,6 +814,8 @@ test.describe("Extension Trends — Application des limites par plan", () => {
   async function setupPlanTest(page: Page, plan: string): Promise<string> {
     const userId = `user-${plan.toLowerCase()}-${Date.now()}`;
     const token = tokenManager.createToken(userId, plan);
+
+    await setupPage(page);
 
     await page.route("**/api/extension/trends*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
@@ -788,12 +863,15 @@ test.describe("Extension Trends — Application des limites par plan", () => {
   test("limite à 5 tendances maximum pour le plan FREE", async ({ page }) => {
     const token = await setupPlanTest(page, "FREE");
 
-    const response = await page.request.get("/api/extension/trends?limit=100", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { plan: string; trends: unknown[] };
     expect(body.plan).toBe("FREE");
     expect(body.trends.length).toBeLessThanOrEqual(5);
   });
@@ -801,12 +879,15 @@ test.describe("Extension Trends — Application des limites par plan", () => {
   test("limite à 20 tendances maximum pour le plan PRO", async ({ page }) => {
     const token = await setupPlanTest(page, "PRO");
 
-    const response = await page.request.get("/api/extension/trends?limit=100", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { plan: string; trends: unknown[] };
     expect(body.plan).toBe("PRO");
     expect(body.trends.length).toBeLessThanOrEqual(20);
   });
@@ -814,12 +895,15 @@ test.describe("Extension Trends — Application des limites par plan", () => {
   test("limite à 20 tendances maximum pour le plan TEAM", async ({ page }) => {
     const token = await setupPlanTest(page, "TEAM");
 
-    const response = await page.request.get("/api/extension/trends?limit=100", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?limit=100", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { plan: string; trends: unknown[] };
     expect(body.plan).toBe("TEAM");
     expect(body.trends.length).toBeLessThanOrEqual(20);
   });
@@ -829,26 +913,30 @@ test.describe("Extension Trends — Application des limites par plan", () => {
 
     for (const plan of plans) {
       const token = await setupPlanTest(page, plan);
-      const response = await page.request.get("/api/extension/trends", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      expect(response.status()).toBe(200);
-      const body = await response.json();
+      const result = await page.evaluate(async (token) => {
+        const res = await fetch("/api/extension/trends", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return { status: res.status, body: await res.json() };
+      }, token);
+      expect(result.status).toBe(200);
+      const body = result.body as { plan: string };
       expect(body.plan).toBe(plan);
     }
   });
 
-  test("inclut les métadonnées utilisateur (name, email) dans la réponse", async ({
-    page,
-  }) => {
+  test("inclut les métadonnées utilisateur (name, email) dans la réponse", async ({ page }) => {
     const token = await setupPlanTest(page, "TEAM");
 
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { user: Record<string, unknown> };
     expect(body).toHaveProperty("user");
     expect(body.user).toMatchObject({
       id: expect.any(String),
@@ -857,21 +945,19 @@ test.describe("Extension Trends — Application des limites par plan", () => {
     });
   });
 
-  test("respecte la limite du plan même si un limit plus grand est demandé", async ({
-    page,
-  }) => {
+  test("respecte la limite du plan même si un limit plus grand est demandé", async ({ page }) => {
     const token = await setupPlanTest(page, "FREE");
 
     // FREE plan should never return more than 5 trends regardless of limit param
-    const response = await page.request.get(
-      "/api/extension/trends?limit=50&niche=tech-ia",
-      {
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?limit=50&niche=tech-ia", {
         headers: { Authorization: `Bearer ${token}` },
-      },
-    );
-    expect(response.status()).toBe(200);
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as { trends: unknown[] };
     expect(body.trends.length).toBeLessThanOrEqual(5);
   });
 });
@@ -883,9 +969,8 @@ test.describe("Extension Trends — Application des limites par plan", () => {
 test.describe("Extension Trends — Suivi lastUsedAt", () => {
   const tokenManager = createTokenManager();
 
-  test("met à jour lastUsedAt après chaque appel API réussi", async ({
-    page,
-  }) => {
+  test("met à jour lastUsedAt après chaque appel API réussi", async ({ page }) => {
+    await setupPage(page);
     tokenManager.clear();
     const token = tokenManager.createToken("user-lastused-1", "TEAM");
     const lastUsedTimestamps: number[] = [];
@@ -925,19 +1010,25 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
     });
 
     // First call
-    const res1 = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(res1.status()).toBe(200);
+    const res1 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(res1.status).toBe(200);
 
     // Small delay to ensure timestamp difference
     await page.waitForTimeout(50);
 
     // Second call
-    const res2 = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(res2.status()).toBe(200);
+    const res2 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(res2.status).toBe(200);
 
     expect(lastUsedTimestamps.length).toBe(2);
 
@@ -951,9 +1042,8 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
     }
   });
 
-  test("définit lastUsedAt de null à une date lors du premier appel API", async ({
-    page,
-  }) => {
+  test("définit lastUsedAt de null à une date lors du premier appel API", async ({ page }) => {
+    await setupPage(page);
     tokenManager.clear();
     const token = tokenManager.createToken("user-first-call", "TEAM");
 
@@ -993,10 +1083,13 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
       });
     });
 
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
     // After first call, lastUsedAt should be set
     const updatedData = tokenManager.getTokenData(token);
@@ -1007,9 +1100,8 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
     expect(Date.now() - updatedData!.lastUsedAt!).toBeLessThan(30_000);
   });
 
-  test("reflète l'heure du dernier appel avec des appels rapides successifs", async ({
-    page,
-  }) => {
+  test("reflète l'heure du dernier appel avec des appels rapides successifs", async ({ page }) => {
+    await setupPage(page);
     tokenManager.clear();
     const token = tokenManager.createToken("user-rapid-calls", "TEAM");
     const callTimestamps: number[] = [];
@@ -1048,15 +1140,18 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
 
     // Fire 5 rapid calls in parallel
     const promises = Array.from({ length: 5 }, (_, i) =>
-      page.request.get("/api/extension/trends", {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
+      page.evaluate(async (token) => {
+        const res = await fetch("/api/extension/trends", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return { status: res.status };
+      }, token),
     );
 
     const responses = await Promise.all(promises);
 
     for (const res of responses) {
-      expect(res.status()).toBe(200);
+      expect(res.status).toBe(200);
     }
 
     // Each call should have updated lastUsedAt
@@ -1079,27 +1174,32 @@ test.describe("Extension Trends — Suivi lastUsedAt", () => {
 /* ========================================================================== */
 
 test.describe("Session-based Auth — POST /api/extension/auth", () => {
-  test("retourne 401 'Non authentifié' sans cookie de session", async ({
-    page,
-  }) => {
-    // No session mock → the real auth() returns null
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
-    });
-    expect(response.status()).toBe(401);
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
 
-    const body = await response.json();
+  test("retourne 401 'Non authentifié' sans cookie de session", async ({ page }) => {
+    // No session mock → the real auth() returns null
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
   });
 
-  test("retourne 401 si la session est expirée (expires dans le passé)", async ({
-    page,
-  }) => {
+  test("retourne 401 si la session est expirée (expires dans le passé)", async ({ page }) => {
     // Mock session with expired date
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1119,23 +1219,26 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
     // The auth() call in development might still return the session
     // since page.route mocks at the HTTP level. This tests that
     // the endpoint properly handles the session it receives.
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
     // If auth() returns the expired session, we get a token (since our mock doesn't validate expiry)
     // If auth() rejects it server-side, we get 401
     // Both are valid — the test documents the behaviour
-    expect([200, 401]).toContain(response.status());
+    expect([200, 401]).toContain(result.status);
   });
 
-  test("génère un token avec une session valide et plan TEAM", async ({
-    page,
-  }) => {
+  test("génère un token avec une session valide et plan TEAM", async ({ page }) => {
     const tokenManager = createTokenManager();
 
     await mockAuthSession(page, { plan: "TEAM" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -1152,12 +1255,17 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toHaveProperty("token");
     expect(body.token).toMatch(UUID_V4_REGEX);
     expect(body).toHaveProperty("id");
@@ -1171,7 +1279,7 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
     // This test verifies the endpoint correctly returns 403 for PRO.
     await mockAuthSession(page, { plan: "PRO" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -1180,19 +1288,23 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
         status: 403,
         contentType: "application/json",
         body: JSON.stringify({
-          error:
-            "API non disponible sur votre formule. Passez à Team pour accéder à l'API.",
+          error: "API non disponible sur votre formule. Passez à Team pour accéder à l'API.",
           code: "FORBIDDEN",
         }),
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(403);
+    expect(result.status).toBe(403);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: expect.stringContaining("API non disponible"),
       code: "FORBIDDEN",
@@ -1207,7 +1319,7 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
 
     await mockAuthSession(page, { plan: "TEAM" });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       const method = route.request().method();
 
       if (method === "POST") {
@@ -1254,16 +1366,24 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
     });
 
     // Create token via POST
-    const postRes = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const postResult = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(postRes.status()).toBe(200);
-    const postBody = await postRes.json();
+    expect(postResult.status).toBe(200);
+    const postBody = postResult.body as Record<string, unknown>;
 
     // List tokens via GET
-    const getRes = await page.request.get("/api/extension/auth");
-    expect(getRes.status()).toBe(200);
-    const getBody = await getRes.json();
+    const getResult = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(getResult.status).toBe(200);
+    const getBody = getResult.body as { tokens: Array<Record<string, unknown>> };
 
     expect(getBody).toHaveProperty("tokens");
     expect(Array.isArray(getBody.tokens)).toBe(true);
@@ -1281,34 +1401,48 @@ test.describe("Session-based Auth — POST /api/extension/auth", () => {
 test.describe("Extension Analyze — POST /api/extension/analyze", () => {
   const VALID_TOKEN = crypto.randomUUID();
 
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("retourne 401 sans authentification Bearer", async ({ page }) => {
-    const response = await page.request.post("/api/extension/analyze", {
-      data: { videoId: "dQw4w9WgXcQ" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   test("retourne 401 avec un token invalide", async ({ page }) => {
-    const response = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${crypto.randomUUID()}` },
-      data: { videoId: "dQw4w9WgXcQ" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: "Token invalide",
       code: "INVALID_TOKEN",
     });
   });
 
-  test("retourne 400 si videoId est manquant dans le corps", async ({
-    page,
-  }) => {
+  test("retourne 400 si videoId est manquant dans le corps", async ({ page }) => {
     const tokenManager = createTokenManager();
     const token = tokenManager.createToken("user-analyze-1", "TEAM");
 
-    await page.route("**/api/extension/analyze", async (route) => {
+    await page.route("**/api/extension/analyze*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const extractedToken = extractBearerToken(authHeader);
       if (!extractedToken || !tokenManager.verifyToken(extractedToken)) {
@@ -1345,13 +1479,20 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${token}` },
-      data: {}, // no videoId
-    });
-    expect(response.status()).toBe(400);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(400);
 
-    const body = await response.json();
+    const body = result.body as { error: string };
     expect(body).toHaveProperty("error");
     expect(body.error).toContain("videoId");
   });
@@ -1360,7 +1501,7 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
     const tokenManager = createTokenManager();
     const token = tokenManager.createToken("user-analyze-free", "FREE");
 
-    await page.route("**/api/extension/analyze", async (route) => {
+    await page.route("**/api/extension/analyze*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const extractedToken = extractBearerToken(authHeader);
       const record = extractedToken ? tokenManager.verifyToken(extractedToken) : null;
@@ -1405,13 +1546,20 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { videoId: "dQw4w9WgXcQ" },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       score: 0,
       status: "LIMITED",
@@ -1425,7 +1573,7 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
     const tokenManager = createTokenManager();
     const token = tokenManager.createToken("user-analyze-team", "TEAM");
 
-    await page.route("**/api/extension/analyze", async (route) => {
+    await page.route("**/api/extension/analyze*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const extractedToken = extractBearerToken(authHeader);
       const record = extractedToken ? tokenManager.verifyToken(extractedToken) : null;
@@ -1462,13 +1610,20 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { videoId: "dQw4w9WgXcQ" },
-    });
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       videoId: "dQw4w9WgXcQ",
       score: 87.3,
@@ -1486,7 +1641,7 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
     const tokenManager = createTokenManager();
     const token = tokenManager.createToken("user-analyze-error", "TEAM");
 
-    await page.route("**/api/extension/analyze", async (route) => {
+    await page.route("**/api/extension/analyze*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const extractedToken = extractBearerToken(authHeader);
       if (!extractedToken || !tokenManager.verifyToken(extractedToken)) {
@@ -1512,13 +1667,20 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
       });
     });
 
-    const response = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { videoId: "dQw4w9WgXcQ" },
-    });
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, token);
+    expect(result.status).toBe(500);
 
-    const body = await response.json();
+    const body = result.body as Record<string, unknown>;
     expect(body).toMatchObject({
       error: expect.stringContaining("analyse"),
       code: "ANALYSIS_FAILED",
@@ -1531,9 +1693,8 @@ test.describe("Extension Analyze — POST /api/extension/analyze", () => {
 /* ========================================================================== */
 
 test.describe("Integration — Parcours complet Extension → API", () => {
-  test("scénario complet: auth → token → trends → analyze", async ({
-    page,
-  }) => {
+  test("scénario complet: auth → token → trends → analyze", async ({ page }) => {
+    await setupPage(page);
     const tokenManager = createTokenManager();
     let currentToken: string | null = null;
 
@@ -1541,7 +1702,7 @@ test.describe("Integration — Parcours complet Extension → API", () => {
     await mockAuthSession(page, { plan: "TEAM" });
 
     // Step 2: Mock auth endpoint
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() === "POST") {
         const token = tokenManager.createToken("test-user-id", "TEAM");
         currentToken = token;
@@ -1614,7 +1775,7 @@ test.describe("Integration — Parcours complet Extension → API", () => {
     });
 
     // Step 4: Mock analyze endpoint
-    await page.route("**/api/extension/analyze", async (route) => {
+    await page.route("**/api/extension/analyze*", async (route) => {
       const authHeader = route.request().headers()["authorization"];
       const extractedToken = extractBearerToken(authHeader);
       const record = extractedToken ? tokenManager.verifyToken(extractedToken) : null;
@@ -1651,58 +1812,91 @@ test.describe("Integration — Parcours complet Extension → API", () => {
     // ── EXECUTE FULL FLOW ──
 
     // 1. Create token via POST /api/extension/auth
-    const authRes = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const authResult = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(authRes.status()).toBe(200);
-    const authBody = await authRes.json();
+    expect(authResult.status).toBe(200);
+    const authBody = authResult.body as { token: string };
     expect(authBody.token).toMatch(UUID_V4_REGEX);
 
     // 2. List tokens via GET /api/extension/auth
-    const listRes = await page.request.get("/api/extension/auth");
-    expect(listRes.status()).toBe(200);
-    const listBody = await listRes.json();
+    const listResult = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(listResult.status).toBe(200);
+    const listBody = listResult.body as { tokens: unknown[] };
     expect(listBody.tokens.length).toBe(1);
 
     // 3. Fetch trends with the token
-    const trendsRes = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${authBody.token}` },
-    });
-    expect(trendsRes.status()).toBe(200);
-    const trendsBody = await trendsRes.json();
+    const trendsResult = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, authBody.token);
+    expect(trendsResult.status).toBe(200);
+    const trendsBody = trendsResult.body as { trends: unknown[]; plan: string; user: unknown };
     expect(trendsBody.trends.length).toBe(3);
     expect(trendsBody.plan).toBe("TEAM");
     expect(trendsBody.user).toBeDefined();
 
     // 4. Analyze a video
-    const analyzeRes = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${authBody.token}` },
-      data: { videoId: "dQw4w9WgXcQ" },
-    });
-    expect(analyzeRes.status()).toBe(200);
-    const analyzeBody = await analyzeRes.json();
+    const analyzeResult = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ videoId: "dQw4w9WgXcQ" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, authBody.token);
+    expect(analyzeResult.status).toBe(200);
+    const analyzeBody = analyzeResult.body as { status: string; score: number };
     expect(analyzeBody.status).toBe("ANALYZED");
     expect(analyzeBody.score).toBeGreaterThan(0);
 
     // 5. Token rotation: create new token
-    const authRes2 = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const authResult2 = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(authRes2.status()).toBe(200);
-    const authBody2 = await authRes2.json();
+    expect(authResult2.status).toBe(200);
+    const authBody2 = authResult2.body as { token: string };
     expect(authBody2.token).not.toBe(authBody.token);
 
     // 6. Old token no longer works on trends
-    const oldTrendsRes = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${authBody.token}` },
-    });
-    expect(oldTrendsRes.status()).toBe(401);
+    const oldTrendsResult = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, authBody.token);
+    expect(oldTrendsResult.status).toBe(401);
 
     // 7. New token works on analyze
-    const analyzeRes2 = await page.request.post("/api/extension/analyze", {
-      headers: { Authorization: `Bearer ${authBody2.token}` },
-      data: { videoId: "9bZkp7q19f0" },
-    });
-    expect(analyzeRes2.status()).toBe(200);
+    const analyzeResult2 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ videoId: "9bZkp7q19f0" }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, authBody2.token);
+    expect(analyzeResult2.status).toBe(200);
   });
 });

@@ -1,5 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * Billing, Pricing & Settings Extended E2E tests for YouTube TrendHunter
  *
@@ -73,7 +93,7 @@ const MOCK_SESSION_TEAM = {
  * cookies (real DB) and may redirect to /login if no valid session exists.
  */
 async function mockSession(page: Page, session: object = MOCK_SESSION_FREE) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -127,12 +147,13 @@ test.describe("Billing — Page d'accès", () => {
 test.describe("Checkout Stripe — Scénarios étendus", () => {
   test.describe("Utilisateur déjà abonné (Pro)", () => {
     test.beforeEach(async ({ page }) => {
+      await setupPage(page);
       await mockSession(page, MOCK_SESSION_PRO);
     });
 
     test("POST /api/stripe/checkout avec session Pro retourne une URL", async ({ page }) => {
       // A Pro user can still create a checkout session (upgrade/downgrade)
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         expect(route.request().method()).toBe("POST");
         const body = JSON.parse(route.request().postData() || "{}");
         expect(body).toHaveProperty("priceId");
@@ -146,22 +167,27 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: PRO_PRICE_ID },
-      });
-      expect(response.status()).toBe(200);
-      const json = await response.json();
-      expect(json.url).toContain("checkout.stripe.com");
+      const result = await page.evaluate(async (priceId) => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, PRO_PRICE_ID);
+      expect(result.status).toBe(200);
+      expect(result.body.url).toContain("checkout.stripe.com");
     });
   });
 
   test.describe("Utilisateur déjà abonné (Team)", () => {
     test.beforeEach(async ({ page }) => {
+      await setupPage(page);
       await mockSession(page, MOCK_SESSION_TEAM);
     });
 
     test("POST /api/stripe/checkout avec session Team retourne une URL", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -171,24 +197,29 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: TEAM_PRICE_ID },
-      });
-      expect(response.status()).toBe(200);
-      const json = await response.json();
-      expect(json).toHaveProperty("url");
+      const result = await page.evaluate(async (priceId) => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, TEAM_PRICE_ID);
+      expect(result.status).toBe(200);
+      expect(result.body).toHaveProperty("url");
     });
   });
 
   test.describe("Erreurs Stripe — Checkout", () => {
     test.beforeEach(async ({ page }) => {
+      await setupPage(page);
       await mockSession(page, MOCK_SESSION_FREE);
     });
 
     test("POST /api/stripe/checkout retourne 500 quand Stripe est indisponible", async ({
       page,
     }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         await route.fulfill({
           status: 500,
           contentType: "application/json",
@@ -199,17 +230,21 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: PRO_PRICE_ID },
-      });
-      expect(response.status()).toBe(500);
-      const json = await response.json();
-      expect(json).toHaveProperty("error");
-      expect(json).toHaveProperty("code");
+      const result = await page.evaluate(async (priceId) => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, PRO_PRICE_ID);
+      expect(result.status).toBe(500);
+      expect(result.body).toHaveProperty("error");
+      expect(result.body).toHaveProperty("code");
     });
 
     test("POST /api/stripe/checkout avec priceId vide retourne 400", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         const body = JSON.parse(route.request().postData() || "{}");
         // Simulate Zod validation: priceId must be non-empty string
         if (!body.priceId || typeof body.priceId !== "string" || body.priceId.trim() === "") {
@@ -230,16 +265,20 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         }
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: "" },
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId: "" }),
+        });
+        return { status: res.status, body: await res.json() };
       });
-      expect(response.status()).toBe(400);
-      const json = await response.json();
-      expect(json.error).toBeDefined();
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBeDefined();
     });
 
     test("POST /api/stripe/checkout avec priceId null retourne 400", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         const body = JSON.parse(route.request().postData() || "{}");
         if (!body.priceId) {
           await route.fulfill({
@@ -259,14 +298,19 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         }
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: null },
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId: null }),
+        });
+        return { status: res.status };
       });
-      expect(response.status()).toBe(400);
+      expect(result.status).toBe(400);
     });
 
     test("POST /api/stripe/checkout sans body retourne 400", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         await route.fulfill({
           status: 400,
           contentType: "application/json",
@@ -277,20 +321,24 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: undefined,
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+        });
+        return { status: res.status };
       });
-      expect(response.status()).toBe(400);
+      expect(result.status).toBe(400);
     });
   });
 
   test.describe("Validation des entrées Checkout", () => {
     test.beforeEach(async ({ page }) => {
+      await setupPage(page);
       await mockSession(page, MOCK_SESSION_FREE);
     });
 
     test("priceId avec caractères dangereux retourne 400", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         await route.fulfill({
           status: 400,
           contentType: "application/json",
@@ -301,14 +349,19 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: "<script>alert('xss')</script>" },
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId: "<script>alert('xss')</script>" }),
+        });
+        return { status: res.status };
       });
-      expect(response.status()).toBe(400);
+      expect(result.status).toBe(400);
     });
 
     test("priceId avec type incorrect (nombre) retourne 400", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         await route.fulfill({
           status: 400,
           contentType: "application/json",
@@ -319,14 +372,19 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: 12345 },
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId: 12345 }),
+        });
+        return { status: res.status };
       });
-      expect(response.status()).toBe(400);
+      expect(result.status).toBe(400);
     });
 
     test("POST /api/stripe/checkout avec méthode GET retourne 405", async ({ page }) => {
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         if (route.request().method() !== "POST") {
           await route.fulfill({
             status: 405,
@@ -342,8 +400,11 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
         }
       });
 
-      const response = await page.request.get("/api/stripe/checkout");
-      expect(response.status()).toBe(405);
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/stripe/checkout");
+        return { status: res.status };
+      });
+      expect(result.status).toBe(405);
     });
   });
 });
@@ -353,11 +414,14 @@ test.describe("Checkout Stripe — Scénarios étendus", () => {
 /* ======================================================================== */
 
 test.describe("Portail de facturation — Gestion d'erreurs", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("POST /api/stripe/portal pour utilisateur Free retourne 400 (pas d'abonnement)", async ({
     page,
   }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       // The portal endpoint checks for stripeCustomerId — Free users don't have one
       await route.fulfill({
         status: 400,
@@ -366,15 +430,19 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toContain("abonnement");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain("abonnement");
   });
 
   test("POST /api/stripe/portal retourne 500 quand Stripe est indisponible", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -385,15 +453,19 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(500);
-    const json = await response.json();
-    expect(json.error).toBeDefined();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(500);
+    expect(result.body.error).toBeDefined();
   });
 
   test("POST /api/stripe/portal sans authentification retourne 401", async ({ page }) => {
     // No session mock
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 401,
         contentType: "application/json",
@@ -404,13 +476,18 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      return { status: res.status };
+    });
+    expect(result.status).toBe(401);
   });
 
   test("POST /api/stripe/portal pour utilisateur Pro retourne une URL valide", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -420,18 +497,22 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json).toHaveProperty("url");
-    expect(json.url).toContain("stripe.com");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body).toHaveProperty("url");
+    expect(result.body.url).toContain("stripe.com");
   });
 
   test("POST /api/stripe/portal pour utilisateur Team retourne une URL valide", async ({
     page,
   }) => {
     await mockSession(page, MOCK_SESSION_TEAM);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -441,15 +522,19 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/portal");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json).toHaveProperty("url");
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result2.status).toBe(200);
+    expect(result2.body).toHaveProperty("url");
   });
 
   test("POST /api/stripe/portal avec returnUrl personnalisé fonctionne", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       // If returnUrl is provided, it should be a valid URL
       if (body.returnUrl && !body.returnUrl.startsWith("http")) {
@@ -469,17 +554,21 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/portal", {
-      data: { returnUrl: "https://app.trendhunter.app/billing" },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: "https://app.trendhunter.app/billing" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json).toHaveProperty("url");
+    expect(result3.status).toBe(200);
+    expect(result3.body).toHaveProperty("url");
   });
 
   test("POST /api/stripe/portal avec returnUrl invalide retourne 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       if (body.returnUrl && !body.returnUrl.startsWith("http")) {
         await route.fulfill({
@@ -496,10 +585,15 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/portal", {
-      data: { returnUrl: "not-a-valid-url" },
+    const result4 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: "not-a-valid-url" }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result4.status).toBe(400);
   });
 });
 
@@ -508,8 +602,12 @@ test.describe("Portail de facturation — Gestion d'erreurs", () => {
 /* ======================================================================== */
 
 test.describe("Webhook Stripe — Gestion d'erreurs", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("POST /api/stripe/webhook sans signature retourne 400", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const headers = route.request().headers();
       if (!headers["stripe-signature"]) {
         await route.fulfill({
@@ -522,16 +620,20 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.paid" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "invoice.paid" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toContain("Signature");
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain("Signature");
   });
 
   test("POST /api/stripe/webhook avec signature invalide retourne 400", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       // The adapter will throw on constructEvent with bad sig
       await route.fulfill({
         status: 400,
@@ -540,21 +642,25 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.paid" },
-      headers: {
-        "stripe-signature": "invalid_signature_value",
-      },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "invalid_signature_value",
+        },
+        body: JSON.stringify({ type: "invoice.paid" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toBeDefined();
+    expect(result2.status).toBe(400);
+    expect(result2.body.error).toBeDefined();
   });
 
   test("POST /api/stripe/webhook avec événement non géré retourne received:true, handled:false", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       // Unhandled event types are accepted but marked as not handled
       await route.fulfill({
         status: 200,
@@ -566,21 +672,24 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "charge.succeeded" },
-      headers: {
-        "stripe-signature": "test_sig",
-        "content-type": "application/json",
-      },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "test_sig",
+        },
+        body: JSON.stringify({ type: "charge.succeeded" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result3.status).toBe(200);
+    expect(result3.body.received).toBe(true);
+    expect(result3.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook avec body vide retourne 400", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const pd = route.request().postData();
       if (!pd || pd.length === 0) {
         await route.fulfill({
@@ -597,17 +706,20 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: null,
-      headers: {
-        "stripe-signature": "test_sig",
-      },
+    const result4 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "test_sig",
+        },
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result4.status).toBe(400);
   });
 
   test("POST /api/stripe/webhook gère l'événement checkout.session.completed", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       // This is a handled event type
       await route.fulfill({
         status: 200,
@@ -619,30 +731,33 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "checkout.session.completed",
-        data: {
-          object: {
-            mode: "subscription",
-            subscription: "sub_test_123",
-          },
+    const result5 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig",
         },
-      },
-      headers: {
-        "stripe-signature": "valid_sig",
-        "content-type": "application/json",
-      },
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              mode: "subscription",
+              subscription: "sub_test_123",
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
+    expect(result5.status).toBe(200);
+    expect(result5.body.received).toBe(true);
   });
 
   test("POST /api/stripe/webhook gère l'événement customer.subscription.deleted", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -653,20 +768,23 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "customer.subscription.deleted" },
-      headers: {
-        "stripe-signature": "valid_sig",
-        "content-type": "application/json",
-      },
+    const result6 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig",
+        },
+        body: JSON.stringify({ type: "customer.subscription.deleted" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.handled).toBe(true);
+    expect(result6.status).toBe(200);
+    expect(result6.body.handled).toBe(true);
   });
 
   test("POST /api/stripe/webhook gère l'événement invoice.payment_failed", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -677,16 +795,19 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.payment_failed" },
-      headers: {
-        "stripe-signature": "valid_sig",
-        "content-type": "application/json",
-      },
+    const result7 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig",
+        },
+        body: JSON.stringify({ type: "invoice.payment_failed" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.handled).toBe(true);
+    expect(result7.status).toBe(200);
+    expect(result7.body.handled).toBe(true);
   });
 });
 
@@ -695,10 +816,13 @@ test.describe("Webhook Stripe — Gestion d'erreurs", () => {
 /* ======================================================================== */
 
 test.describe("Webhook Stripe — Idempotence", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("le même webhook traité deux fois retourne handled:false la seconde fois", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       // Simulate idempotency: first call handles, second skips
       const callCount = new Map<string, number>();
       const key = route.request().postData() || "default";
@@ -723,19 +847,32 @@ test.describe("Webhook Stripe — Idempotence", () => {
     });
 
     // First request
-    const response1 = await page.request.post("/api/stripe/webhook", {
-      data: { type: "checkout.session.completed", id: "evt_duplicate" },
-      headers: { "stripe-signature": "sig1", "content-type": "application/json" },
+    const result1 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "sig1",
+        },
+        body: JSON.stringify({ type: "checkout.session.completed", id: "evt_duplicate" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response1.status()).toBe(200);
-    const json1 = await response1.json();
+    expect(result1.status).toBe(200);
 
     // Request again with same event ID (simulates Stripe retry)
-    const response2 = await page.request.post("/api/stripe/webhook", {
-      data: { type: "checkout.session.completed", id: "evt_duplicate" },
-      headers: { "stripe-signature": "sig1", "content-type": "application/json" },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "sig1",
+        },
+        body: JSON.stringify({ type: "checkout.session.completed", id: "evt_duplicate" }),
+      });
+      return { status: res.status };
     });
-    expect(response2.status()).toBe(200);
+    expect(result2.status).toBe(200);
   });
 });
 
@@ -744,9 +881,12 @@ test.describe("Webhook Stripe — Idempotence", () => {
 /* ======================================================================== */
 
 test.describe("Compte utilisateur — Suppression", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("DELETE /api/user sans authentification retourne 401", async ({ page }) => {
     // No session mock
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         await route.fulfill({
           status: 401,
@@ -756,15 +896,20 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: true },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   test("DELETE /api/user sans { confirm: true } retourne 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         const body = JSON.parse(route.request().postData() || "{}");
         if (body.confirm !== true) {
@@ -781,17 +926,21 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: false },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: false }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toContain("Confirmation");
+    expect(result2.status).toBe(400);
+    expect(result2.body.error).toContain("Confirmation");
   });
 
   test("DELETE /api/user avec body vide retourne 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         const pd = route.request().postData();
         if (!pd || pd === "{}") {
@@ -806,15 +955,20 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: {},
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result3.status).toBe(400);
   });
 
   test("DELETE /api/user avec { confirm: true } retourne 204 (succès)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         const body = JSON.parse(route.request().postData() || "{}");
         if (body.confirm === true) {
@@ -823,17 +977,21 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: true },
+    const result4 = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status, text: await res.text() };
     });
-    expect(response.status()).toBe(204);
-    const text = await response.text();
-    expect(text).toBe("");
+    expect(result4.status).toBe(204);
+    expect(result4.text).toBe("");
   });
 
   test("DELETE /api/user gère l'échec d'annulation Stripe", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         // Simulate Stripe cancellation failure
         await route.fulfill({
@@ -846,19 +1004,23 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: true },
+    const result5 = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(500);
-    const json = await response.json();
-    expect(json.error).toContain("abonnement");
+    expect(result5.status).toBe(500);
+    expect(result5.body.error).toContain("abonnement");
   });
 
   test("DELETE /api/user avec valeur autre que true pour confirm retourne 400", async ({
     page,
   }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "DELETE") {
         const body = JSON.parse(route.request().postData() || "{}");
         // Zod schema uses z.literal(true), so "yes" or 1 should fail
@@ -874,10 +1036,15 @@ test.describe("Compte utilisateur — Suppression", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: "yes" },
+    const result6 = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "yes" }),
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result6.status).toBe(400);
   });
 });
 
@@ -916,54 +1083,69 @@ test.describe("Settings — Page", () => {
 /* ======================================================================== */
 
 test.describe("Plans — Comportements par type de session", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("la session Free est correctement mockée via l'API", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_FREE);
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.user.plan).toBe("FREE");
-    expect(json.user.email).toBe("free@test.com");
-    expect(json.user.name).toBe("Test Free");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.user.plan).toBe("FREE");
+    expect(result.body.user.email).toBe("free@test.com");
+    expect(result.body.user.name).toBe("Test Free");
   });
 
   test("la session Pro est correctement mockée via l'API", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.user.plan).toBe("PRO");
-    expect(json.user.email).toBe("pro@test.com");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.user.plan).toBe("PRO");
+    expect(result.body.user.email).toBe("pro@test.com");
   });
 
   test("la session Team est correctement mockée via l'API", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_TEAM);
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.user.plan).toBe("TEAM");
-    expect(json.user.email).toBe("team@test.com");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.user.plan).toBe("TEAM");
+    expect(result.body.user.email).toBe("team@test.com");
   });
 
   test("le plan Free est le plan par défaut dans le mock", async ({ page }) => {
     // Default mockSession uses MOCK_SESSION_FREE
     await mockSession(page);
-    const response = await page.request.get("/api/auth/session");
-    const json = await response.json();
-    expect(json.user.plan).toBe("FREE");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.user.plan).toBe("FREE");
   });
 
   test("changement de plan de Free à Pro reflété dans la session", async ({ page }) => {
     // First verify Free
     await mockSession(page, MOCK_SESSION_FREE);
-    let response = await page.request.get("/api/auth/session");
-    let json = await response.json();
-    expect(json.user.plan).toBe("FREE");
+    let result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.user.plan).toBe("FREE");
 
     // Switch to Pro mock
     await mockSession(page, MOCK_SESSION_PRO);
-    response = await page.request.get("/api/auth/session");
-    json = await response.json();
-    expect(json.user.plan).toBe("PRO");
+    result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.body.user.plan).toBe("PRO");
   });
 });
 
@@ -973,11 +1155,12 @@ test.describe("Plans — Comportements par type de session", () => {
 
 test.describe("Stripe API — Résilience", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page, MOCK_SESSION_FREE);
   });
 
   test("POST /api/stripe/checkout gère le délai de Stripe (timeout simulé)", async ({ page }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       // Simulate a slow Stripe response
       await new Promise((resolve) => setTimeout(resolve, 100));
       await route.fulfill({
@@ -990,14 +1173,19 @@ test.describe("Stripe API — Résilience", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
-    expect(response.status()).toBe(500);
+    const result = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status };
+    }, PRO_PRICE_ID);
+    expect(result.status).toBe(500);
   });
 
   test("POST /api/stripe/checkout avec corps JSON invalide retourne 400", async ({ page }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 400,
         contentType: "application/json",
@@ -1008,11 +1196,15 @@ test.describe("Stripe API — Résilience", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: "not-json",
-      headers: { "content-type": "application/json" },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "not-json",
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result2.status).toBe(400);
   });
 });
 
@@ -1021,10 +1213,13 @@ test.describe("Stripe API — Résilience", () => {
 /* ======================================================================== */
 
 test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("POST /api/stripe/webhook customer.subscription.updated géré correctement", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1032,17 +1227,23 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "customer.subscription.updated" },
-      headers: { "stripe-signature": "sig", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "sig",
+        },
+        body: JSON.stringify({ type: "customer.subscription.updated" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.handled).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.body.handled).toBe(true);
   });
 
   test("POST /api/stripe/webhook invoice.payment_succeeded géré correctement", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1050,19 +1251,25 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.payment_succeeded" },
-      headers: { "stripe-signature": "sig", "content-type": "application/json" },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "sig",
+        },
+        body: JSON.stringify({ type: "invoice.payment_succeeded" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.handled).toBe(true);
+    expect(result2.status).toBe(200);
+    expect(result2.body.handled).toBe(true);
   });
 
   test("POST /api/stripe/webhook customer.subscription.trial_will_end géré correctement", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1070,13 +1277,19 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "customer.subscription.trial_will_end" },
-      headers: { "stripe-signature": "sig", "content-type": "application/json" },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "sig",
+        },
+        body: JSON.stringify({ type: "customer.subscription.trial_will_end" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.handled).toBe(true);
+    expect(result3.status).toBe(200);
+    expect(result3.body.handled).toBe(true);
   });
 });
 
@@ -1085,36 +1298,45 @@ test.describe("Webhook Stripe — Cycle de vie d'abonnement", () => {
 /* ======================================================================== */
 
 test.describe("PLAN_LIMITS — Vérification des constantes de limites", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("les limites Free sont correctes (1 niche, 5 tendances, pas d'alertes)", async ({
     page,
   }) => {
     // This test validates the API session structure which reflects plan data
     await mockSession(page, MOCK_SESSION_FREE);
-    const response = await page.request.get("/api/auth/session");
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.user.plan).toBe("FREE");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.user.plan).toBe("FREE");
     // Plan limits are defined server-side in subscription.service.ts:
     // FREE: { niches: 1, trendsPerNiche: 5, alerts: false, export: false, api: false }
-    expect(json.user).toHaveProperty("id");
-    expect(json.user).toHaveProperty("email");
+    expect(result.body.user).toHaveProperty("id");
+    expect(result.body.user).toHaveProperty("email");
   });
 
   test("les limites Pro sont correctes (niches illimitées, tendances illimitées, alertes)", async ({
     page,
   }) => {
     await mockSession(page, MOCK_SESSION_PRO);
-    const response = await page.request.get("/api/auth/session");
-    const json = await response.json();
-    expect(json.user.plan).toBe("PRO");
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result2.body.user.plan).toBe("PRO");
     // PRO: { niches: -1, trendsPerNiche: -1, alerts: true, export: true, api: false }
   });
 
   test("les limites Team sont correctes (tout Pro + API access)", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_TEAM);
-    const response = await page.request.get("/api/auth/session");
-    const json = await response.json();
-    expect(json.user.plan).toBe("TEAM");
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result3.body.user.plan).toBe("TEAM");
     // TEAM: { niches: -1, trendsPerNiche: -1, alerts: true, export: true, api: true }
   });
 });
@@ -1143,12 +1365,13 @@ test.describe("Dashboard — Comportement par plan", () => {
 
 test.describe("Rate Limiting — Protection des endpoints", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page, MOCK_SESSION_FREE);
   });
 
   test("POST /api/stripe/checkout retourne 429 après trop de requêtes", async ({ page }) => {
     let requestCount = 0;
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       requestCount++;
       if (requestCount > 5) {
         await route.fulfill({
@@ -1170,22 +1393,30 @@ test.describe("Rate Limiting — Protection des endpoints", () => {
 
     // Make several rapid requests
     for (let i = 0; i < 7; i++) {
-      await page.request.post("/api/stripe/checkout", {
-        data: { priceId: PRO_PRICE_ID },
-      });
+      await page.evaluate(async (priceId) => {
+        await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+      }, PRO_PRICE_ID);
     }
 
     // The last request should be rate limited
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
+    const result = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, PRO_PRICE_ID);
 
     // This may or may not be 429 depending on actual rate limit config
     // The important thing is that rate limiting is wired up
-    expect([200, 429]).toContain(response.status());
-    if (response.status() === 429) {
-      const json = await response.json();
-      expect(json.code).toBe("RATE_LIMIT");
+    expect([200, 429]).toContain(result.status);
+    if (result.status === 429) {
+      expect(result.body.code).toBe("RATE_LIMIT");
     }
   });
 });
@@ -1650,9 +1881,12 @@ test.describe("Facturation — Erreur Prisma", () => {
 /* ======================================================================== */
 
 test.describe("API — Authentification", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
   test("GET /api/user retourne 401 sans authentification", async ({ page }) => {
     // No session mock — unauthenticated
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 401,
@@ -1662,13 +1896,16 @@ test.describe("API — Authentification", () => {
       }
     });
 
-    const response = await page.request.get("/api/user");
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user");
+      return { status: res.status };
+    });
+    expect(result.status).toBe(401);
   });
 
   test("GET /api/user retourne 405 avec méthode non autorisée (sans session)", async ({ page }) => {
     // If the route doesn't export GET, Next.js returns 405
-    await page.route("**/api/user", async (route) => {
+    await page.route("**/api/user*", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 405,
@@ -1678,8 +1915,11 @@ test.describe("API — Authentification", () => {
       }
     });
 
-    const response = await page.request.get("/api/user");
-    expect(response.status()).toBe(405);
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/user");
+      return { status: res.status };
+    });
+    expect(result2.status).toBe(405);
   });
 });
 
@@ -1689,13 +1929,14 @@ test.describe("API — Authentification", () => {
 
 test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page, MOCK_SESSION_FREE);
   });
 
   test("POST /api/stripe/checkout avec priceId inconnu retourne 500 (PRICE_NOT_FOUND)", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       const unknownPriceId = body.priceId;
       // Simulate adapter rejecting unknown price IDs
@@ -1717,18 +1958,22 @@ test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: "price_unknown_invalid" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId: "price_unknown_invalid" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(500);
-    const json = await response.json();
-    expect(json.code).toBe("PRICE_NOT_FOUND");
+    expect(result.status).toBe(500);
+    expect(result.body.code).toBe("PRICE_NOT_FOUND");
   });
 
   test("POST /api/stripe/checkout retourne 404 quand l'utilisateur n'existe pas en DB", async ({
     page,
   }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       await route.fulfill({
         status: 404,
         contentType: "application/json",
@@ -1736,16 +1981,20 @@ test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
-    expect(response.status()).toBe(404);
-    const json = await response.json();
-    expect(json.error).toContain("introuvable");
+    const result2 = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, PRO_PRICE_ID);
+    expect(result2.status).toBe(404);
+    expect(result2.body.error).toContain("introuvable");
   });
 
   test("POST /api/stripe/checkout avec body JSON malformé retourne 400", async ({ page }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const pd = route.request().postData();
       // Simulate JSON parsing failure — invalid JSON
       if (pd && !pd.startsWith("{")) {
@@ -1763,18 +2012,22 @@ test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: "not-json-at-all",
-      headers: { "content-type": "application/json" },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "not-json-at-all",
+      });
+      return { status: res.status };
     });
-    expect(response.status()).toBe(400);
+    expect(result3.status).toBe(400);
   });
 
   test("Stripe checkout.priceId valide rejette les priceId non-associés à un abonnement", async ({
     page,
   }) => {
     // A one-time payment price ID should be rejected for subscription checkout
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       const priceId = body.priceId;
       // Simulate: if priceId doesn't match allowed subscription price IDs, reject
@@ -1797,18 +2050,22 @@ test.describe("Checkout Stripe — Gestion d'erreurs avancée", () => {
     });
 
     // Try a one-time payment price ID
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: "price_one_time_payment" },
+    const result4 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId: "price_one_time_payment" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toContain("abonnement");
+    expect(result4.status).toBe(400);
+    expect(result4.body.error).toContain("abonnement");
   });
 
   test("double-clic sur le bouton de checkout → un seul appel API", async ({ page }) => {
     let callCount = 0;
 
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       callCount++;
       await new Promise((resolve) => setTimeout(resolve, 100));
       await route.fulfill({
@@ -1887,7 +2144,7 @@ test.describe("Webhook Stripe — Cas non gérés spécifiques", () => {
    * the real stripe-webhook-handler.ts behavior.
    */
   async function mockDetailedWebhook(page: Page, validSignature: string = "valid_sig_test") {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.fallback();
         return;
@@ -1986,189 +2243,230 @@ test.describe("Webhook Stripe — Cas non gérés spécifiques", () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockDetailedWebhook(page);
   });
-
-  const WEBHOOK_HEADERS = {
-    "stripe-signature": "valid_sig_test",
-    "content-type": "application/json",
-  };
 
   test("POST /api/stripe/webhook avec mode=payment (pas subscription) retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "checkout.session.completed",
-        data: {
-          object: {
-            id: "cs_payment_mode",
-            mode: "payment",
-            subscription: "sub_test",
-            metadata: { userId: "user-123" },
-          },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_payment_mode",
+              mode: "payment",
+              subscription: "sub_test",
+              metadata: { userId: "user-123" },
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result.status).toBe(200);
+    expect(result.body.received).toBe(true);
+    expect(result.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook checkout.session.completed sans userId retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "checkout.session.completed",
-        data: {
-          object: {
-            id: "cs_no_userid",
-            mode: "subscription",
-            subscription: "sub_test_456",
-            metadata: {},
-          },
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_no_userid",
+              mode: "subscription",
+              subscription: "sub_test_456",
+              metadata: {},
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result2.status).toBe(200);
+    expect(result2.body.received).toBe(true);
+    expect(result2.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook checkout.session.completed sans subscription items retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "checkout.session.completed",
-        data: {
-          object: {
-            id: "cs_no_sub",
-            mode: "subscription",
-            // Pas de subscription
-            metadata: { userId: "user-123" },
-          },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: "cs_no_sub",
+              mode: "subscription",
+              // Pas de subscription
+              metadata: { userId: "user-123" },
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result3.status).toBe(200);
+    expect(result3.body.received).toBe(true);
+    expect(result3.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook invoice.payment_succeeded sans référence d'abonnement retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "invoice.payment_succeeded",
-        data: {
-          object: {
-            id: "inv_no_sub_ref",
-            charge: "ch_test",
-            // Pas de subscription
-          },
+    const result4 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "invoice.payment_succeeded",
+          data: {
+            object: {
+              id: "inv_no_sub_ref",
+              charge: "ch_test",
+              // Pas de subscription
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result4.status).toBe(200);
+    expect(result4.body.received).toBe(true);
+    expect(result4.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook customer.subscription.updated avec status PAST_DUE est géré", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "customer.subscription.updated",
-        data: {
-          object: {
-            id: "sub_past_due",
-            status: "past_due",
-            metadata: { userId: "user-456" },
-            items: { data: [{ price: { id: "price_pro" } }] },
-          },
+    const result5 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "customer.subscription.updated",
+          data: {
+            object: {
+              id: "sub_past_due",
+              status: "past_due",
+              metadata: { userId: "user-456" },
+              items: { data: [{ price: { id: "price_pro" } }] },
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(true);
+    expect(result5.status).toBe(200);
+    expect(result5.body.received).toBe(true);
+    expect(result5.body.handled).toBe(true);
   });
 
   test("POST /api/stripe/webhook customer.subscription.updated sans userId retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "customer.subscription.updated",
-        data: {
-          object: {
-            id: "sub_no_userid",
-            status: "active",
-            metadata: {},
-          },
+    const result6 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "customer.subscription.updated",
+          data: {
+            object: {
+              id: "sub_no_userid",
+              status: "active",
+              metadata: {},
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result6.status).toBe(200);
+    expect(result6.body.received).toBe(true);
+    expect(result6.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook customer.subscription.deleted sans userId retourne handled: false", async ({
     page,
   }) => {
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "customer.subscription.deleted",
-        data: {
-          object: {
-            id: "sub_deleted_no_userid",
-            metadata: {},
-          },
+    const result7 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "valid_sig_test",
         },
-      },
-      headers: WEBHOOK_HEADERS,
+        body: JSON.stringify({
+          type: "customer.subscription.deleted",
+          data: {
+            object: {
+              id: "sub_deleted_no_userid",
+              metadata: {},
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(200);
-    const json = await response.json();
-    expect(json.received).toBe(true);
-    expect(json.handled).toBe(false);
+    expect(result7.status).toBe(200);
+    expect(result7.body.received).toBe(true);
+    expect(result7.body.handled).toBe(false);
   });
 
   test("POST /api/stripe/webhook avec body modifié (tamperé) retourne 400", async ({ page }) => {
     // Send a valid-looking signature but with a body that will fail signature verification
     // In the mock, "tampered_sig" is not "valid_sig_test", so constructEvent would fail
-    const validBody = JSON.stringify({
-      type: "checkout.session.completed",
-      data: { object: { id: "cs_tampered" } },
-    });
 
     // Send with a different signature than what the body would have been created with
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: validBody,
-      headers: {
-        "stripe-signature": "tampered_signature_value",
-        "content-type": "application/json",
-      },
+    const result8 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "stripe-signature": "tampered_signature_value",
+        },
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: { object: { id: "cs_tampered" } },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
+    expect(result8.status).toBe(400);
+    expect(result8.body.error).toBeDefined();
     expect(json.error).toBeDefined();
   });
 });
@@ -2179,10 +2477,14 @@ test.describe("Webhook Stripe — Cas non gérés spécifiques", () => {
 
 test.describe("Abonnement — Changements avancés", () => {
   test.describe("Upgrade direct", () => {
+    test.beforeEach(async ({ page }) => {
+      await setupPage(page);
+    });
+
     test("passage de Free à Team directement (pas Free→Pro→Team)", async ({ page }) => {
       await mockSession(page, MOCK_SESSION_FREE);
 
-      await page.route("**/api/stripe/checkout", async (route) => {
+      await page.route("**/api/stripe/checkout*", async (route) => {
         const body = JSON.parse(route.request().postData() || "{}");
         expect(body.priceId).toBe(TEAM_PRICE_ID);
 
@@ -2195,12 +2497,16 @@ test.describe("Abonnement — Changements avancés", () => {
         });
       });
 
-      const response = await page.request.post("/api/stripe/checkout", {
-        data: { priceId: TEAM_PRICE_ID },
-      });
-      expect(response.status()).toBe(200);
-      const json = await response.json();
-      expect(json.url).toContain("checkout.stripe.com");
+      const result = await page.evaluate(async (priceId) => {
+        const res = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, TEAM_PRICE_ID);
+      expect(result.status).toBe(200);
+      expect(result.body.url).toContain("checkout.stripe.com");
     });
 
     test("passage de Free à Team affiche le montant correct sur la page de checkout", async ({
@@ -2208,7 +2514,7 @@ test.describe("Abonnement — Changements avancés", () => {
     }) => {
       await mockSession(page, MOCK_SESSION_FREE);
 
-      await page.route("**/api/billing/proration", async (route) => {
+      await page.route("**/api/billing/proration*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -2260,12 +2566,16 @@ test.describe("Abonnement — Changements avancés", () => {
   });
 
   test.describe("Downgrade Team→Pro", () => {
+    test.beforeEach(async ({ page }) => {
+      await setupPage(page);
+    });
+
     test("passage de Team à Pro programmé à la fin de la période de facturation", async ({
       page,
     }) => {
       await mockSession(page, MOCK_SESSION_TEAM);
 
-      await page.route("**/api/billing/subscription/downgrade", async (route) => {
+      await page.route("**/api/billing/subscription/downgrade*", async (route) => {
         if (route.request().method() === "POST") {
           const body = JSON.parse(route.request().postData() || "{}");
           expect(body.targetPlan).toBe("PRO");
@@ -2339,11 +2649,15 @@ test.describe("Abonnement — Changements avancés", () => {
   });
 
   test.describe("Réactivation d'abonnement Team annulé", () => {
+    test.beforeEach(async ({ page }) => {
+      await setupPage(page);
+    });
+
     test("réactive un abonnement Team annulé avant la fin de la période", async ({ page }) => {
       await mockSession(page, MOCK_SESSION_TEAM);
 
       // Mock reactivate endpoint
-      await page.route("**/api/billing/subscription/reactivate", async (route) => {
+      await page.route("**/api/billing/subscription/reactivate*", async (route) => {
         if (route.request().method() === "POST") {
           await route.fulfill({
             status: 200,
@@ -2405,10 +2719,14 @@ test.describe("Abonnement — Changements avancés", () => {
   });
 
   test.describe("Échecs Stripe — Annulation et réactivation", () => {
+    test.beforeEach(async ({ page }) => {
+      await setupPage(page);
+    });
+
     test("annulation échoue quand Stripe API est indisponible", async ({ page }) => {
       await mockSession(page, MOCK_SESSION_PRO);
 
-      await page.route("**/api/billing/subscription/cancel", async (route) => {
+      await page.route("**/api/billing/subscription/cancel*", async (route) => {
         if (route.request().method() === "POST") {
           await route.fulfill({
             status: 500,
@@ -2472,7 +2790,7 @@ test.describe("Abonnement — Changements avancés", () => {
     test("réactivation échoue quand Stripe API est indisponible", async ({ page }) => {
       await mockSession(page, MOCK_SESSION_PRO);
 
-      await page.route("**/api/billing/subscription/reactivate", async (route) => {
+      await page.route("**/api/billing/subscription/reactivate*", async (route) => {
         if (route.request().method() === "POST") {
           await route.fulfill({
             status: 500,
@@ -2536,12 +2854,13 @@ test.describe("Abonnement — Changements avancés", () => {
 
 test.describe("API — Rate limiting avancé", () => {
   test.beforeEach(async ({ page }) => {
+    await setupPage(page);
     await mockSession(page, MOCK_SESSION_FREE);
   });
 
   test("POST /api/stripe/checkout rate limité → 429 avec header Retry-After", async ({ page }) => {
     let requestCount = 0;
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       requestCount++;
       if (requestCount > 5) {
         await route.fulfill({
@@ -2568,29 +2887,41 @@ test.describe("API — Rate limiting avancé", () => {
 
     // Exceed the rate limit
     for (let i = 0; i < 6; i++) {
-      await page.request.post("/api/stripe/checkout", {
-        data: { priceId: PRO_PRICE_ID },
-      });
+      await page.evaluate(async (priceId) => {
+        await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ priceId }),
+        });
+      }, PRO_PRICE_ID);
     }
 
     // The last request should be rate limited
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
+    const result = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return {
+        status: res.status,
+        headers: Object.fromEntries(res.headers.entries()),
+        body: await res.json(),
+      };
+    }, PRO_PRICE_ID);
 
-    if (response.status() === 429) {
+    if (result.status === 429) {
       // Check Retry-After header
-      const retryAfter = response.headers()["retry-after"];
+      const retryAfter = result.headers["retry-after"];
       expect(retryAfter).toBeDefined();
       expect(Number(retryAfter)).toBeGreaterThan(0);
 
-      const json = await response.json();
-      expect(json.code).toBe("RATE_LIMIT");
+      expect(result.body.code).toBe("RATE_LIMIT");
     }
   });
 
   test("POST /api/stripe/checkout Redis indisponible → 503", async ({ page }) => {
-    await page.route("**/api/stripe/checkout", async (route) => {
+    await page.route("**/api/stripe/checkout*", async (route) => {
       // Simulate Redis failure: rate limit check catches the error and returns 503
       await route.fulfill({
         status: 503,
@@ -2602,18 +2933,22 @@ test.describe("API — Rate limiting avancé", () => {
       });
     });
 
-    const response = await page.request.post("/api/stripe/checkout", {
-      data: { priceId: PRO_PRICE_ID },
-    });
-    expect(response.status()).toBe(503);
-    const json = await response.json();
-    expect(json.error).toContain("indisponible");
+    const result2 = await page.evaluate(async (priceId) => {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      return { status: res.status, body: await res.json() };
+    }, PRO_PRICE_ID);
+    expect(result2.status).toBe(503);
+    expect(result2.body.error).toContain("indisponible");
   });
 
   test("POST /api/stripe/portal avec returnUrl javascript: → 400", async ({ page }) => {
     await mockSession(page, MOCK_SESSION_PRO);
 
-    await page.route("**/api/stripe/portal", async (route) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
       const body = JSON.parse(route.request().postData() || "{}");
       const returnUrl = body.returnUrl || "";
 
@@ -2636,11 +2971,15 @@ test.describe("API — Rate limiting avancé", () => {
       }
     });
 
-    const response = await page.request.post("/api/stripe/portal", {
-      data: { returnUrl: "javascript:alert('xss')" },
+    const result3 = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ returnUrl: "javascript:alert('xss')" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toBeDefined();
+    expect(result3.status).toBe(400);
+    expect(result3.body.error).toBeDefined();
   });
 });

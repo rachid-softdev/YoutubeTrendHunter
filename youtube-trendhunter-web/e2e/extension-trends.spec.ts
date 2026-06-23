@@ -18,27 +18,33 @@ test.describe("Extension — GET /api/extension/trends", () => {
   const VALID_TOKEN = "th_test_valid_token_abc123";
   const INVALID_TOKEN = "th_invalid_token_xyz789";
 
-  test("retourne 401 sans token d'authentification", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends");
-    expect(response.status()).toBe(401);
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+  test("retourne 401 sans token d'authentification", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body).toMatchObject({
       error: "Token manquant",
       code: "UNAUTHORIZED",
     });
   });
 
   test("retourne 401 avec un token invalide", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: {
-        Authorization: `Bearer ${INVALID_TOKEN}`,
-      },
-    });
-    expect(response.status()).toBe(401);
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, INVALID_TOKEN);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+    expect(result.body).toMatchObject({
       error: "Token invalide",
       code: "UNAUTHORIZED",
     });
@@ -46,19 +52,23 @@ test.describe("Extension — GET /api/extension/trends", () => {
 
   test("retourne 429 en cas de rate limiting (trop de requêtes)", async ({ page }) => {
     // Send rapid requests to trigger rate limiting
-    const promises = Array.from({ length: 10 }, () =>
-      page.request.get("/api/extension/trends", {
-        headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-      }),
-    );
+    const results = await page.evaluate(async (token) => {
+      const promises = Array.from({ length: 10 }, () =>
+        fetch("/api/extension/trends", {
+          headers: { Authorization: `Bearer ${token}` },
+        }).then(async (res) => ({
+          status: res.status,
+          body: await res.json(),
+        })),
+      );
+      return await Promise.all(promises);
+    }, VALID_TOKEN);
 
-    const responses = await Promise.all(promises);
-    const hasRateLimit = responses.some((r) => r.status() === 429);
+    const hasRateLimit = results.some((r) => r.status === 429);
 
     if (hasRateLimit) {
-      const rateLimitResponse = responses.find((r) => r.status() === 429)!;
-      const body = await rateLimitResponse.json();
-      expect(body).toMatchObject({
+      const rateLimitResponse = results.find((r) => r.status === 429)!;
+      expect(rateLimitResponse.body).toMatchObject({
         error: expect.stringContaining("Trop de requêtes"),
         code: "RATE_LIMIT",
       });
@@ -119,21 +129,23 @@ test.describe("Extension — GET /api/extension/trends", () => {
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia&limit=3", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia&limit=3", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
 
-    expect(response.status()).toBe(200);
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("trends");
-    expect(Array.isArray(body.trends)).toBe(true);
-    expect(body.trends.length).toBe(3);
-    expect(body).toHaveProperty("plan");
-    expect(body).toHaveProperty("nextCursor");
+    expect(result.body).toHaveProperty("trends");
+    expect(Array.isArray(result.body.trends)).toBe(true);
+    expect(result.body.trends.length).toBe(3);
+    expect(result.body).toHaveProperty("plan");
+    expect(result.body).toHaveProperty("nextCursor");
 
     // Verify trend object structure
-    const trend = body.trends[0];
+    const trend = result.body.trends[0];
     expect(trend).toHaveProperty("id");
     expect(trend).toHaveProperty("title");
     expect(trend).toHaveProperty("channelName");
@@ -146,7 +158,7 @@ test.describe("Extension — GET /api/extension/trends", () => {
     expect(typeof trend.score).toBe("number");
 
     // Verify plan is a string
-    expect(typeof body.plan).toBe("string");
+    expect(typeof result.body.plan).toBe("string");
   });
 
   test("accepte le paramètre de niche optionnel", async ({ page }) => {
@@ -181,20 +193,25 @@ test.describe("Extension — GET /api/extension/trends", () => {
     });
 
     // Test with custom niche
-    const response = await page.request.get("/api/extension/trends?niche=gaming", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=gaming", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends[0].title).toContain("gaming");
+    expect(result.status).toBe(200);
+    expect(result.body.trends[0].title).toContain("gaming");
 
     // Test without niche (should default to tech-ia)
-    const responseDefault = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${VALID_TOKEN}` },
-    });
+    const resultDefault = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TOKEN);
 
-    expect(responseDefault.status()).toBe(200);
+    expect(resultDefault.status).toBe(200);
   });
 });
 
@@ -203,14 +220,22 @@ test.describe("Extension — GET /api/extension/trends", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Extension — POST /api/extension/auth", () => {
-  test("retourne 401 sans session authentifiée", async ({ page }) => {
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
-    });
-    expect(response.status()).toBe(401);
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+  test("retourne 401 sans session authentifiée", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
@@ -218,7 +243,7 @@ test.describe("Extension — POST /api/extension/auth", () => {
 
   test("retourne 400 avec des données invalides", async ({ page }) => {
     // Mock session for auth
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -236,7 +261,7 @@ test.describe("Extension — POST /api/extension/auth", () => {
     });
 
     // Mock the extension auth endpoint to test validation
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -267,13 +292,16 @@ test.describe("Extension — POST /api/extension/auth", () => {
       }
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: 123 },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: 123 }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-
-    expect(response.status()).toBe(400);
-    const json = await response.json();
-    expect(json.error).toContain("invalides");
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain("invalides");
   });
 });
 
@@ -282,19 +310,25 @@ test.describe("Extension — POST /api/extension/auth", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Extension — GET /api/extension/auth", () => {
-  test("retourne 401 sans session authentifiée", async ({ page }) => {
-    const response = await page.request.get("/api/extension/auth");
-    expect(response.status()).toBe(401);
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
 
-    const body = await response.json();
-    expect(body).toMatchObject({
+  test("retourne 401 sans session authentifiée", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body).toMatchObject({
       error: "Non authentifié",
       code: "UNAUTHORIZED",
     });
   });
 
   test("retourne la liste des tokens avec session (mocké)", async ({ page }) => {
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -311,7 +345,7 @@ test.describe("Extension — GET /api/extension/auth", () => {
       });
     });
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 200,
@@ -328,15 +362,17 @@ test.describe("Extension — GET /api/extension/auth", () => {
       }
     });
 
-    const response = await page.request.get("/api/extension/auth");
-    expect(response.status()).toBe(200);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
-    expect(body).toHaveProperty("tokens");
-    expect(Array.isArray(body.tokens)).toBe(true);
-    expect(body.tokens.length).toBe(2);
-    expect(body.tokens[0]).toHaveProperty("id");
-    expect(body.tokens[0]).toHaveProperty("name");
+    expect(result.body).toHaveProperty("tokens");
+    expect(Array.isArray(result.body.tokens)).toBe(true);
+    expect(result.body.tokens.length).toBe(2);
+    expect(result.body.tokens[0]).toHaveProperty("id");
+    expect(result.body.tokens[0]).toHaveProperty("name");
   });
 });
 
@@ -345,24 +381,32 @@ test.describe("Extension — GET /api/extension/auth", () => {
 /* -------------------------------------------------------------------------- */
 
 test.describe("Extension — Gestion d'erreurs", () => {
-  test("un token vide dans le header est rejeté", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: "Bearer " },
-    });
-    expect(response.status()).toBe(401);
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
 
-    const body = await response.json();
-    expect(body.code).toBe("UNAUTHORIZED");
+  test("un token vide dans le header est rejeté", async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: "Bearer " },
+      });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+
+    expect(result.body.code).toBe("UNAUTHORIZED");
   });
 
   test("un header Authorization malformé est rejeté", async ({ page }) => {
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: "InvalidFormat token123" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: "InvalidFormat token123" },
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
 
-    const body = await response.json();
-    expect(body.code).toBe("UNAUTHORIZED");
+    expect(result.body.code).toBe("UNAUTHORIZED");
   });
 });
 

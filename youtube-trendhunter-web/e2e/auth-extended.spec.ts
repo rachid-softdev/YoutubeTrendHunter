@@ -1,5 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * Extended Auth E2E tests for YouTube TrendHunter
  *
@@ -62,7 +82,7 @@ const EXPIRED_SESSION = {
  * This only covers client-side fetches; server-side auth() still reads cookies.
  */
 async function mockSession(page: Page, session = ACTIVE_SESSION) {
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -191,7 +211,7 @@ test.describe("Auth étendu — Cas de succès", () => {
 test.describe("Auth étendu — Gestion d'erreurs", () => {
   test("l'API /api/auth/session retourne 500 — l'application ne crash pas", async ({ page }) => {
     // Given the session endpoint returns a server error
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -223,7 +243,7 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
     page,
   }) => {
     // Given the session endpoint is unreachable (abort the request)
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.abort("connectionrefused");
     });
 
@@ -242,7 +262,7 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
 
   test("l'API /api/auth/session retourne null (non connecté)", async ({ page }) => {
     // Given the session endpoint explicitly returns null (not authenticated)
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -288,7 +308,7 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
     // Given authenticated user but alerts API fails
     await mockSession(page, ACTIVE_SESSION);
 
-    await page.route("**/api/alerts", async (route) => {
+    await page.route("**/api/alerts*", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
           status: 500,
@@ -314,15 +334,19 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
     page,
   }) => {
     // Given a FREE plan user
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When trying to access the export endpoint (PRO-only feature)
-    const response = await page.request.get("/api/user/export?format=json");
+    const result1 = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then the API should return 403 Forbidden
     // (this test works without mocking because the real auth() will fail first — 401)
     // We mock session to actually test the plan check
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -330,31 +354,40 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
       });
     });
 
-    const response2 = await page.request.get("/api/user/export?format=json");
+    const result2 = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
     // The response depends on whether the real DB has the user.
     // If session is mocked but user doesn't exist in DB, the plan check may fail differently.
     // We just verify the request doesn't crash the app.
-    const status = response2.status();
+    const status = result2.status;
     const validStatuses = [401, 403, 500];
     expect(validStatuses).toContain(status);
   });
 
   test("l'API /api/niches retourne 403 pour un FREE qui dépasse la limite", async ({ page }) => {
     // Given a FREE plan user
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When POST to follow a second niche (FREE limit is 1)
-    const response = await page.request.post("/api/niches", {
-      data: { nicheId: "niche-2" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/niches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nicheId: "niche-2" }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
     // The response should be 403 if the mock session is honored by the API
     // (In practice, the server-side auth() reads real cookies, so this may be 401 first)
-    const status = response.status();
+    const status = result.status;
     expect([401, 403, 400, 500]).toContain(status);
 
     if (status === 403) {
-      const body = await response.json();
+      const body = result.body;
       expect(body.code).toBe("FORBIDDEN");
       expect(body.error).toContain("Limite du plan FREE");
     }
@@ -368,7 +401,8 @@ test.describe("Auth étendu — Gestion d'erreurs", () => {
 test.describe("Auth étendu — Plans et rôles", () => {
   test("un utilisateur FREE voit les limites appliquées dans la réponse API", async ({ page }) => {
     // Given mock session with FREE plan
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -377,12 +411,15 @@ test.describe("Auth étendu — Plans et rôles", () => {
     });
 
     // When fetching trends
-    const response = await page.request.get("/api/trends?niche=tech");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then verify plan info is present in response (if auth passes)
-    const status = response.status();
+    const status = result.status;
     if (status === 200) {
-      const body = await response.json();
+      const body = result.body;
       expect(body).toHaveProperty("plan");
       expect(body.plan).toBe("FREE");
     }
@@ -390,7 +427,8 @@ test.describe("Auth étendu — Plans et rôles", () => {
 
   test("un utilisateur PRO voit son plan dans la réponse API", async ({ page }) => {
     // Given mock session with PRO plan
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -399,12 +437,15 @@ test.describe("Auth étendu — Plans et rôles", () => {
     });
 
     // When fetching trends
-    const response = await page.request.get("/api/trends?niche=tech");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then verify PRO plan is reflected
-    const status = response.status();
+    const status = result.status;
     if (status === 200) {
-      const body = await response.json();
+      const body = result.body;
       expect(body).toHaveProperty("plan");
       expect(body.plan).toBe("PRO");
     }
@@ -412,7 +453,8 @@ test.describe("Auth étendu — Plans et rôles", () => {
 
   test("l'accès admin est bloqué pour un utilisateur non-admin", async ({ page }) => {
     // Given a regular USER session (not ADMIN)
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -421,19 +463,23 @@ test.describe("Auth étendu — Plans et rôles", () => {
     });
 
     // When trying to access admin API
-    const response = await page.request.get("/api/admin/stats");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/admin/stats");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then the response should be 401 (not authorized)
-    const status = response.status();
+    const status = result.status;
     expect(status).toBe(401);
 
-    const body = await response.json();
+    const body = result.body;
     expect(body.error).toBeDefined();
   });
 
   test("l'API /api/admin/plans est inaccessible pour un utilisateur standard", async ({ page }) => {
     // Given a regular user
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -442,17 +488,20 @@ test.describe("Auth étendu — Plans et rôles", () => {
     });
 
     // When accessing admin plans endpoint
-    const response = await page.request.get("/api/admin/plans");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/admin/plans");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then it should be rejected
-    const status = response.status();
+    const status = result.status;
     // Either 401 (role check) or 500 (error)
     expect([401, 500]).toContain(status);
   });
 
   test("un utilisateur PRO peut accéder aux fonctionnalités PRO", async ({ page }) => {
     // Given a PRO session
-    await page.route("**/api/auth/session", async (route) => {
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -534,36 +583,44 @@ test.describe("Auth étendu — Cas limites", () => {
   test("accès direct à /api/auth/session sans être connecté retourne null", async ({ page }) => {
     // Given no session at all (no mocking)
     // When directly accessing the session endpoint
-    const response = await page.request.get("/api/auth/session");
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
 
     // Then it should return a non-error response (possibly null or empty)
-    const status = response.status();
+    const status = result.status;
     // In NextAuth v5, /api/auth/session returns 200 with a JSON body that may be
     // null or { user: null } when no session exists
     expect(status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body;
     // The body should be null or an object with null user
     expect(body === null || body?.user === null || body?.user === undefined).toBe(true);
   });
 
   test("manipulation d'URL — headers modifiés ne contournent pas l'auth", async ({ page }) => {
     // When trying to access /dashboard with custom headers (potential bypass attempt)
-    const response = await page.request.get("/dashboard", {
-      headers: {
-        "X-Forwarded-Proto": "https",
-        "X-Forwarded-Host": "localhost:3000",
-        Authorization: "Bearer fake-token-12345",
-      },
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/dashboard", {
+        headers: {
+          "X-Forwarded-Proto": "https",
+          "X-Forwarded-Host": "localhost:3000",
+          Authorization: "Bearer fake-token-12345",
+        },
+      });
+      return { status: res.status, url: res.url };
     });
 
     // Then the server should still redirect to login (auth check happens server-side)
     // The response status should be 200 (Next.js redirect is a 307/308 internally,
     // but Playwright follows redirects by default)
-    expect(response.status()).toBe(200);
+    expect(result.status).toBe(200);
 
     // The final URL should be /login
-    expect(response.url()).toContain("/login");
+    expect(result.url).toContain("/login");
   });
 
   test("accès à /billing sans auth affiche la page de connexion", async ({ page }) => {
@@ -579,7 +636,8 @@ test.describe("Auth étendu — Cas limites", () => {
 
   test("l'API alert POST est bloquée pour un utilisateur FREE", async ({ page }) => {
     // Given a FREE user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -588,22 +646,27 @@ test.describe("Auth étendu — Cas limites", () => {
     });
 
     // When trying to create an alert (PRO feature)
-    const response = await page.request.post("/api/alerts", {
-      data: {
-        nicheId: "niche-1",
-        type: "VIEW_THRESHOLD",
-        threshold: 100000,
-        channel: "email",
-      },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nicheId: "niche-1",
+          type: "VIEW_THRESHOLD",
+          threshold: 100000,
+          channel: "email",
+        }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
     // Then the response should be 403 (Forbidden)
-    const status = response.status();
+    const status = result.status;
     // If auth passes, should be 403; if auth fails (server-side), could be 401
     expect([401, 403]).toContain(status);
 
     if (status === 403) {
-      const body = await response.json();
+      const body = result.body;
       expect(body.code).toBe("FORBIDDEN");
     }
   });
@@ -643,7 +706,8 @@ test.describe("Auth étendu — Cas limites", () => {
 
   test("l'utilisateur tente d'accéder à /api/admin/users sans rôle ADMIN", async ({ page }) => {
     // Given a regular user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -652,10 +716,13 @@ test.describe("Auth étendu — Cas limites", () => {
     });
 
     // When trying to access admin users endpoint
-    const response = await page.request.get("/api/admin/users");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/admin/users");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then rejected
-    const status = response.status();
+    const status = result.status;
     expect([401, 403]).toContain(status);
   });
 });
@@ -667,36 +734,54 @@ test.describe("Auth étendu — Cas limites", () => {
 test.describe("Auth étendu — Résilience", () => {
   test("plusieurs requêtes API simultanées sans session retournent 401", async ({ page }) => {
     // Given no session
+    await setupPage(page);
     // When firing multiple parallel API requests to protected endpoints
-    const results = await Promise.all([
-      page.request.get("/api/trends?niche=tech"),
-      page.request.get("/api/alerts"),
-      page.request.get("/api/niches"),
-      page.request.get("/api/user/export?format=json"),
-    ]);
+    const results = await page.evaluate(async () => {
+      const endpoints = [
+        "/api/trends?niche=tech",
+        "/api/alerts",
+        "/api/niches",
+        "/api/user/export?format=json",
+      ];
+      const responses = await Promise.all(
+        endpoints.map((url) =>
+          fetch(url).then(async (res) => ({
+            status: res.status,
+            body: await res.json().catch(() => ({})),
+          })),
+        ),
+      );
+      return responses;
+    });
 
     // Then all should return 401 Unauthorized
-    for (const response of results) {
-      expect(response.status()).toBe(401);
-      const body = await response.json();
-      expect(body.code).toBe("UNAUTHORIZED");
-      expect(body.error).toBe("Non authentifié");
+    for (const result of results) {
+      expect(result.status).toBe(401);
+      expect(result.body.code).toBe("UNAUTHORIZED");
+      expect(result.body.error).toBe("Non authentifié");
     }
   });
 
   test("le session endpoint est cohérent entre requêtes répétées", async ({ page }) => {
     // Given no session
+    await setupPage(page);
     // When calling /api/auth/session multiple times
-    const responses = await Promise.all([
-      page.request.get("/api/auth/session"),
-      page.request.get("/api/auth/session"),
-      page.request.get("/api/auth/session"),
-    ]);
+    const results = await page.evaluate(async () => {
+      const responses = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          fetch("/api/auth/session").then(async (res) => ({
+            status: res.status,
+            body: await res.json(),
+          })),
+        ),
+      );
+      return responses;
+    });
 
     // Then all responses should be consistent
-    for (const response of responses) {
-      expect(response.status()).toBe(200);
-      const body = await response.json();
+    for (const result of results) {
+      expect(result.status).toBe(200);
+      const body = result.body;
       // Without auth, body should be null or have no user
       expect(body === null || body?.user === null || body?.user === undefined).toBe(true);
     }
@@ -704,15 +789,21 @@ test.describe("Auth étendu — Résilience", () => {
 
   test("l'API trends avec paramètres invalides ne contourne pas l'auth", async ({ page }) => {
     // Given no session
+    await setupPage(page);
     // When accessing trends with various invalid params
-    const response = await page.request.get("/api/trends?niche=");
-    expect(response.status()).toBe(401);
-
-    const response2 = await page.request.get("/api/trends");
-    expect(response2.status()).toBe(401);
-
-    const response3 = await page.request.get("/api/trends?niche=../etc/passwd");
-    expect(response3.status()).toBe(401);
+    const results = await page.evaluate(async () => {
+      const r1 = await fetch("/api/trends?niche=");
+      const r2 = await fetch("/api/trends");
+      const r3 = await fetch("/api/trends?niche=../etc/passwd");
+      return {
+        r1: { status: r1.status, body: await r1.json().catch(() => ({})) },
+        r2: { status: r2.status, body: await r2.json().catch(() => ({})) },
+        r3: { status: r3.status, body: await r3.json().catch(() => ({})) },
+      };
+    });
+    expect(results.r1.status).toBe(401);
+    expect(results.r2.status).toBe(401);
+    expect(results.r3.status).toBe(401);
   });
 
   test("page /login déjà visitée — le re-render est stable", async ({ page }) => {
@@ -755,7 +846,7 @@ test.describe("Auth étendu — Simulation OAuth", () => {
     // Clicking the button submits a server action to /api/auth/signin/google.
     // Intercept to verify the POST is dispatched, then abort gracefully.
     let signInAttempted = false;
-    await page.route("**/api/auth/signin/google", async (route, request) => {
+    await page.route("**/api/auth/signin/google*", async (route, request) => {
       if (request.method() === "POST") {
         signInAttempted = true;
       }
@@ -965,7 +1056,7 @@ test.describe("Auth étendu — Page de connexion : accessibilité clavier", () 
 
     // Mock the sign-in endpoint to capture the submission
     let formSubmitted = false;
-    await page.route("**/api/auth/signin/google", async (route, request) => {
+    await page.route("**/api/auth/signin/google*", async (route, request) => {
       if (request.method() === "POST") {
         formSubmitted = true;
       }
@@ -1010,11 +1101,13 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
     expect(validStates).toBe(true);
 
     // Verify the session fetch still returns the same data
-    const sessionResponse = await page.request.get("/api/auth/session");
-    expect(sessionResponse.status()).toBe(200);
-    const body = await sessionResponse.json();
-    expect(body.user.email).toBe(ACTIVE_SESSION.user.email);
-    expect(body.user.plan).toBe(ACTIVE_SESSION.user.plan);
+    const sessionResult = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(sessionResult.status).toBe(200);
+    expect(sessionResult.body.user.email).toBe(ACTIVE_SESSION.user.email);
+    expect(sessionResult.body.user.plan).toBe(ACTIVE_SESSION.user.plan);
   });
 
   test("la déconnexion vide la session — retour à null après signOut", async ({ page }) => {
@@ -1031,7 +1124,7 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
     if (isOnDashboard) {
       // Simulate logout by removing the mock and returning null
       await clearMocks(page);
-      await page.route("**/api/auth/session", async (route) => {
+      await page.route("**/api/auth/session*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -1046,9 +1139,11 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
       expect(page.url().includes("/login")).toBe(true);
 
       // The session endpoint now returns null
-      const sessionResponse = await page.request.get("/api/auth/session");
-      const body = await sessionResponse.json();
-      expect(body).toBeNull();
+      const sessionResult = await page.evaluate(async () => {
+        const res = await fetch("/api/auth/session");
+        return { status: res.status, body: await res.json() };
+      });
+      expect(sessionResult.body).toBeNull();
     } else {
       // If redirected to login, at least verify the login page is functional
       await expect(page.locator("h1")).toContainText("l'Algorithme");
@@ -1069,7 +1164,7 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
     if (isOnDashboard) {
       // Simulate account disable: session endpoint starts returning null
       await clearMocks(page);
-      await page.route("**/api/auth/session", async (route) => {
+      await page.route("**/api/auth/session*", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -1085,9 +1180,11 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
       expect(page.url().includes("/login")).toBe(true);
 
       // Verify the session explicitly returns null
-      const sessionResponse = await page.request.get("/api/auth/session");
-      const body = await sessionResponse.json();
-      expect(body).toBeNull();
+      const sessionResult = await page.evaluate(async () => {
+        const res = await fetch("/api/auth/session");
+        return { status: res.status, body: await res.json() };
+      });
+      expect(sessionResult.body).toBeNull();
     } else {
       // Best-effort: if server redirects, verify login page
       await expect(page.locator("h1")).toContainText("l'Algorithme");
@@ -1103,20 +1200,26 @@ test.describe("Auth étendu — Session : persistance et invalidation", () => {
     await page.waitForLoadState("networkidle");
 
     // Fetch session data
-    const session1 = await page.request.get("/api/auth/session");
-    const body1 = await session1.json();
+    const session1 = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    const body1 = session1.body;
 
     // Refresh the page
     await page.reload();
     await page.waitForLoadState("networkidle");
 
     // Fetch session data again after reload
-    const session2 = await page.request.get("/api/auth/session");
-    const body2 = await session2.json();
+    const session2 = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/session");
+      return { status: res.status, body: await res.json() };
+    });
+    const body2 = session2.body;
 
     // Both responses should have the same user data if the mock is active
-    expect(session1.status()).toBe(200);
-    expect(session2.status()).toBe(200);
+    expect(session1.status).toBe(200);
+    expect(session2.status).toBe(200);
 
     if (body1 !== null && body2 !== null) {
       expect(body2.user.id).toBe(body1.user.id);
@@ -1184,6 +1287,7 @@ test.describe("Auth étendu — Administration : accès à la page /admin", () =
 
   test("utilisateur non-admin reçoit 401 sur les endpoints API admin", async ({ page }) => {
     // Given a regular user session (mocked)
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When accessing various admin API endpoints
@@ -1197,23 +1301,29 @@ test.describe("Auth étendu — Administration : accès à la page /admin", () =
     ];
 
     for (const endpoint of adminEndpoints) {
-      const response = await page.request.get(endpoint);
+      const result = await page.evaluate(async (ep) => {
+        const res = await fetch(ep);
+        return { status: res.status, body: await res.json().catch(() => ({})) };
+      }, endpoint);
       // Must return 401 (Unauthorized) for non-admin users
-      expect(response.status()).toBe(401);
-      const body = await response.json();
-      expect(body.error).toBeDefined();
+      expect(result.status).toBe(401);
+      expect(result.body.error).toBeDefined();
     }
   });
 
   test("admin monitoring stream rejeté pour utilisateur non-admin", async ({ page }) => {
     // Given a regular user session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When accessing the SSE monitoring stream
-    const response = await page.request.get("/api/admin/monitoring/stream");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/admin/monitoring/stream");
+      return { status: res.status };
+    });
 
     // Then it should be rejected with 401/403
-    expect([401, 403]).toContain(response.status());
+    expect([401, 403]).toContain(result.status);
   });
 });
 
@@ -1307,7 +1417,7 @@ test.describe("Auth étendu — Entitlements : résilience (500)", () => {
     await serveEntitlements500Page(page);
 
     // Mock the entitlements endpoint to return 500
-    await page.route("**/api/entitlements", async (route) => {
+    await page.route("**/api/entitlements*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -1334,7 +1444,7 @@ test.describe("Auth étendu — Entitlements : résilience (500)", () => {
     await serveEntitlements500Page(page);
 
     // Mock the entitlements endpoint to return 500
-    await page.route("**/api/entitlements", async (route) => {
+    await page.route("**/api/entitlements*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -1361,7 +1471,7 @@ test.describe("Auth étendu — Entitlements : résilience (500)", () => {
     await mockSession(page, ACTIVE_SESSION);
     await serveEntitlements500Page(page);
 
-    await page.route("**/api/entitlements", async (route) => {
+    await page.route("**/api/entitlements*", async (route) => {
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -1385,10 +1495,11 @@ test.describe("Auth étendu — Entitlements : résilience (500)", () => {
 test.describe("Auth étendu — Tokens API : gestion", () => {
   test("GET /api/extension/auth retourne la liste des tokens", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // Mock the extension auth GET endpoint to return a token list
-    await page.route("**/api/extension/auth", async (route, request) => {
+    await page.route("**/api/extension/auth*", async (route, request) => {
       if (request.method() === "GET") {
         await route.fulfill({
           status: 200,
@@ -1416,11 +1527,14 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
     });
 
     // When fetching token list
-    const response = await page.request.get("/api/extension/auth");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Then it returns 200 with a token list
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body).toHaveProperty("tokens");
     expect(Array.isArray(body.tokens)).toBe(true);
     expect(body.tokens.length).toBeGreaterThanOrEqual(2);
@@ -1430,61 +1544,78 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
 
   test("POST /api/extension/auth avec un nom vide retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When posting with empty name
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "" }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
     // The endpoint validates via extensionAuthSchema — empty string is invalid
     // If auth passes, should return 400; if auth fails (server-side), 401
-    expect([400, 401]).toContain(response.status());
+    expect([400, 401]).toContain(result.status);
 
-    if (response.status() === 400) {
-      const body = await response.json();
-      expect(body.error).toBeDefined();
+    if (result.status === 400) {
+      expect(result.body.error).toBeDefined();
     }
   });
 
   test("POST /api/extension/auth avec un nom trop long retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When posting with a very long name
     const longName = "A".repeat(300);
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: longName },
-    });
+    const result = await page.evaluate(async (name) => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    }, longName);
 
     // Should reject with 400 (validation) or 401 (auth failure)
-    expect([400, 401]).toContain(response.status());
+    expect([400, 401]).toContain(result.status);
 
-    if (response.status() === 400) {
-      const body = await response.json();
-      expect(body.error).toBe("Données invalides");
+    if (result.status === 400) {
+      expect(result.body.error).toBe("Données invalides");
     }
   });
 
   test("POST /api/extension/auth avec un name contenant des caractères spéciaux — validé", async ({
     page,
   }) => {
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // Names with special chars might be rejected by schema
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "<script>alert('xss')</script>" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "<script>alert('xss')</script>" }),
+      });
+      return { status: res.status };
     });
 
     // Should be rejected (validation) or pass (if sanitized)
     // Either way, no crash
     const validStatuses = [200, 400, 401, 403];
-    expect(validStatuses).toContain(response.status());
+    expect(validStatuses).toContain(result.status);
   });
 
   test("utilisateur FREE reçoit 403 en POST /api/extension/auth", async ({ page }) => {
     // Given a FREE plan user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1493,24 +1624,29 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
     });
 
     // When attempting to create an API token
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Test Token" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Test Token" }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
     // Then the API should return 403 (plan restriction)
     // If server-side auth fails (not in DB), it could be 401 first
-    expect([401, 403]).toContain(response.status());
+    expect([401, 403]).toContain(result.status);
 
-    if (response.status() === 403) {
-      const body = await response.json();
-      expect(body.code).toBe("FORBIDDEN");
-      expect(body.error).toContain("API non disponible");
+    if (result.status === 403) {
+      expect(result.body.code).toBe("FORBIDDEN");
+      expect(result.body.error).toContain("API non disponible");
     }
   });
 
   test("utilisateur PRO peut créer un token API", async ({ page }) => {
     // Given a PRO plan user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1519,7 +1655,7 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
     });
 
     // Mock POST extension auth to simulate successful creation
-    await page.route("**/api/extension/auth", async (route, request) => {
+    await page.route("**/api/extension/auth*", async (route, request) => {
       if (request.method() === "POST") {
         await route.fulfill({
           status: 200,
@@ -1533,13 +1669,18 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
       }
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Pro Token Test" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Pro Token Test" }),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
-    const status = response.status();
+    const status = result.status;
     if (status === 200) {
-      const body = await response.json();
+      const body = result.body;
       expect(body).toHaveProperty("token");
       expect(body).toHaveProperty("id");
       expect(body).toHaveProperty("name");
@@ -1558,45 +1699,62 @@ test.describe("Auth étendu — Tokens API : gestion", () => {
 test.describe("Auth étendu — Gestion du compte utilisateur", () => {
   test("DELETE /api/user retourne 401 sans authentification", async ({ page }) => {
     // Given no session (no mocking)
+    await setupPage(page);
     // When attempting to delete account without auth
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: true },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status };
     });
 
     // Then it should return 401 Unauthorized
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 
   test("DELETE /api/user sans confirm:true retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When attempting to delete WITHOUT confirm field
-    const response = await page.request.delete("/api/user", {
-      data: {},
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
     });
 
     // The endpoint validates with deleteAccountSchema — missing confirm → 400
     // If server-side auth fails first → 401
-    expect([400, 401]).toContain(response.status());
+    expect([400, 401]).toContain(result.status);
 
-    if (response.status() === 400) {
-      const body = await response.json();
-      expect(body.error).toContain("Confirmation requise");
+    if (result.status === 400) {
+      expect(result.body.error).toContain("Confirmation requise");
     }
   });
 
   test("DELETE /api/user avec un body invalide retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When sending invalid JSON body
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: "not-a-boolean" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "not-a-boolean" }),
+      });
+      return { status: res.status };
     });
 
     // Should reject with 400 (validation error) or 401 (auth)
-    expect([400, 401]).toContain(response.status());
+    expect([400, 401]).toContain(result.status);
   });
 
   test("DELETE /api/user avec confirm:true retourne 204 (succès)", async ({ page }) => {
@@ -1604,7 +1762,7 @@ test.describe("Auth étendu — Gestion du compte utilisateur", () => {
     await mockSession(page, ACTIVE_SESSION);
 
     // Mock the user DELETE endpoint to simulate successful deletion
-    await page.route("**/api/user", async (route, request) => {
+    await page.route("**/api/user*", async (route, request) => {
       if (request.method() === "DELETE") {
         const body = await request.postDataJSON().catch(() => ({}));
         if (body?.confirm === true) {
@@ -1623,34 +1781,46 @@ test.describe("Auth étendu — Gestion du compte utilisateur", () => {
       }
     });
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: true },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      return { status: res.status, statusText: res.statusText };
     });
 
     // If the mock is honored, should be 204 (No Content)
     // If server-side auth fails first, could be 401
-    expect([204, 401]).toContain(response.status());
+    expect([204, 401]).toContain(result.status);
 
-    if (response.status() === 204) {
-      expect(response.statusText()).toBe("No Content");
+    if (result.status === 204) {
+      expect(result.statusText).toBe("No Content");
     }
   });
 
   test("DELETE /api/user avec confirm:false retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
-    const response = await page.request.delete("/api/user", {
-      data: { confirm: false },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: false }),
+      });
+      return { status: res.status };
     });
 
     // deleteAccountSchema likely requires confirm: true, so false → 400
-    expect([400, 401]).toContain(response.status());
+    expect([400, 401]).toContain(result.status);
   });
 
   test("GET /api/user/export pour un utilisateur PRO — accès autorisé", async ({ page }) => {
     // Given a PRO plan user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1674,12 +1844,15 @@ test.describe("Auth étendu — Gestion du compte utilisateur", () => {
       });
     });
 
-    const response = await page.request.get("/api/user/export?format=json");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
     // Should succeed (200) if mock works, or 401/403 if DB auth fails
-    const status = response.status();
+    const status = result.status;
     if (status === 200) {
-      const body = await response.json();
+      const body = result.body;
       expect(body).toHaveProperty("profile");
       expect(body).toHaveProperty("subscription");
       expect(body.subscription.plan).toBe("PRO");
@@ -1690,7 +1863,8 @@ test.describe("Auth étendu — Gestion du compte utilisateur", () => {
 
   test("GET /api/user/export pour un utilisateur FREE — refusé (403)", async ({ page }) => {
     // Given a FREE plan user session
-    await page.route("**/api/auth/session", async (route) => {
+    await setupPage(page);
+    await page.route("**/api/auth/session*", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1698,37 +1872,45 @@ test.describe("Auth étendu — Gestion du compte utilisateur", () => {
       });
     });
 
-    const response = await page.request.get("/api/user/export?format=json");
-    const status = response.status();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
+    const status = result.status;
     expect([401, 403]).toContain(status);
 
     if (status === 403) {
-      const body = await response.json();
-      expect(body.code).toBe("FORBIDDEN");
+      expect(result.body.code).toBe("FORBIDDEN");
     }
   });
 
   test("GET /api/user/export sans session retourne 401", async ({ page }) => {
     // Given no session at all
-    const response = await page.request.get("/api/user/export?format=json");
-    expect(response.status()).toBe(401);
-    const body = await response.json();
-    expect(body.code).toBe("UNAUTHORIZED");
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
+    expect(result.status).toBe(401);
+    expect(result.body.code).toBe("UNAUTHORIZED");
   });
 
   test("GET /api/user/export avec paramètres invalides retourne 400", async ({ page }) => {
     // Given an authenticated session
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // When requesting with invalid format
-    const response = await page.request.get("/api/user/export?format=invalid");
-    const status = response.status();
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=invalid");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
+    const status = result.status;
     // The endpoint validates via userExportQuerySchema
     expect([400, 401]).toContain(status);
 
     if (status === 400) {
-      const body = await response.json();
-      expect(body.error).toBeDefined();
+      expect(result.body.error).toBeDefined();
     }
   });
 });
@@ -1769,20 +1951,27 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
     });
 
     // Make 11 rapid requests
-    const results = await Promise.all(
-      Array.from({ length: 11 }, () => page.request.get("/api/trends?niche=tech")),
-    );
+    const results = await page.evaluate(async () => {
+      const responses = await Promise.all(
+        Array.from({ length: 11 }, () =>
+          fetch("/api/trends?niche=tech").then(async (res) => ({
+            status: res.status,
+            body: await res.json().catch(() => ({})),
+          })),
+        ),
+      );
+      return responses;
+    });
 
     // At least one should be 429 (rate limited)
-    const rateLimited = results.some((r) => r.status() === 429);
+    const rateLimited = results.some((r) => r.status === 429);
     expect(rateLimited).toBe(true);
 
     // The 429 response has the proper error code
     for (const res of results) {
-      if (res.status() === 429) {
-        const body = await res.json();
-        expect(body.code).toBe("RATE_LIMIT");
-        expect(body.error).toContain("Trop de requêtes");
+      if (res.status === 429) {
+        expect(res.body.code).toBe("RATE_LIMIT");
+        expect(res.body.error).toContain("Trop de requêtes");
       }
     }
   });
@@ -1816,20 +2005,30 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
       }
     });
 
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     // Make enough requests to trigger rate limit
-    const requests = Array.from({ length: 12 }, (_, i) =>
-      page.request.get("/api/trends?niche=tech"),
-    );
-
-    const results = await Promise.all(requests);
-    const rateLimitedResult = results.find((r) => r.status() === 429);
+    const results = await page.evaluate(async () => {
+      const responses = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          fetch("/api/trends?niche=tech").then(async (res) => {
+            const headers: Record<string, string> = {};
+            res.headers.forEach((value, key) => {
+              headers[key] = value;
+            });
+            return { status: res.status, headers };
+          }),
+        ),
+      );
+      return responses;
+    });
+    const rateLimitedResult = results.find((r) => r.status === 429);
 
     if (rateLimitedResult) {
-      expect(rateLimitedResult.headers()["x-ratelimit-limit"]).toBe("10");
-      expect(rateLimitedResult.headers()["x-ratelimit-remaining"]).toBe("0");
-      expect(rateLimitedResult.headers()["x-ratelimit-reset"]).toBeDefined();
+      expect(rateLimitedResult.headers["x-ratelimit-limit"]).toBe("10");
+      expect(rateLimitedResult.headers["x-ratelimit-remaining"]).toBe("0");
+      expect(rateLimitedResult.headers["x-ratelimit-reset"]).toBeDefined();
     }
   });
 
@@ -1840,6 +2039,7 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
     // We simulate this by returning a 503 response when the rate limit key is
     // checked (the rate-limit.ts catches Redis errors and returns 503).
 
+    await setupPage(page);
     await page.route("**/api/trends*", async (route) => {
       // Simulate Redis connection failure → 503
       await route.fulfill({
@@ -1852,17 +2052,20 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
       });
     });
 
-    const response = await page.request.get("/api/trends?niche=tech");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    });
 
-    expect(response.status()).toBe(503);
-    const body = await response.json();
-    expect(body.error).toContain("Service temporairement indisponible");
+    expect(result.status).toBe(503);
+    expect(result.body.error).toContain("Service temporairement indisponible");
   });
 
   test("Redis down — /api/user/export retourne 503 si rate limit Redis échoue", async ({
     page,
   }) => {
     // Simulate Redis failure on a different endpoint that also uses withRateLimit
+    await setupPage(page);
     await page.route("**/api/user/export*", async (route) => {
       await route.fulfill({
         status: 503,
@@ -1873,13 +2076,17 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
       });
     });
 
-    const response = await page.request.get("/api/user/export?format=json");
-    expect(response.status()).toBe(503);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/user/export?format=json");
+      return { status: res.status };
+    });
+    expect(result.status).toBe(503);
   });
 
   test("Redis down — /api/alerts retourne 503", async ({ page }) => {
     // Verify Redis failure handling on yet another endpoint
-    await page.route("**/api/alerts", async (route, request) => {
+    await setupPage(page);
+    await page.route("**/api/alerts*", async (route, request) => {
       if (request.method() === "GET") {
         await route.fulfill({
           status: 503,
@@ -1893,14 +2100,18 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
       }
     });
 
-    const response = await page.request.get("/api/alerts");
-    expect(response.status()).toBe(503);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/alerts");
+      return { status: res.status };
+    });
+    expect(result.status).toBe(503);
   });
 
   test("rate limit sur /api/trends — réinitialisation après la fenêtre (simulation)", async ({
     page,
   }) => {
     // Simulate rate limit that resets after a window
+    await setupPage(page);
     await mockSession(page, ACTIVE_SESSION);
 
     let callIdx = 0;
@@ -1935,17 +2146,31 @@ test.describe("Auth étendu — Rate limiting : général et Redis down", () => 
     });
 
     // First batch: 12 requests (10 success, 2 rate-limited)
-    const batch1 = await Promise.all(
-      Array.from({ length: 12 }, () => page.request.get("/api/trends?niche=tech")),
-    );
-    const batch1RateLimited = batch1.filter((r) => r.status() === 429);
+    const batch1 = await page.evaluate(async () => {
+      const responses = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          fetch("/api/trends?niche=tech").then(async (res) => ({
+            status: res.status,
+          })),
+        ),
+      );
+      return responses;
+    });
+    const batch1RateLimited = batch1.filter((r) => r.status === 429);
     expect(batch1RateLimited.length).toBeGreaterThan(0);
 
     // Reset: 3 more requests should succeed (simulating window expiry)
-    const batch2 = await Promise.all(
-      Array.from({ length: 3 }, () => page.request.get("/api/trends?niche=tech")),
-    );
-    const batch2Ok = batch2.filter((r) => r.status() === 200);
+    const batch2 = await page.evaluate(async () => {
+      const responses = await Promise.all(
+        Array.from({ length: 3 }, () =>
+          fetch("/api/trends?niche=tech").then(async (res) => ({
+            status: res.status,
+          })),
+        ),
+      );
+      return responses;
+    });
+    const batch2Ok = batch2.filter((r) => r.status === 200);
     expect(batch2Ok.length).toBe(3);
   });
 });
@@ -1961,10 +2186,14 @@ test.describe("Auth étendu — Sécurité OAuth et en-têtes", () => {
     // a valid session returns a 200 (CSRF token is available without auth)
     // and that the CSRF token structure is valid.
 
-    const response = await page.request.get("/api/auth/csrf");
-    expect(response.status()).toBe(200);
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/auth/csrf");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(200);
 
-    const body = await response.json();
+    const body = result.body;
     // NextAuth v5 CSRF endpoint returns { csrfToken: "..." }
     expect(body).toHaveProperty("csrfToken");
     expect(typeof body.csrfToken).toBe("string");
@@ -2035,9 +2264,17 @@ test.describe("Auth étendu — Sécurité OAuth et en-têtes", () => {
   test("les en-têtes de sécurité sont présents sur les réponses API protégées", async ({
     page,
   }) => {
-    const response = await page.request.get("/api/trends?niche=tech");
+    await setupPage(page);
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/trends?niche=tech");
+      const headers: Record<string, string> = {};
+      res.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      return { status: res.status, headers };
+    });
 
-    const headers = response.headers();
+    const headers = result.headers;
 
     // X-Content-Type-Options should be set
     if (headers["x-content-type-options"]) {

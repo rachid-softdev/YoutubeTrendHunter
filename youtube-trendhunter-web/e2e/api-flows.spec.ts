@@ -1,5 +1,29 @@
 import { test, expect, type Page } from "@playwright/test";
 
+/* -------------------------------------------------------------------------- */
+/*  Setup Helpers — Use native fetch() so page.route() interceptors work      */
+/* -------------------------------------------------------------------------- */
+
+const BASE_URL = "http://localhost:3000";
+
+async function setupPage(page: Page) {
+  await page.route(BASE_URL, async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!DOCTYPE html><html><body></body></html>",
+      });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/favicon.ico", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
+}
+
 /**
  * API Backend Flows — E2E tests for YouTube TrendHunter
  *
@@ -12,7 +36,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   ✓ Stripe Webhook — all event types handled, missing headers, empty body
  *
  * Strategy:
- *   - page.request.get/post for direct API calls
+ *   - page.evaluate() with native fetch() for direct API calls (respects page.route() interceptors)
  *   - page.route() to intercept the endpoint and simulate server-side behaviors
  *     (prisma lookups, auth checks, plan limits, stripe event handling)
  *   - Inline helpers for pure logic tests (plan check, PLAN_LIMITS)
@@ -72,7 +96,7 @@ async function mockExtensionTrends(
   page: Page,
   handler: (route: Parameters<Parameters<typeof page.route>[1]>[0]) => void | Promise<void>,
 ) {
-  await page.route("**/api/extension/trends", handler);
+  await page.route("**/api/extension/trends*", handler);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -94,7 +118,7 @@ async function mockAuthSession(page: Page, overrides: Record<string, unknown> = 
     },
     expires: "2099-01-01T00:00:00.000Z",
   };
-  await page.route("**/api/auth/session", async (route) => {
+  await page.route("**/api/auth/session*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -108,6 +132,10 @@ async function mockAuthSession(page: Page, overrides: Record<string, unknown> = 
 /* ========================================================================== */
 
 test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("1a — Token valide (format UUID legacy) retourne 200 avec user info", async ({ page }) => {
     // Simulate that a valid legacy UUID token returns full user info
     await mockExtensionTrends(page, async (route) => {
@@ -145,16 +173,18 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_UUID_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_UUID_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends).toBeDefined();
-    expect(body.trends.length).toBeGreaterThan(0);
+    expect(result.status).toBe(200);
+    expect(result.body.trends).toBeDefined();
+    expect(result.body.trends.length).toBeGreaterThan(0);
     // Verify user info shape from the token lookup
-    expect(body._test_user).toMatchObject({
+    expect(result.body._test_user).toMatchObject({
       id: expect.any(String),
       name: expect.any(String),
       email: expect.any(String),
@@ -178,17 +208,21 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       await route.continue();
     });
 
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${INVALID_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, INVALID_TOKEN);
 
-    expect(response.status()).toBe(401);
-    const body = await response.json();
-    expect(body.error).toBe("Token invalide");
-    expect(body.code).toBe("UNAUTHORIZED");
+    expect(result.status).toBe(401);
+    expect(result.body.error).toBe("Token invalide");
+    expect(result.body.code).toBe("UNAUTHORIZED");
   });
 
-  test("1c — Token trouvé → lastUsedAt mis à jour (vérifié via appel suivant)", async ({ page }) => {
+  test("1c — Token trouvé → lastUsedAt mis à jour (vérifié via appel suivant)", async ({
+    page,
+  }) => {
     let tokenVerificationCalls = 0;
 
     await mockExtensionTrends(page, async (route) => {
@@ -229,18 +263,24 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
     });
 
     // First call — token verified, lastUsedAt gets updated
-    const res1 = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
-    expect(res1.status()).toBe(200);
-    const body1 = await res1.json();
+    const res1 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
+    expect(res1.status).toBe(200);
+    const body1 = res1.body;
 
     // Second call — lastUsedAt should reflect the previous verification
-    const res2 = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
-    expect(res2.status()).toBe(200);
-    const body2 = await res2.json();
+    const res2 = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
+    expect(res2.status).toBe(200);
+    const body2 = res2.body;
 
     // The lastUsedAt timestamp should have advanced between calls
     const ts1 = new Date(body1._test_lastUsedAt).getTime();
@@ -287,22 +327,26 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=gaming", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=gaming", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body._test_tokenLookup).toBeDefined();
-    expect(body._test_tokenLookup.tokenId).toBe("tok-abc-123");
-    expect(body._test_tokenLookup.user).toMatchObject({
+    expect(result.status).toBe(200);
+    expect(result.body._test_tokenLookup).toBeDefined();
+    expect(result.body._test_tokenLookup.tokenId).toBe("tok-abc-123");
+    expect(result.body._test_tokenLookup.user).toMatchObject({
       id: "user-42",
       name: "Jean Dupont",
       email: "jean@example.com",
     });
   });
 
-  test("1e — Slug de niche introuvable en DB → { trends: [], plan } (pas d'erreur)", async ({ page }) => {
+  test("1e — Slug de niche introuvable en DB → { trends: [], plan } (pas d'erreur)", async ({
+    page,
+  }) => {
     await mockExtensionTrends(page, async (route) => {
       const url = new URL(route.request().url());
       const nicheSlug = url.searchParams.get("niche") || "tech-ia";
@@ -323,16 +367,18 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       await route.continue();
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=niche-inexistante", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=niche-inexistante", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.trends).toEqual([]);
-    expect(body.plan).toBeDefined();
-    expect(typeof body.plan).toBe("string");
-    expect(body.nextCursor).toBeNull();
+    expect(result.status).toBe(200);
+    expect(result.body.trends).toEqual([]);
+    expect(result.body.plan).toBeDefined();
+    expect(typeof result.body.plan).toBe("string");
+    expect(result.body.nextCursor).toBeNull();
   });
 
   test("1f — Paramètre niche non fourni → valeur par défaut 'tech-ia'", async ({ page }) => {
@@ -356,12 +402,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
     });
 
     // Request WITHOUT niche param
-    const response = await page.request.get("/api/extension/trends", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     // The resolved niche should be "tech-ia" (the default)
     expect(body._test_resolvedNiche).toBe("tech-ia");
     // The trends should reference the default niche
@@ -402,12 +451,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body.plan).toBe("FREE");
     expect(body.trends.length).toBeLessThanOrEqual(5);
     expect(body._test_planLimit).toBe(5);
@@ -443,12 +495,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia&limit=30", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia&limit=30", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body.plan).toBe("PRO");
     expect(body.trends.length).toBeLessThanOrEqual(20);
     expect(body._test_planLimit).toBe(20);
@@ -482,12 +537,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia&limit=50", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia&limit=50", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body.plan).toBe("TEAM");
     expect(body.trends.length).toBeLessThanOrEqual(20);
     expect(body._test_planLimit).toBe(20);
@@ -531,12 +589,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     const scores = body.trends.map((t: MockTrend) => t.score);
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]);
@@ -547,7 +608,9 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
     expect(body.trends[2].score).toBe(65);
   });
 
-  test("1k — Seules les tendances non-expirées sont retournées (expiresAt >= now)", async ({ page }) => {
+  test("1k — Seules les tendances non-expirées sont retournées (expiresAt >= now)", async ({
+    page,
+  }) => {
     await mockExtensionTrends(page, async (route) => {
       const now = Date.now();
 
@@ -607,12 +670,15 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     // Only non-expired trends should be in the response
     for (const trend of body.trends) {
       expect(new Date(trend.expiresAt).getTime()).toBeGreaterThanOrEqual(Date.now());
@@ -636,11 +702,13 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
       await route.continue();
     });
 
-    const response = await page.request.get("/api/extension/trends");
-    expect(response.status()).toBe(401);
-    const body = await response.json();
-    expect(body.error).toBe("Token manquant");
-    expect(body.code).toBe("UNAUTHORIZED");
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends");
+      return { status: res.status, body: await res.json() };
+    });
+    expect(result.status).toBe(401);
+    expect(result.body.error).toBe("Token manquant");
+    expect(result.body.code).toBe("UNAUTHORIZED");
   });
 });
 
@@ -649,10 +717,14 @@ test.describe("Extension Trends — GET /api/extension/trends — Deep Behavior"
 /* ========================================================================== */
 
 test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("2a — Crée un token via prisma.apiToken.create avec un UUID aléatoire", async ({ page }) => {
     await mockAuthSession(page);
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -675,12 +747,17 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json).toHaveProperty("token");
     expect(typeof json.token).toBe("string");
     expect(json.token.length).toBeGreaterThan(20); // th_xxx... format
@@ -692,7 +769,7 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
   test("2b — Nom par défaut 'Extension Chrome' quand name non fourni", async ({ page }) => {
     await mockAuthSession(page);
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -713,21 +790,28 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
     });
 
     // POST without a name field
-    const response = await page.request.post("/api/extension/auth", {
-      data: {},
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.name).toBe("Extension Chrome");
   });
 
-  test("2c — Les tokens précédents de l'utilisateur sont supprimés avant création", async ({ page }) => {
+  test("2c — Les tokens précédents de l'utilisateur sont supprimés avant création", async ({
+    page,
+  }) => {
     let previousTokensDeleted = false;
 
     await mockAuthSession(page);
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -748,12 +832,17 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     // Verify the mock recorded that previous tokens were deleted
     expect(json._test_previousDeleted).toBe(true);
   });
@@ -761,7 +850,7 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
   test("2d — Retourne { token, id, name } avec token au format th_xxx", async ({ page }) => {
     await mockAuthSession(page);
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -779,12 +868,17 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
       });
     });
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     // Verify exact response shape
     expect(Object.keys(json)).toEqual(["token", "id", "name"]);
     // Token should start with th_ prefix
@@ -800,22 +894,29 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
     // The real /api/auth/session will return null (no cookie)
     // which the route's auth() call will interpret as unauthenticated
 
-    const response = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(401);
-    const body = await response.json();
+    expect(result.status).toBe(401);
+    const body = result.body;
     expect(body.error).toBe("Non authentifié");
     expect(body.code).toBe("UNAUTHORIZED");
   });
 
-  test("2f — Un seul token par utilisateur (les anciens sont supprimés à la regénération)", async ({ page }) => {
+  test("2f — Un seul token par utilisateur (les anciens sont supprimés à la regénération)", async ({
+    page,
+  }) => {
     let deletionCount = 0;
 
     await mockAuthSession(page);
 
-    await page.route("**/api/extension/auth", async (route) => {
+    await page.route("**/api/extension/auth*", async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
         return;
@@ -837,18 +938,28 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
     });
 
     // Generate token twice — second call should delete the first
-    const res1 = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const res1 = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(res1.status()).toBe(200);
-    const json1 = await res1.json();
+    expect(res1.status).toBe(200);
+    const json1 = res1.body;
     expect(json1.id).toBe("token-generation-1");
 
-    const res2 = await page.request.post("/api/extension/auth", {
-      data: { name: "Extension Chrome" },
+    const res2 = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Extension Chrome" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(res2.status()).toBe(200);
-    const json2 = await res2.json();
+    expect(res2.status).toBe(200);
+    const json2 = res2.body;
     expect(json2.id).toBe("token-generation-2");
 
     // The deletion was triggered before each creation
@@ -881,11 +992,14 @@ test.describe("Extension Auth — POST /api/extension/auth — Deep Behavior", (
     });
 
     // Token without th_ prefix (not UUID format either)
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: "Bearer plaintext-without-prefix" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: "Bearer plaintext-without-prefix" },
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(401);
+    expect(result.status).toBe(401);
   });
 });
 
@@ -1084,8 +1198,12 @@ test.describe("Plan Check Logic — PLAN_LIMITS", () => {
 /* ========================================================================== */
 
 test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
   test("4a — checkout.session.completed → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const headers = route.request().headers();
       const sig = headers["stripe-signature"];
 
@@ -1138,40 +1256,56 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       }
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "checkout.session.completed",
-        data: {
-          object: {
-            mode: "subscription",
-            subscription: "sub_test_123",
-          },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "valid_test_signature",
+          "Content-Type": "application/json",
         },
-      },
-      headers: {
-        "stripe-signature": "valid_test_signature",
-        "content-type": "application/json",
-      },
+        body: JSON.stringify({
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              mode: "subscription",
+              subscription: "sub_test_123",
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
-  test("4b — customer.subscription.updated → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+  test("4b — customer.subscription.updated → événement traité (handled: true)", async ({
+    page,
+  }) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
       const pd = route.request().postData() || "{}";
       let payload: Record<string, unknown>;
-      try { payload = JSON.parse(pd); } catch {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Webhook invalide" }) });
+      try {
+        payload = JSON.parse(pd);
+      } catch {
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Webhook invalide" }),
+        });
         return;
       }
 
@@ -1190,32 +1324,45 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       }
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "customer.subscription.updated",
-        data: {
-          object: {
-            id: "sub_update_123",
-            metadata: { userId: "user-123" },
-            status: "active",
-            items: { data: [{ price: { id: "price_pro" } }] },
-          },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_valid",
+          "Content-Type": "application/json",
         },
-      },
-      headers: { "stripe-signature": "sig_valid", "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "customer.subscription.updated",
+          data: {
+            object: {
+              id: "sub_update_123",
+              metadata: { userId: "user-123" },
+              status: "active",
+              items: { data: [{ price: { id: "price_pro" } }] },
+            },
+          },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
-  test("4c — customer.subscription.deleted → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+  test("4c — customer.subscription.deleted → événement traité (handled: true)", async ({
+    page,
+  }) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1230,7 +1377,9 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           });
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       await route.fulfill({
         status: 200,
@@ -1239,25 +1388,36 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: {
-        type: "customer.subscription.deleted",
-        data: { object: { id: "sub_deleted_456", metadata: { userId: "user-cancel" } } },
-      },
-      headers: { "stripe-signature": "sig_del", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_del",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "customer.subscription.deleted",
+          data: { object: { id: "sub_deleted_456", metadata: { userId: "user-cancel" } } },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
   test("4d — invoice.payment_failed → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1272,7 +1432,9 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           });
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       await route.fulfill({
         status: 200,
@@ -1281,22 +1443,36 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.payment_failed", data: { object: { id: "inv_fail_789" } } },
-      headers: { "stripe-signature": "sig_inv_fail", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_inv_fail",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "invoice.payment_failed",
+          data: { object: { id: "inv_fail_789" } },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
   test("4e — invoice.payment_succeeded → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1311,7 +1487,9 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           });
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       await route.fulfill({
         status: 200,
@@ -1320,22 +1498,38 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "invoice.payment_succeeded", data: { object: { id: "inv_success_111", subscription: "sub_111" } } },
-      headers: { "stripe-signature": "sig_inv_ok", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_inv_ok",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "invoice.payment_succeeded",
+          data: { object: { id: "inv_success_111", subscription: "sub_111" } },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
-  test("4f — customer.subscription.trial_will_end → événement traité (handled: true)", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+  test("4f — customer.subscription.trial_will_end → événement traité (handled: true)", async ({
+    page,
+  }) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1350,7 +1544,9 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           });
           return;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       await route.fulfill({
         status: 200,
@@ -1359,22 +1555,36 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "customer.subscription.trial_will_end", data: { object: { id: "sub_trial_end_222", metadata: { userId: "user-trial" } } } },
-      headers: { "stripe-signature": "sig_trial", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_trial",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "customer.subscription.trial_will_end",
+          data: { object: { id: "sub_trial_end_222", metadata: { userId: "user-trial" } } },
+        }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(true);
   });
 
   test("4g — Type d'événement non géré → { received: true, handled: false }", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1397,7 +1607,9 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           body: JSON.stringify({ received: true, handled }),
         });
         return;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       await route.fulfill({
         status: 200,
@@ -1406,19 +1618,26 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
       });
     });
 
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "charge.succeeded", data: { object: { id: "ch_unknown" } } },
-      headers: { "stripe-signature": "sig_unknown", "content-type": "application/json" },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_unknown",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "charge.succeeded", data: { object: { id: "ch_unknown" } } }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(200);
-    const json = await response.json();
+    expect(result.status).toBe(200);
+    const json = result.body;
     expect(json.received).toBe(true);
     expect(json.handled).toBe(false);
   });
 
   test("4h — Header stripe-signature manquant → 400 'Signature manquante'", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const headers = route.request().headers();
       if (!headers["stripe-signature"]) {
         await route.fulfill({
@@ -1432,20 +1651,24 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
     });
 
     // POST without stripe-signature header
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: { type: "checkout.session.completed" },
-      // Notably: no "stripe-signature" header
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "checkout.session.completed" }),
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(400);
-    const json = await response.json();
+    expect(result.status).toBe(400);
+    const json = result.body;
     // The actual route returns: { error: "Signature manquante" }
     expect(json.error).toBeDefined();
     expect(json.error.toLowerCase()).toContain("signature");
   });
 
   test("4i — Body vide → 400", async ({ page }) => {
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const pd = route.request().postData();
       const sig = route.request().headers()["stripe-signature"];
 
@@ -1476,16 +1699,20 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
     });
 
     // Send empty body with valid signature
-    const response = await page.request.post("/api/stripe/webhook", {
-      data: "",
-      headers: {
-        "stripe-signature": "sig_empty",
-        "content-type": "application/json",
-      },
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_empty",
+          "Content-Type": "application/json",
+        },
+        body: "",
+      });
+      return { status: res.status, body: await res.json() };
     });
 
-    expect(response.status()).toBe(400);
-    const json = await response.json();
+    expect(result.status).toBe(400);
+    const json = result.body;
     expect(json.error).toBeDefined();
   });
 
@@ -1502,10 +1729,14 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
 
     const results: Array<{ type: string; handled: boolean }> = [];
 
-    await page.route("**/api/stripe/webhook", async (route) => {
+    await page.route("**/api/stripe/webhook*", async (route) => {
       const sig = route.request().headers()["stripe-signature"];
       if (!sig) {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Signature manquante" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Signature manquante" }),
+        });
         return;
       }
 
@@ -1521,28 +1752,45 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
           body: JSON.stringify({ received: true, handled }),
         });
       } catch {
-        await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Webhook invalide" }) });
+        await route.fulfill({
+          status: 400,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Webhook invalide" }),
+        });
       }
     });
 
     // Send one event of each handled type
     for (const eventType of handledEventTypes) {
-      const res = await page.request.post("/api/stripe/webhook", {
-        data: { type: eventType, data: { object: { id: `evt_${eventType}` } } },
-        headers: { "stripe-signature": `sig_${eventType}`, "content-type": "application/json" },
-      });
-      expect(res.status()).toBe(200);
-      const json = await res.json();
-      expect(json.handled).toBe(true);
+      const r = await page.evaluate(async (et) => {
+        const res = await fetch("/api/stripe/webhook", {
+          method: "POST",
+          headers: {
+            "stripe-signature": `sig_${et}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ type: et, data: { object: { id: `evt_${et}` } } }),
+        });
+        return { status: res.status, body: await res.json() };
+      }, eventType);
+      expect(r.status).toBe(200);
+      expect(r.body.handled).toBe(true);
     }
 
     // Also test one unhandled event
-    const resUnhandled = await page.request.post("/api/stripe/webhook", {
-      data: { type: "charge.refunded", data: { object: { id: "ch_refund" } } },
-      headers: { "stripe-signature": "sig_unhandled", "content-type": "application/json" },
+    const rUnhandled = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/webhook", {
+        method: "POST",
+        headers: {
+          "stripe-signature": "sig_unhandled",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "charge.refunded", data: { object: { id: "ch_refund" } } }),
+      });
+      return { status: res.status, body: await res.json() };
     });
-    expect(resUnhandled.status()).toBe(200);
-    const jsonUnhandled = await resUnhandled.json();
+    expect(rUnhandled.status).toBe(200);
+    const jsonUnhandled = rUnhandled.body;
     expect(jsonUnhandled.handled).toBe(false);
 
     // All 6 handled events returned handled: true
@@ -1557,7 +1805,13 @@ test.describe("Stripe Webhook — POST /api/stripe/webhook — Event Handling", 
 /* ========================================================================== */
 
 test.describe("API — Contract & Security", () => {
-  test("5a — Toutes les routes API retournent du JSON avec error et code en cas d'erreur", async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("5a — Toutes les routes API retournent du JSON avec error et code en cas d'erreur", async ({
+    page,
+  }) => {
     const endpoints = [
       { method: "GET" as const, url: "/api/extension/trends" },
       { method: "POST" as const, url: "/api/extension/auth", data: {} },
@@ -1565,20 +1819,29 @@ test.describe("API — Contract & Security", () => {
     ];
 
     for (const ep of endpoints) {
-      let response;
+      let result;
       if (ep.method === "GET") {
-        response = await page.request.get(ep.url);
+        result = await page.evaluate(async (url) => {
+          const res = await fetch(url);
+          return { status: res.status, body: await res.json() };
+        }, ep.url);
       } else {
-        response = await page.request.post(ep.url, { data: ep.data });
+        result = await page.evaluate(async (url) => {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          return { status: res.status, body: await res.json() };
+        }, ep.url);
       }
 
       // All should fail with 401 (no auth)
-      expect(response.status()).toBe(401);
+      expect(result.status).toBe(401);
 
-      const body = await response.json();
-      expect(body).toHaveProperty("error");
-      expect(body).toHaveProperty("code");
-      expect(body.code).toBe("UNAUTHORIZED");
+      expect(result.body).toHaveProperty("error");
+      expect(result.body).toHaveProperty("code");
+      expect(result.body.code).toBe("UNAUTHORIZED");
     }
   });
 
@@ -1608,14 +1871,18 @@ test.describe("API — Contract & Security", () => {
     ];
 
     for (const headers of malformedHeaders) {
-      const response = await page.request.get("/api/extension/trends", { headers });
-      expect(response.status()).toBe(401);
-      const body = await response.json();
-      expect(body.code).toBe("UNAUTHORIZED");
+      const result = await page.evaluate(async (h) => {
+        const res = await fetch("/api/extension/trends", { headers: h });
+        return { status: res.status, body: await res.json() };
+      }, headers);
+      expect(result.status).toBe(401);
+      expect(result.body.code).toBe("UNAUTHORIZED");
     }
   });
 
-  test("5c — Réponse 200 contient toujours les champs trends, plan, nextCursor", async ({ page }) => {
+  test("5c — Réponse 200 contient toujours les champs trends, plan, nextCursor", async ({
+    page,
+  }) => {
     await mockExtensionTrends(page, async (route) => {
       const authHeader = route.request().headers()["authorization"];
       if (!authHeader?.startsWith("Bearer ")) {
@@ -1638,12 +1905,15 @@ test.describe("API — Contract & Security", () => {
       });
     });
 
-    const response = await page.request.get("/api/extension/trends?niche=tech-ia", {
-      headers: { Authorization: `Bearer ${VALID_TH_TOKEN}` },
-    });
+    const result = await page.evaluate(async (token) => {
+      const res = await fetch("/api/extension/trends?niche=tech-ia", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return { status: res.status, body: await res.json() };
+    }, VALID_TH_TOKEN);
 
-    expect(response.status()).toBe(200);
-    const body = await response.json();
+    expect(result.status).toBe(200);
+    const body = result.body;
     expect(body).toHaveProperty("trends");
     expect(body).toHaveProperty("plan");
     expect(body).toHaveProperty("nextCursor");
