@@ -3,7 +3,9 @@ import { getApiBaseUrl, API_ENDPOINTS } from "../shared/constants/api";
 
 export default defineBackground(() => {
   browser.action.onClicked.addListener(async (tab) => {
-    await browser.sidePanel.open({ windowId: tab.windowId });
+    const windowId = tab.windowId ?? tab.id;
+    if (!windowId) return;
+    await browser.sidePanel.open({ windowId });
   });
 
   browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) => {
@@ -19,10 +21,15 @@ export default defineBackground(() => {
     const API_BASE = await getApiBaseUrl();
 
     if (message.type === "GET_TRENDS") {
-      const { apiToken, selectedNiche } = await browser.storage.session.get([
-        "apiToken",
-        "selectedNiche",
-      ]);
+      let apiToken: string | undefined;
+      let selectedNiche: string | undefined;
+      try {
+        const result = await browser.storage.session.get(["apiToken", "selectedNiche"]);
+        apiToken = result.apiToken;
+        selectedNiche = result.selectedNiche;
+      } catch {
+        return { error: "NOT_AUTHENTICATED" };
+      }
       if (!apiToken) return { error: "NOT_AUTHENTICATED" };
       try {
         const res = await fetch(
@@ -37,8 +44,15 @@ export default defineBackground(() => {
     }
 
     if (message.type === "ANALYZE_VIDEO") {
-      const { apiToken } = await browser.storage.session.get("apiToken");
+      let apiToken: string | undefined;
+      try {
+        const result = await browser.storage.session.get("apiToken");
+        apiToken = result.apiToken;
+      } catch {
+        return { error: "NOT_AUTHENTICATED" };
+      }
       if (!apiToken) return { error: "NOT_AUTHENTICATED" };
+      if (!message.videoId) return { error: "INVALID_VIDEO_ID" };
       try {
         const res = await fetch(`${API_BASE}${API_ENDPOINTS.analyze}`, {
           method: "POST",
@@ -54,5 +68,8 @@ export default defineBackground(() => {
         return { error: "FETCH_ERROR" };
       }
     }
+
+    // Unknown message type — caller won't get a response, which signals "unhandled"
+    return undefined;
   });
 });

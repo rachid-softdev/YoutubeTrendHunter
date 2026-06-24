@@ -1588,6 +1588,50 @@ test.describe("Tendances — GET /api/trends", () => {
 });
 
 /* ========================================================================== */
+/*  405 Method Not Allowed — /api/trends                                       */
+/* ========================================================================== */
+
+test.describe("Tendances — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("POST /api/trends → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/trends*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/trends", { method: "POST" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+
+  test("DELETE /api/trends → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/trends*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/trends", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+});
+
+/* ========================================================================== */
 /*  4. POST /api/trends/refresh — Tests                                       */
 /* ========================================================================== */
 

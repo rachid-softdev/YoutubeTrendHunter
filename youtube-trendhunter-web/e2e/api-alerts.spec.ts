@@ -844,6 +844,55 @@ test.describe("POST /api/alerts — Création d'une alerte", () => {
 });
 
 /* ========================================================================== */
+/*  405 Method Not Allowed — /api/alerts                                       */
+/* ========================================================================== */
+
+test.describe("Alertes — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("DELETE /api/alerts → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({
+          status: 405,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Method Not Allowed" }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    const resp = await fetchApi(page, "/api/alerts", { method: "DELETE" });
+    expect(resp.status).toBe(405);
+    expect((resp.body as Record<string, unknown>).error).toBeDefined();
+  });
+
+  test("PUT /api/alerts → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/alerts*", async (route) => {
+      if (route.request().method() === "PUT") {
+        await route.fulfill({
+          status: 405,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Method Not Allowed" }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    const resp = await fetchApi(page, "/api/alerts", {
+      method: "PUT",
+      body: { type: "SCORE_THRESHOLD" },
+    });
+    expect(resp.status).toBe(405);
+    expect((resp.body as Record<string, unknown>).error).toBeDefined();
+  });
+});
+
+/* ========================================================================== */
 /*  3. GET /api/alerts/[id] — 6 scenarios                                     */
 /* ========================================================================== */
 
@@ -2133,7 +2182,9 @@ test.describe("PATCH /api/alerts/[id] — Cas limites supplémentaires", () => {
     expect((res.body as Record<string, string>).code).toBe("NOT_FOUND");
   });
 
-  test("8d — Mise à jour concurrente (2 PATCH simultanés) → les deux 200, dernier gagne", async ({ page }) => {
+  test("8d — Mise à jour concurrente (2 PATCH simultanés) → les deux 200, dernier gagne", async ({
+    page,
+  }) => {
     await mockSession(page, SESSION_PRO);
     let patchVersion = 0;
 
@@ -2178,7 +2229,9 @@ test.describe("PATCH /api/alerts/[id] — Cas limites supplémentaires", () => {
     expect(data1.alert._patchVersion ?? data2.alert._patchVersion).toBeDefined();
   });
 
-  test("8e — Cohérence read-after-write (PATCH puis GET) → valeurs mises à jour", async ({ page }) => {
+  test("8e — Cohérence read-after-write (PATCH puis GET) → valeurs mises à jour", async ({
+    page,
+  }) => {
     await mockSession(page, SESSION_PRO);
     let updatedThreshold = 70;
 
@@ -2268,7 +2321,9 @@ test.describe("DELETE /api/alerts/[id] — Cas limites supplémentaires", () => 
     await setupPage(page);
   });
 
-  test("9a — CRITIQUE: IDOR — User A tente de DELETE l'alerte de User B → 404", async ({ page }) => {
+  test("9a — CRITIQUE: IDOR — User A tente de DELETE l'alerte de User B → 404", async ({
+    page,
+  }) => {
     await mockSession(page, SESSION_PRO);
 
     await page.route("**/api/alerts/alert-b-1*", async (route) => {

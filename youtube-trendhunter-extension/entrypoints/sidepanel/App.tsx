@@ -59,7 +59,12 @@ export default function App() {
     const response = await browser.runtime.sendMessage({
       type: "GET_TRENDS",
     });
-    if (response?.data) {
+    if (response?.error === "NOT_AUTHENTICATED") {
+      await browser.storage.session.remove("apiToken");
+      setTrends([]);
+      setPlan("FREE");
+      setScreen("auth");
+    } else if (response?.data) {
       setTrends(response.data.trends ?? []);
       setPlan(response.data.plan ?? "FREE");
     }

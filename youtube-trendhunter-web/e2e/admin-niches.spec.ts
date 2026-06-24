@@ -1059,5 +1059,101 @@ test.describe("Admin - Niches", () => {
         expect(injectedCount).toBe(0);
       }
     });
+
+    test("29 - PATCH /api/admin/niches/[id] retourne 401 pour un utilisateur non-admin", async ({
+      page,
+    }) => {
+      await page.route("**/api/admin/niches/n1*", async (route) => {
+        if (route.request().method() === "PATCH") {
+          await route.fulfill({
+            status: 401,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+
+      const response = await fetchApi(page, "/api/admin/niches/n1", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Hacked Name" }),
+      });
+      expect(response.status).toBe(401);
+      const body = response.body as any;
+      expect(body.error).toBeDefined();
+    });
+
+    test("30 - DELETE /api/admin/niches/[id] retourne 401 pour un utilisateur non-admin", async ({
+      page,
+    }) => {
+      await page.route("**/api/admin/niches/n1*", async (route) => {
+        if (route.request().method() === "DELETE") {
+          await route.fulfill({
+            status: 401,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+
+      const response = await fetchApi(page, "/api/admin/niches/n1", {
+        method: "DELETE",
+      });
+      expect(response.status).toBe(401);
+    });
+
+    test("31 - PATCH /api/admin/niches/[id] avec corps invalide → 400", async ({ page }) => {
+      await page.route("**/api/admin/niches/n1*", async (route) => {
+        if (route.request().method() === "PATCH") {
+          await route.fulfill({
+            status: 400,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: "Données invalides",
+              code: "VALIDATION_ERROR",
+              fields: { name: "Le nom ne peut pas dépasser 100 caractères" },
+            }),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+
+      const response = await fetchApi(page, "/api/admin/niches/n1", {
+        method: "PATCH",
+        body: JSON.stringify({ name: "a".repeat(101) }),
+      });
+      expect(response.status).toBe(400);
+      const body = response.body as any;
+      expect(body.code).toBe("VALIDATION_ERROR");
+    });
+
+    test("32 - PATCH /api/admin/niches/[id] avec slug en double → 409", async ({ page }) => {
+      await page.route("**/api/admin/niches/n1*", async (route) => {
+        if (route.request().method() === "PATCH") {
+          await route.fulfill({
+            status: 409,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: "Ce slug est déjà utilisé",
+              code: "CONFLICT",
+            }),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+
+      const response = await fetchApi(page, "/api/admin/niches/n1", {
+        method: "PATCH",
+        body: JSON.stringify({ slug: "gaming" }),
+      });
+      expect(response.status).toBe(409);
+      const body = response.body as any;
+      expect(body.code).toBe("CONFLICT");
+    });
   });
 });
