@@ -91,19 +91,10 @@ const faqSchema = [
   },
 ];
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ slug: string }>;
-}
-
-export async function generateStaticParams() {
-  const niches = await prisma.niche.findMany({
-    where: { isActive: true },
-    select: { slug: true },
-  });
-
-  return niches.map((niche) => ({
-    slug: niche.slug,
-  }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -373,7 +364,7 @@ export default async function NichePage({ params }: Props) {
                 Aucune tendance active dans cette niche pour le moment.
               </p>
               <p className="text-sm text-dark-ink-tertiary">
-                Revenez plus tard ou explorez d'autres niches.
+                Revenez plus tard ou explorez d&apos;autres niches.
               </p>
             </div>
           )}
@@ -395,7 +386,7 @@ export default async function NichePage({ params }: Props) {
         {/* CTA Section */}
         <section className="text-center py-12 bg-dark-surface border border-hairline-dark">
           <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            Prêt à détecter les tendances avant qu'elles n'explosent ?
+            Prêt à détecter les tendances avant qu&apos;elles n&apos;explosent ?
           </h2>
           <p className="text-dark-ink-secondary mb-6 max-w-xl mx-auto">
             Rejoignez +1200 créateurs qui font confiance à TrendHunter pour anticiper les tendances
@@ -403,7 +394,7 @@ export default async function NichePage({ params }: Props) {
           </p>
           <Link href="/login">
             <Button variant="subscribe" size="lg" className="h-12 px-10 font-bold">
-              COMMENCER L'ANALYSE
+              COMMENCER L&apos;ANALYSE
             </Button>
           </Link>
         </section>
