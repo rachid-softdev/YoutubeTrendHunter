@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-hairline-dark bg-dark-surface z-50">
-        <Link href="/" className="flex items-center gap-1">
+        <Link href="/home" className="flex items-center gap-1">
           <div className="bg-yt-red p-1 rounded-none">
             <Play className="w-3 h-3 text-white fill-current" />
           </div>

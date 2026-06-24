@@ -44,7 +44,7 @@
     "critters": "^0.0.25",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "prisma": "^7.8.0",
+    "prisma": "^6.19.3",
     "typescript": "^5",
     "vitest": "^4.1.6"
   }

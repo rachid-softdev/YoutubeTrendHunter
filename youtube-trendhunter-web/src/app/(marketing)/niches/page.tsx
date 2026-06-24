@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TrendingUp, ArrowRight, Play, BarChart3, Sparkles } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Niches YouTube - Détectez les tendances par catégorie | TrendHunter",
   description:
@@ -175,7 +177,7 @@ export default async function NichesPage() {
 
           <Link href="/login">
             <Button variant="subscribe" size="lg" className="h-12 px-10 font-bold">
-              COMMENCER L'ANALYSE
+              COMMENCER L&apos;ANALYSE
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </Link>

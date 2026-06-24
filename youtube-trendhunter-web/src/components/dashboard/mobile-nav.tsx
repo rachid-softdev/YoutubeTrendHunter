@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Target, Bell, CreditCard, Settings } from "lucide-react";
 
 const links = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Trends" },
+  { href: "/home", icon: LayoutDashboard, label: "Trends" },
   { href: "/my-niches", icon: Target, label: "Niches" },
   { href: "/alerts", icon: Bell, label: "Alerts" },
   { href: "/billing", icon: CreditCard, label: "Billing" },

@@ -9,7 +9,7 @@ import { cn } from "@youtube-trendhunter/ui";
 import { Separator } from "@/components/ui/separator";
 
 const navItems = [
-  { href: "/dashboard", label: "Tendances", icon: LayoutDashboard },
+  { href: "/home", label: "Tendances", icon: LayoutDashboard },
   { href: "/my-niches", label: "Niches", icon: Target },
   { href: "/alerts", label: "Alertes", icon: Bell },
   { href: "/billing", label: "Facturation", icon: CreditCard },
@@ -22,7 +22,7 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
   return (
     <aside className="w-64 bg-dark-surface border-r border-hairline-dark px-4 py-6 flex flex-col h-screen">
       <div className="mb-8 px-2">
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href="/home" className="flex items-center gap-2 group">
           <div className="bg-yt-red p-1 rounded-none group-hover:bg-yt-red-deep transition-colors">
             <Play className="w-4 h-4 text-white fill-current" />
           </div>
