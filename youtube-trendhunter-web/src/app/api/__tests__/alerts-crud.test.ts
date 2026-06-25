@@ -164,7 +164,7 @@ describe("Alerts CRUD", () => {
 
   describe("GET /api/alerts — business logic", () => {
     it("should return 401 when user is not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       if (!session?.user?.id) {

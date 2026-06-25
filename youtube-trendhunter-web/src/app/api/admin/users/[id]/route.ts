@@ -4,7 +4,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +33,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     return new NextResponse(null, { status: 204 });
   } catch (error: unknown) {
-    if (error.status === 401 || error.status === 403) {
+    if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Users/:id] DELETE Error:", error);

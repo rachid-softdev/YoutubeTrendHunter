@@ -267,7 +267,7 @@ describe("Extension Endpoints", () => {
 
   describe("GET /api/extension/trends/niches — business logic", () => {
     it("should reject without token", async () => {
-      const authHeader = null;
+      const authHeader = null as string | null;
       const token = authHeader?.replace("Bearer ", "");
       expect(token).toBeUndefined();
     });
@@ -329,7 +329,7 @@ describe("Extension Endpoints", () => {
 
   describe("POST /api/extension/auth — token creation", () => {
     it("should require authentication", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       const isAuthenticated = !!session?.user?.id;
@@ -376,7 +376,7 @@ describe("Extension Endpoints", () => {
 
   describe("GET /api/extension/auth — list tokens", () => {
     it("should require authentication", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -408,7 +408,7 @@ describe("Extension Endpoints", () => {
 
   describe("POST /api/extension/analyze — business logic", () => {
     it("should reject without token", async () => {
-      const authHeader = undefined;
+      const authHeader = undefined as string | undefined;
       const token = authHeader?.replace("Bearer ", "");
       expect(token).toBeUndefined();
     });

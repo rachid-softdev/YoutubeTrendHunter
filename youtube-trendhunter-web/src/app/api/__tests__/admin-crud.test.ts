@@ -255,8 +255,8 @@ describe("Admin CRUD", () => {
       const search = "alice";
       const where = {
         OR: [
-          { email: { contains: search, mode: "insensitive" } },
-          { name: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" as const } },
+          { name: { contains: search, mode: "insensitive" as const } },
         ],
       };
 
@@ -481,11 +481,11 @@ describe("Admin CRUD", () => {
 
     it("should check slug uniqueness when changing slug", async () => {
       // Setup: finding a different niche with same slug indicates a conflict
-      vi.mocked(prisma.niche.findUnique).mockImplementation(async ({ where }: any) => {
+      vi.mocked(prisma.niche.findUnique).mockImplementation((async ({ where }: any) => {
         if (where.slug === "tech") return { id: "niche-2", slug: "tech" };
         if (where.id === "niche-1") return { id: "niche-1", name: "Tech", slug: "old-slug" };
         return null;
-      });
+      }) as any);
 
       const existingNiche = (await prisma.niche.findUnique({ where: { id: "niche-1" } })) as any;
       const slugExists = await prisma.niche.findUnique({ where: { slug: "tech" } });

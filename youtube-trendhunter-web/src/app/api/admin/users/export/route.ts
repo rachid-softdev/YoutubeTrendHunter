@@ -4,8 +4,9 @@
 // ============================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +17,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
 
-    const where: Record<string, unknown> = {};
+    const where: Prisma.UserWhereInput = {};
     if (search) {
       where.OR = [
-        { email: { contains: search, mode: "insensitive" } },
-        { name: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" as const } },
+        { name: { contains: search, mode: "insensitive" as const } },
       ];
     }
 
     const users = await prisma.user.findMany({
-      where: where as unknown,
+      where,
       orderBy: { createdAt: "desc" },
       select: {
         name: true,
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    if (error.status === 401 || error.status === 403) {
+    if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Users/Export] Error:", error);

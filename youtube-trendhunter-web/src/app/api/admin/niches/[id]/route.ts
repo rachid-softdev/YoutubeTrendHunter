@@ -4,7 +4,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -47,7 +47,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ niche });
   } catch (error: unknown) {
-    if (error.status === 401 || error.status === 403) {
+    if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Niches/:id] GET Error:", error);
@@ -91,7 +91,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     return NextResponse.json({ niche });
   } catch (error: unknown) {
-    if (error.status === 401 || error.status === 403) {
+    if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Niches/:id] PATCH Error:", error);
@@ -118,7 +118,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
-    if (error.status === 401 || error.status === 403) {
+    if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Niches/:id] DELETE Error:", error);

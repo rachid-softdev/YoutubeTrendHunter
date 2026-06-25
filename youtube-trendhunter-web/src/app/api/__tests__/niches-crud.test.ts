@@ -113,7 +113,7 @@ describe("Niches CRUD", () => {
 
   describe("GET /api/niches — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -135,7 +135,7 @@ describe("Niches CRUD", () => {
       const mockFollowed = ["n-1"];
       const mockAvailable = [{ id: "n-1", name: "Tech", slug: "tech" }];
 
-      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches);
+      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches as any);
       vi.mocked(getAllFollowedNicheIds).mockResolvedValue(mockFollowed);
       vi.mocked(getAllActiveNiches).mockResolvedValue(mockAvailable as any);
 
@@ -156,7 +156,7 @@ describe("Niches CRUD", () => {
         userNiches: Array.from({ length: 5 }, (_, i) => ({ id: `un-${i}` })),
         nextCursor: "un-4",
       };
-      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches);
+      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches as any);
 
       const result = await getUserNichesPaginated("user-123", { limit: 5 });
       expect(result.userNiches).toHaveLength(5);

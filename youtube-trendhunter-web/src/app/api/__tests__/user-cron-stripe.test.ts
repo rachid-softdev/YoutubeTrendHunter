@@ -191,7 +191,7 @@ describe("User, Cron & Stripe", () => {
 
   describe("DELETE /api/user — account deletion logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -265,7 +265,7 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/user/audit-logs — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -293,7 +293,7 @@ describe("User, Cron & Stripe", () => {
         user: { id: "user-123" },
       } as any);
 
-      const userId = "user-123";
+      const userId: string = "user-123";
       const requestedUserId = "user-456";
 
       const forbidden = requestedUserId !== userId;
@@ -305,7 +305,7 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/user/export — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -505,7 +505,7 @@ describe("User, Cron & Stripe", () => {
 
   describe("POST /api/stripe/portal — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
@@ -583,7 +583,7 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/jobs/[id] — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null);
+      vi.mocked(auth).mockResolvedValue(null as any);
 
       const session = await auth();
       expect(session).toBeNull();
