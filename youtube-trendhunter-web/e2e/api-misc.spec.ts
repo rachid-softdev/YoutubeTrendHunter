@@ -393,7 +393,15 @@ async function mockUserExport(page: Page) {
 
       if (format === "csv" && includeTrends) {
         // CSV with trends containing injection payloads
-        const csvHeaders = ["niche", "title", "score", "status", "avgViews", "contentAngles", "detectedAt"];
+        const csvHeaders = [
+          "niche",
+          "title",
+          "score",
+          "status",
+          "avgViews",
+          "contentAngles",
+          "detectedAt",
+        ];
         const csvRows = [
           csvHeaders.join(","),
           // title starts with = → should be sanitized
@@ -409,7 +417,7 @@ async function mockUserExport(page: Page) {
           // title starts with + → should be sanitized
           [
             "Gaming",
-            sanitizeCsvValue('+SUM(A1:A100)'),
+            sanitizeCsvValue("+SUM(A1:A100)"),
             "82",
             "active",
             "85000",
@@ -419,7 +427,7 @@ async function mockUserExport(page: Page) {
           // title starts with - → should be sanitized
           [
             "Business",
-            sanitizeCsvValue('-1+2'),
+            sanitizeCsvValue("-1+2"),
             "78",
             "active",
             "230000",
@@ -429,7 +437,7 @@ async function mockUserExport(page: Page) {
           // title starts with @ → should be sanitized
           [
             "Science",
-            sanitizeCsvValue('@SUM(B1:B10)'),
+            sanitizeCsvValue("@SUM(B1:B10)"),
             "70",
             "active",
             "45000",
@@ -439,7 +447,7 @@ async function mockUserExport(page: Page) {
           // title starts with % → should be sanitized
           [
             "Health",
-            sanitizeCsvValue('%DANGEROUS_MACRO()'),
+            sanitizeCsvValue("%DANGEROUS_MACRO()"),
             "65",
             "active",
             "32000",
@@ -449,7 +457,7 @@ async function mockUserExport(page: Page) {
           // title contains comma → should be quoted
           [
             "Sports",
-            sanitizeCsvValue('Football, Soccer, Rugby'),
+            sanitizeCsvValue("Football, Soccer, Rugby"),
             "90",
             "active",
             "200000",
@@ -475,9 +483,24 @@ async function mockUserExport(page: Page) {
         // CSV summary with injection payloads in various fields
         const csvRows = [
           ["Type", "Nom", "Détails", "Date"].join(","),
-          ["Profile", sanitizeCsvValue("=SUM(A1:A10)"), sanitizeCsvValue("test@example.com"), "2024-01-15T00:00:00.000Z"].join(","),
-          ["Niche", sanitizeCsvValue("+HYPERLINK(\"http://evil.com\")"), sanitizeCsvValue("-1"), "2024-02-01T00:00:00.000Z"].join(","),
-          ["Alerte", sanitizeCsvValue("@DANGER"), sanitizeCsvValue("%MACRO"), "2024-03-01T00:00:00.000Z"].join(","),
+          [
+            "Profile",
+            sanitizeCsvValue("=SUM(A1:A10)"),
+            sanitizeCsvValue("test@example.com"),
+            "2024-01-15T00:00:00.000Z",
+          ].join(","),
+          [
+            "Niche",
+            sanitizeCsvValue('+HYPERLINK("http://evil.com")'),
+            sanitizeCsvValue("-1"),
+            "2024-02-01T00:00:00.000Z",
+          ].join(","),
+          [
+            "Alerte",
+            sanitizeCsvValue("@DANGER"),
+            sanitizeCsvValue("%MACRO"),
+            "2024-03-01T00:00:00.000Z",
+          ].join(","),
         ];
 
         const filename = `trendhunter-export-${today}.csv`;
@@ -1186,5 +1209,49 @@ test.describe("User Export — GET /api/user/export", () => {
     // Vérifie que les champs bruts non échappés n'apparaissent pas
     expect(csvContent).not.toContain(",=SUM(");
     expect(csvContent).not.toContain(",+HYPERLINK(");
+  });
+});
+
+/* ========================================================================== */
+/*  405 Method Not Allowed — /api/health                                       */
+/* ========================================================================== */
+
+test.describe("Health Check — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("POST /api/health → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/health**", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/health", { method: "POST" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+
+  test("DELETE /api/health → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/health**", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/health", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
   });
 });

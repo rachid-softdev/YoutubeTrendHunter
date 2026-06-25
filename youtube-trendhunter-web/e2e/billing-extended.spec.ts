@@ -3168,3 +3168,30 @@ test.describe("POST /api/extension/auth — Scénarios d'erreur", () => {
     expect(result.body.code).toBe("RATE_LIMIT");
   });
 });
+
+/* ======================================================================== */
+/*  405 Method Not Allowed — /api/stripe/portal                              */
+/* ======================================================================== */
+
+test.describe("Stripe Portal — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("GET /api/stripe/portal → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/stripe/portal*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/stripe/portal", { method: "GET" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+});

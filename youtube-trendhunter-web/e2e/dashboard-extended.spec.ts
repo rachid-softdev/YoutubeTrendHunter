@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { injectSessionCookie, cleanupTestSession } from "./auth-helpers";
+import { injectSessionCookie, cleanupTestSession } from "_e2e-helpers";
 
 /**
  * Dashboard Extended E2E tests for YouTube TrendHunter

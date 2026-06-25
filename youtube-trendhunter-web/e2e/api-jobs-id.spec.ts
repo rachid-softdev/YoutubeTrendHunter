@@ -615,10 +615,7 @@ test.describe("API Jobs / [id] — GET /api/jobs/[id]", () => {
   });
 
   test("1k — Job PROCESSING périmé (lockedAt > 5 min) → statut stale", async ({ page }) => {
-    const res = await fetchApi(
-      page,
-      "/api/jobs/stale-job?_test_session=true&_test_stale=true",
-    );
+    const res = await fetchApi(page, "/api/jobs/stale-job?_test_session=true&_test_stale=true");
 
     expect(res.status).toBe(200);
 
@@ -663,5 +660,49 @@ test.describe("API Jobs / [id] — GET /api/jobs/[id]", () => {
     const body = res.body as { error: string; code: string };
     expect(body.error).toContain("Job");
     expect(body.code).toBe("NOT_FOUND");
+  });
+});
+
+/* ========================================================================== */
+/*  405 Method Not Allowed — /api/jobs/[id]                                    */
+/* ========================================================================== */
+
+test.describe("API Jobs — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("POST /api/jobs/[id] → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/jobs/*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/jobs/some-id", { method: "POST" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+
+  test("DELETE /api/jobs/[id] → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/jobs/*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/jobs/some-id", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
   });
 });

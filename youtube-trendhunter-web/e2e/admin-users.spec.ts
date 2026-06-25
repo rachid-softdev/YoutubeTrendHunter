@@ -286,9 +286,7 @@ async function mockUsersApiRoutes(page: Page) {
           allUsers.some((u) => u.id === userId) || page2Users.some((u) => u.id === userId);
         if (exists) {
           await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({ success: true }),
+            status: 204,
           });
         } else {
           await route.fulfill({
@@ -619,9 +617,7 @@ test.describe("Admin - Utilisateurs", () => {
         if (buttonVisible) {
           // Verify DELETE endpoint works via API contract test
           const deleteResponse = await fetchApi(page, "/api/admin/users/u1", { method: "DELETE" });
-          expect(deleteResponse.status).toBe(200);
-          const result = deleteResponse.body as any;
-          expect(result.success).toBe(true);
+          expect(deleteResponse.status).toBe(204);
         }
       }
     });
@@ -855,6 +851,167 @@ test.describe("Admin - Utilisateurs", () => {
           await expect(teamBadge).toBeVisible();
         }
       }
+    });
+  });
+
+  /* ====================================================================== */
+  /*  06 - Suppression approfondie (API DELETE)                              */
+  /* ====================================================================== */
+
+  test.describe("06 - Suppression approfondie (API DELETE)", () => {
+    test("25 - DELETE /api/admin/users/[id] → 204 (succès, pas de contenu)", async ({ page }) => {
+      const deleteResponse = await fetchApi(page, "/api/admin/users/u1", { method: "DELETE" });
+      expect(deleteResponse.status).toBe(204);
+      // 204 No Content: body should be empty
+      expect(deleteResponse.bodyText).toBe("");
+    });
+
+    test("26 - DELETE /api/admin/users/[id] avec ID inexistant → 404", async ({ page }) => {
+      const deleteResponse = await fetchApi(page, "/api/admin/users/nonexistent-id-999", {
+        method: "DELETE",
+      });
+      expect(deleteResponse.status).toBe(404);
+      const body = deleteResponse.body as Record<string, unknown>;
+      expect(body.error).toContain("non trouvé");
+    });
+
+    test("27 - DELETE /api/admin/users/[id] avec ID vide → 400 ou 404", async ({ page }) => {
+      const deleteResponse = await fetchApi(page, "/api/admin/users/", { method: "DELETE" });
+      expect([400, 404]).toContain(deleteResponse.status);
+    });
+
+    test("28 - DELETE /api/admin/users/[id] par utilisateur non-admin → 401", async ({ page }) => {
+      // Override to simulate non-admin access
+      await page.route("**/api/admin/users/*", async (route) => {
+        if (route.request().method() === "DELETE") {
+          await route.fulfill({
+            status: 401,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+          });
+        } else {
+          await route.fallback();
+        }
+      });
+
+      const deleteResponse = await fetchApi(page, "/api/admin/users/u1", { method: "DELETE" });
+      expect(deleteResponse.status).toBe(401);
+    });
+  });
+
+  /* ====================================================================== */
+  /*  07 - Export CSV approfondi (sécurité et fonctionnalités)               */
+  /* ====================================================================== */
+
+  test.describe("07 - Export CSV approfondi", () => {
+    test("29 - GET /api/admin/users/export sans authentification → 401", async ({ page }) => {
+      await page.route("**/api/admin/users/export*", async (route) => {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Non authentifié", code: "UNAUTHORIZED" }),
+        });
+      });
+
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(401);
+      const body = exportResponse.body as Record<string, unknown>;
+      expect(body.code).toBe("UNAUTHORIZED");
+    });
+
+    test("30 - GET /api/admin/users/export avec utilisateur non-admin → 403", async ({ page }) => {
+      await page.route("**/api/admin/users/export*", async (route) => {
+        await route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Accès refusé", code: "FORBIDDEN" }),
+        });
+      });
+
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(403);
+    });
+
+    test("31 - GET /api/admin/users/export avec paramètre search → CSV filtré", async ({
+      page,
+    }) => {
+      await page.route("**/api/admin/users/export*", async (route) => {
+        const url = new URL(route.request().url());
+        const search = url.searchParams.get("search") || "";
+        if (search === "jean") {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/csv; charset=utf-8",
+            headers: {
+              "Content-Disposition": 'attachment; filename="users-export-2026-06-24.csv"',
+            },
+            body: "name,email,role,plan,subscriptionStatus,createdAt,updatedAt\nJean Dupont,jean@example.com,USER,PRO,ACTIVE,2026-01-15T10:30:00.000Z,2026-06-20T08:00:00.000Z\n",
+          });
+        }
+      });
+
+      const exportResponse = await fetchApi(page, "/api/admin/users/export?search=jean");
+      expect(exportResponse.status).toBe(200);
+      expect(exportResponse.bodyText).toContain("Jean Dupont");
+      expect(exportResponse.bodyText).not.toContain("Marie Curie");
+    });
+
+    test("32 - GET /api/admin/users/export → en-têtes HTTP corrects (CSV + disposition)", async ({
+      page,
+    }) => {
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(200);
+      const contentType = exportResponse.headers["content-type"] || "";
+      const contentDisposition = exportResponse.headers["content-disposition"] || "";
+      expect(contentType).toContain("text/csv");
+      expect(contentDisposition).toContain(".csv");
+      expect(contentDisposition).toContain("attachment");
+    });
+
+    test("33 - GET /api/admin/users/export → contenu CSV valide (en-têtes + lignes)", async ({
+      page,
+    }) => {
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(200);
+      const lines = exportResponse.bodyText.trim().split("\n");
+      expect(lines[0]).toContain("name");
+      expect(lines[0]).toContain("email");
+      expect(lines[0]).toContain("role");
+      expect(lines.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test("34 - GET /api/admin/users/export avec erreur serveur → 500", async ({ page }) => {
+      await page.route("**/api/admin/users/export*", async (route) => {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "INTERNAL_ERROR" }),
+        });
+      });
+
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(500);
+    });
+
+    test("35 - GET /api/admin/users/export sans utilisateurs → CSV avec seulement les en-têtes", async ({
+      page,
+    }) => {
+      await page.route("**/api/admin/users/export*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/csv; charset=utf-8",
+          headers: {
+            "Content-Disposition": 'attachment; filename="users-export-2026-06-24.csv"',
+          },
+          body: "name,email,role,plan,subscriptionStatus,createdAt,updatedAt\n",
+        });
+      });
+
+      const exportResponse = await fetchApi(page, "/api/admin/users/export");
+      expect(exportResponse.status).toBe(200);
+      const lines = exportResponse.bodyText.trim().split("\n");
+      expect(lines.length).toBe(1);
+      expect(lines[0]).toContain("name");
     });
   });
 });

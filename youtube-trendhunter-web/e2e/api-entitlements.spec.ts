@@ -649,7 +649,11 @@ test.describe("Entitlements — GET /api/entitlements", () => {
     );
 
     expect(resPro.status).toBe(200);
-    const bodyPro = resPro.body as { plan: string; planKey: string; features: Record<string, boolean> };
+    const bodyPro = resPro.body as {
+      plan: string;
+      planKey: string;
+      features: Record<string, boolean>;
+    };
     // Active trial grants PRO benefits
     expect(bodyPro.plan).toBe("PRO");
     expect(bodyPro.planKey).toBe("pro");
@@ -664,7 +668,11 @@ test.describe("Entitlements — GET /api/entitlements", () => {
     );
 
     expect(resTeam.status).toBe(200);
-    const bodyTeam = resTeam.body as { plan: string; planKey: string; features: Record<string, boolean> };
+    const bodyTeam = resTeam.body as {
+      plan: string;
+      planKey: string;
+      features: Record<string, boolean>;
+    };
     expect(bodyTeam.plan).toBe("TEAM");
     expect(bodyTeam.planKey).toBe("team");
     expect(bodyTeam.features.api).toBe(true);
@@ -768,10 +776,7 @@ test.describe("Entitlements — GET /api/entitlements", () => {
   });
 
   test("1t — Aucun enregistrement utilisateur en DB → 500", async ({ page }) => {
-    const res = await fetchApi(
-      page,
-      "/api/entitlements?_test_session=true&_test_no_user=true",
-    );
+    const res = await fetchApi(page, "/api/entitlements?_test_session=true&_test_no_user=true");
 
     expect(res.status).toBe(500);
 
@@ -791,5 +796,49 @@ test.describe("Entitlements — GET /api/entitlements", () => {
 
     const body = res.body as { error: string; code: string };
     expect(body).toHaveProperty("error");
+  });
+});
+
+/* ========================================================================== */
+/*  405 Method Not Allowed — /api/entitlements                                 */
+/* ========================================================================== */
+
+test.describe("Entitlements — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("POST /api/entitlements → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/entitlements*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/entitlements", { method: "POST" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+
+  test("DELETE /api/entitlements → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/entitlements*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/entitlements", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
   });
 });

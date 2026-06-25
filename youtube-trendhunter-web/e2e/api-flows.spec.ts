@@ -1921,3 +1921,47 @@ test.describe("API — Contract & Security", () => {
     expect(typeof body.plan).toBe("string");
   });
 });
+
+/* ========================================================================== */
+/*  405 Method Not Allowed — Extension routes                                  */
+/* ========================================================================== */
+
+test.describe("Extension — 405 Method Not Allowed", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupPage(page);
+  });
+
+  test("POST /api/extension/trends → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/extension/trends*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/trends", { method: "POST" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+
+  test("DELETE /api/extension/auth → 405 Method Not Allowed", async ({ page }) => {
+    await page.route("**/api/extension/auth*", async (route) => {
+      await route.fulfill({
+        status: 405,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+      });
+    });
+
+    const resp = await page.evaluate(async () => {
+      const res = await fetch("/api/extension/auth", { method: "DELETE" });
+      return { status: res.status, body: await res.json() };
+    });
+    expect(resp.status).toBe(405);
+    expect(resp.body.error).toBeDefined();
+  });
+});
