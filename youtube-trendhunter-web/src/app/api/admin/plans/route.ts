@@ -34,16 +34,14 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, parseInt(searchParams.get("limit") || "20"));
     const sort = searchParams.get("sort") || "sortOrder:asc";
 
-    // @ts-expect-error - using new plan model
     const plans = await prisma.plan.findMany({
       orderBy: { sortOrder: "asc" },
     });
 
     // Simple sort
-    // @ts-expect-error - new plan model without full type def
     const sortedPlans = [...plans].sort((a: PlanItem, b: PlanItem) => {
-      if (sort === "key:asc") return a.key?.localeCompare(b.key);
-      if (sort === "name:asc") return a.name?.localeCompare(b.name);
+      if (sort === "key:asc") return (a.key ?? "").localeCompare(b.key ?? "");
+      if (sort === "name:asc") return (a.name ?? "").localeCompare(b.name ?? "");
       return (a.sortOrder || 0) - (b.sortOrder || 0);
     });
 

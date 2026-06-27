@@ -30,6 +30,7 @@ interface AlertsClientProps {
 export function AlertsClient({ alerts: initialAlerts, userNiches, canCreate }: AlertsClientProps) {
   const [alerts, setAlerts] = useState<AlertData[]>(initialAlerts);
   const [isCreating, setIsCreating] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   // Cleanup all pending requests on unmount

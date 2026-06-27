@@ -49,7 +49,7 @@ const steps: Step[] = [
 
 export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
   const router = useRouter();
-  const [completedSteps] = useState<string[]>(() => {
+  const [completedSteps, setCompletedSteps] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("onboarding-completed-steps");
       if (stored) {

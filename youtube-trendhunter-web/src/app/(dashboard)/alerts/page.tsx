@@ -16,7 +16,5 @@ export default async function AlertsPage() {
     getUserNiches(session.user.id),
   ]);
 
-  return (
-    <AlertsClient alerts={alerts} userNiches={userNiches} plan={plan} canCreate={limits.alerts} />
-  );
+  return <AlertsClient alerts={alerts} userNiches={userNiches} canCreate={limits.alerts} />;
 }
