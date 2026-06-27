@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bell, Zap, Plus, X, Loader2 } from "lucide-react";
+import { Zap, Plus, X } from "lucide-react";
 import { AlertForm } from "./alert-form";
 import { AlertList } from "./alert-list";
 
@@ -24,16 +24,10 @@ interface NicheData {
 interface AlertsClientProps {
   alerts: AlertData[];
   userNiches: NicheData[];
-  plan: string;
   canCreate: boolean;
 }
 
-export function AlertsClient({
-  alerts: initialAlerts,
-  userNiches,
-  plan,
-  canCreate,
-}: AlertsClientProps) {
+export function AlertsClient({ alerts: initialAlerts, userNiches, canCreate }: AlertsClientProps) {
   const [alerts, setAlerts] = useState<AlertData[]>(initialAlerts);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

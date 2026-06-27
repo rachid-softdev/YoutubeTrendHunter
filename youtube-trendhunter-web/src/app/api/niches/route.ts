@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getUserPlan, PLAN_LIMITS } from "@/lib/services/subscription.service";
+import { getUserPlan } from "@/lib/services/subscription.service";
 import { auditLog } from "@/lib/audit-log";
 import { z } from "@/lib/schemas";
 import { getCached, setCached, cacheKeys, cacheTTL, invalidateCache } from "@/lib/cache";
@@ -89,7 +89,6 @@ export async function POST(req: NextRequest) {
 
     // Check plan limits
     const plan = await getUserPlan(session.user.id);
-    const limits = PLAN_LIMITS[plan];
 
     const currentCount = await countUserNiches(session.user.id);
 

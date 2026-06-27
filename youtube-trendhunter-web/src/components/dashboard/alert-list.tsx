@@ -93,7 +93,11 @@ export function AlertList({ alerts, onToggleActive, onDelete }: AlertListProps) 
           <CardContent className="flex items-center justify-between p-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2">
-                <Badge variant={getTypeBadgeVariant(alert.type) as any}>
+                <Badge
+                  variant={
+                    getTypeBadgeVariant(alert.type) as "default" | "secondary" | "destructive"
+                  }
+                >
                   {getTypeLabel(alert.type)}
                 </Badge>
                 {alert.type !== "DAILY_DIGEST" && (

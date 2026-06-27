@@ -60,7 +60,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const { id: nicheId } = await params;
-    const body = await req.json().catch(() => ({}));
 
     // Check ownership
     const userNiche = await prisma.userNiche.findUnique({

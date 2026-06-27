@@ -17,9 +17,17 @@ export async function requireAdmin(): Promise<{ id: string; email: string }> {
   }
 
   // Dual role check: direct User.role field OR UserRole model
+  const userRecord = session.user as {
+    role?: string;
+    userRoles?: Array<{ role: string }> | string[];
+  };
   const isAdmin =
-    (session.user as any).role === "ADMIN" ||
-    (session.user as any).userRoles?.includes("ADMIN");
+    userRecord.role === "ADMIN" ||
+    (Array.isArray(userRecord.userRoles) &&
+      userRecord.userRoles.some((r: string | { role: string }) => {
+        if (typeof r === "string") return r === "ADMIN";
+        return r.role === "ADMIN";
+      }));
 
   if (!isAdmin) {
     // Fallback: query database directly (in case session hasn't been refreshed)

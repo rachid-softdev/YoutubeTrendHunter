@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
     const session = await auth();
 
@@ -34,7 +34,11 @@ export async function GET(req: NextRequest) {
 // Validation schema for niche creation
 const nicheCreateSchema = z.object({
   name: z.string().min(1, "Le nom est requis").max(100),
-  slug: z.string().min(1, "Le slug est requis").max(100).regex(/^[a-z0-9-]+$/, "Slug invalide"),
+  slug: z
+    .string()
+    .min(1, "Le slug est requis")
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug invalide"),
   description: z.string().max(500).optional(),
   keywords: z.array(z.string()).optional(),
   language: z.string().length(2).optional(),
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Données invalides", details: parsed.error.flatten().fieldErrors },
-        { status: 400 }
+        { status: 400 },
       );
     }
 

@@ -10,7 +10,7 @@ export function createMockRequest(
     user?: Session["user"];
   } = {},
 ): NextRequest {
-  const { method = "GET", headers = {}, body, query = {}, user } = options;
+  const { method = "GET", headers = {}, body, query = {} } = options;
 
   const url = new URL("http://localhost:3000/api/test");
   Object.entries(query).forEach(([key, value]) => {

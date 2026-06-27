@@ -22,7 +22,7 @@ interface UseAnalyticsOptions {
   userTraits?: Record<string, unknown>;
 }
 
-export function useAnalytics(options?: UseAnalyticsOptions) {
+export function useAnalytics(_options?: UseAnalyticsOptions) {
   const trackCta = useCallback((cta: string, destination: string) => {
     analytics.ctaClicked(cta, destination);
   }, []);

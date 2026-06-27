@@ -4,13 +4,12 @@
 
 "use client";
 
-import { useFeature } from "@/hooks/use-entitlements";
+import { useFeature, useLimit } from "@/hooks/use-entitlements";
 import Link from "next/link";
 
 interface FeatureGuardProps {
   feature: string;
   children: React.ReactNode;
-  fallback?: React.ReactNode;
   showUpgradeLink?: boolean;
   limit?: string; // If checking a limit instead of boolean feature
 }
@@ -18,23 +17,15 @@ interface FeatureGuardProps {
 export function FeatureGuard({
   feature,
   children,
-  fallback = null,
   showUpgradeLink = true,
   limit,
 }: FeatureGuardProps) {
   const isEnabled = useFeature(feature);
+  const limitInfo = useLimit(limit ?? "");
 
   // If checking a limit
   if (limit) {
-    const { useLimit } = require("@/hooks/use-entitlements");
-    const limitInfo = useLimit(limit);
-
-    if (!limitInfo) {
-      // Loading state - show children with loading indicator
-      return <>{children}</>;
-    }
-
-    if (limitInfo.limit !== null && limitInfo.used >= limitInfo.limit) {
+    if (limitInfo && limitInfo.limit !== null && limitInfo.used >= limitInfo.limit) {
       return (
         <FeatureDisabledFallback
           feature={feature}
@@ -137,7 +128,6 @@ interface LimitWarningProps {
 }
 
 export function LimitWarning({ limitKey, showResetDate = true }: LimitWarningProps) {
-  const { useLimit } = require("@/hooks/use-entitlements");
   const limitInfo = useLimit(limitKey);
 
   if (!limitInfo || limitInfo.limit === null) return null;

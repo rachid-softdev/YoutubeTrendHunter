@@ -136,7 +136,7 @@ function QuoteSection({ text, author }: { text: string; author: string }) {
   return (
     <blockquote className="p-6 border-l-4 border-yt-red bg-dark-surface/50">
       <Quote className="w-8 h-8 text-yt-red/30 mb-3" />
-      <p className="text-lg text-dark-ink italic mb-3">"{text}"</p>
+      <p className="text-lg text-dark-ink italic mb-3">&ldquo;{text}&rdquo;</p>
       <cite className="text-sm text-dark-ink-secondary not-italic">— {author}</cite>
     </blockquote>
   );

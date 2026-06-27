@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Check, X, ArrowRight, Play, Sparkles, Zap } from "lucide-react";
+import { Check, X, ArrowRight, Play, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "vidIQ vs TrendHunter - Comparatif 2026 | TrendHunter",

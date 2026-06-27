@@ -18,31 +18,33 @@ const steps = [
 export function OnboardingBanner({ className }: OnboardingBannerProps) {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState(0);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !!localStorage.getItem("onboarding-banner-dismissed");
+    }
+    return false;
+  });
+  const [completedSteps] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("onboarding-completed-steps");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Map completed steps to progress
+        if (parsed.includes("select-niche")) return 1;
+        if (parsed.includes("view-trends")) return 2;
+        if (parsed.includes("create-alert")) return 3;
+      }
+    }
+    return 0;
+  });
 
   useEffect(() => {
-    // Check if dismissed
-    const dismissed = localStorage.getItem("onboarding-banner-dismissed");
-    if (dismissed) {
-      setIsDismissed(true);
-      return;
-    }
-
-    // Check completed steps
-    const stored = localStorage.getItem("onboarding-completed-steps");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Map completed steps to progress
-      if (parsed.includes("select-niche")) setCompletedSteps(1);
-      if (parsed.includes("view-trends")) setCompletedSteps(2);
-      if (parsed.includes("create-alert")) setCompletedSteps(3);
-    }
+    if (isDismissed) return;
 
     // Animate entrance
     const timer = setTimeout(() => setIsVisible(true), 200);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isDismissed]);
 
   const handleDismiss = () => {
     setIsDismissed(true);

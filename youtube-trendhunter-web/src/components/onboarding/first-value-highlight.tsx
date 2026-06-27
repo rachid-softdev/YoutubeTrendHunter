@@ -22,23 +22,21 @@ interface FirstValueHighlightProps {
 export function FirstValueHighlight({ trend, className }: FirstValueHighlightProps) {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !!localStorage.getItem("first-trend-dismissed");
+    }
+    return false;
+  });
 
   useEffect(() => {
-    // Check if dismissed
-    const dismissed = localStorage.getItem("first-trend-dismissed");
-    if (dismissed) {
-      setIsDismissed(true);
-      return;
-    }
-
+    if (isDismissed) return;
     // Animate entrance
     const timer = setTimeout(() => setIsVisible(true), 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isDismissed]);
 
   const handleDismiss = () => {
-    setIsDismissed(true);
     localStorage.setItem("first-trend-dismissed", "true");
     setIsVisible(false);
   };
@@ -53,20 +51,6 @@ export function FirstValueHighlight({ trend, className }: FirstValueHighlightPro
     if (score >= 75) return "bg-yt-red";
     if (score >= 50) return "bg-amber-500";
     return "bg-green-500";
-  };
-
-  // Get status badge variant
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case "PEAK":
-        return "live";
-      case "GROWING":
-        return "default";
-      case "FADING":
-        return "members";
-      default:
-        return "default";
-    }
   };
 
   return (

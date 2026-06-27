@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Loader2, Bell, Mail, Webhook } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface AlertFormProps {
   userNiches: Array<{

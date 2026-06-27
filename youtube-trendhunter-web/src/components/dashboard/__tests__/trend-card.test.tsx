@@ -36,7 +36,7 @@ describe("TrendCard", () => {
   });
 
   it("shows amber for mid score (50-74)", () => {
-    const { container } = render(<TrendCard trend={{ ...baseTrend, score: 60 }} />);
+    render(<TrendCard trend={{ ...baseTrend, score: 60 }} />);
     const scoreBadge = screen.getByText("60");
     expect(scoreBadge.className).toContain("bg-amber-500");
   });

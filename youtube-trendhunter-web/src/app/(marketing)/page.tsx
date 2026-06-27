@@ -144,7 +144,7 @@ export default async function LandingPage() {
                 <h1 className="text-5xl md:text-7xl xl:text-8xl font-black leading-[1] tracking-tighter">
                   Hacker <br className="hidden lg:block" />
                   <span className="text-yt-red relative">
-                    l'Algorithme.
+                    l&apos;Algorithme.
                     <svg
                       className="absolute -bottom-2 left-0 w-full h-3 text-yt-red/20"
                       viewBox="0 0 100 10"
@@ -172,7 +172,7 @@ export default async function LandingPage() {
                       size="lg"
                       className="w-full h-12 px-10 text-base font-bold group"
                     >
-                      DÉMARRER L'ANALYSE
+                      DÉMARRER L&apos;ANALYSE
                       <Zap className="ml-2 w-4 h-4 group-hover:scale-125 transition-transform" />
                     </Button>
                   </Link>
@@ -260,9 +260,9 @@ export default async function LandingPage() {
         <section id="features" className="py-24 bg-dark-surface/30 border-y border-hairline-dark">
           <div className="max-w-[1400px] mx-auto px-4">
             <div className="text-center space-y-4 mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold">L'arsenal ultime du créateur</h2>
+              <h2 className="text-3xl md:text-4xl font-bold">L&apos;arsenal ultime du créateur</h2>
               <p className="text-dark-ink-secondary max-w-2xl mx-auto">
-                Des outils conçus pour la performance, inspirés par l'écosystème YouTube.
+                Des outils conçus pour la performance, inspirés par l&apos;écosystème YouTube.
               </p>
             </div>
 
@@ -372,13 +372,13 @@ export default async function LandingPage() {
         {/* --- CTA Section --- */}
         <section className="py-24 px-4 text-center">
           <div className="max-w-3xl mx-auto space-y-6 bg-dark-surface p-12 border border-hairline-dark">
-            <h2 className="text-3xl md:text-4xl font-bold">Prêt à hacker l'algorithme ?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold">Prêt à hacker l&apos;algorithme ?</h2>
             <p className="text-lg text-dark-ink-secondary">
-              Rejoignez les créateurs qui ont déjà un temps d'avance.
+              Rejoignez les créateurs qui ont déjà un temps d&apos;avance.
             </p>
             <Link href="/login" className="inline-block pt-4 group">
               <Button variant="subscribe" size="lg" className="h-12 px-12 text-base font-bold">
-                COMMENCER L'AVENTURE
+                COMMENCER L&apos;AVENTURE
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
