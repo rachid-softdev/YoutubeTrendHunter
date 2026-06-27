@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, ChevronRight, Target, Eye, Bell, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface OnboardingChecklistProps {
   className?: string;
@@ -50,29 +49,34 @@ const steps: Step[] = [
 
 export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
   const router = useRouter();
-  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const [completedSteps] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("onboarding-completed-steps");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return [];
+  });
   const [isVisible, setIsVisible] = useState(false);
-  const [isSkipped, setIsSkipped] = useState(false);
+  const [isSkipped, setIsSkipped] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !!localStorage.getItem("onboarding-skipped");
+    }
+    return false;
+  });
 
   useEffect(() => {
-    // Check localStorage for completion
-    const stored = localStorage.getItem("onboarding-completed-steps");
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      setCompletedSteps(parsed);
-    }
-
-    // Check if skipped
-    const skipped = localStorage.getItem("onboarding-skipped");
-    if (skipped) {
-      setIsSkipped(true);
-      return;
-    }
+    if (isSkipped) return;
 
     // Animate entrance
     const timer = setTimeout(() => setIsVisible(true), 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isSkipped]);
 
   const handleCompleteStep = (stepId: string) => {
     const newCompleted = [...completedSteps, stepId];
@@ -125,7 +129,7 @@ export function OnboardingChecklist({ className }: OnboardingChecklistProps) {
 
       {/* Steps */}
       <div className="space-y-3">
-        {steps.map((step, index) => {
+        {steps.map((step) => {
           const isCompleted = completedSteps.includes(step.id);
           return (
             <div

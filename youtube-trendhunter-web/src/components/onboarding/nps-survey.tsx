@@ -29,26 +29,25 @@ const trackNPS = async (score: number, comment?: string) => {
 
 export function NpsSurvey({ className }: NpsSurveyProps) {
   const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !!localStorage.getItem("nps-submission");
+    }
+    return false;
+  });
   const [selectedScore, setSelectedScore] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   useEffect(() => {
-    // Check if already submitted
-    const submitted = localStorage.getItem("nps-submission");
-    if (submitted) {
-      setIsDismissed(true);
-      return;
-    }
+    if (isDismissed) return;
 
     // Check signup date (14 days after signup)
     const signupDate = localStorage.getItem("signup-date");
     if (!signupDate) {
       // First visit - store signup date
       localStorage.setItem("signup-date", new Date().toISOString());
-      setIsDismissed(true);
       return;
     }
 
@@ -60,10 +59,8 @@ export function NpsSurvey({ className }: NpsSurveyProps) {
     if (daysSinceSignup >= 14) {
       const timer = setTimeout(() => setIsVisible(true), 3000);
       return () => clearTimeout(timer);
-    } else {
-      setIsDismissed(true);
     }
-  }, []);
+  }, [isDismissed]);
 
   const handleDismiss = () => {
     setIsVisible(false);

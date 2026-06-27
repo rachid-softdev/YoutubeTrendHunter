@@ -34,7 +34,6 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
 
   const fetchEntitlements = useCallback(async () => {
     try {
-      setIsLoading(true);
       const res = await fetch("/api/entitlements");
       if (!res.ok) throw new Error("Failed to fetch entitlements");
       const data = await res.json();
@@ -48,11 +47,20 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    fetchEntitlements();
+    // Schedule initial fetch as microtask to avoid synchronous setState in effect
+    const initialTimer = setTimeout(() => {
+      fetchEntitlements();
+    }, 0);
 
     // Refresh every 60 seconds
-    const interval = setInterval(fetchEntitlements, 60000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      fetchEntitlements();
+    }, 60000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
   }, [fetchEntitlements]);
 
   return (

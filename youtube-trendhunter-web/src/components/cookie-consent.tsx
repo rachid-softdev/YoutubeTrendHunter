@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Cookie } from "lucide-react";
+import { Cookie } from "lucide-react";
 import Link from "next/link";
 
 const COOKIE_CONSENT_KEY = "cookie_consent";
@@ -37,8 +37,9 @@ export function CookieConsent() {
     setTimeout(() => setShow(false), 300);
 
     // Fire PostHog opt-in if available
-    if (typeof window !== "undefined" && (window as any).posthog) {
-      (window as any).posthog.opt_in_capturing();
+    const win = window as { posthog?: { opt_in_capturing: () => void } };
+    if (win.posthog) {
+      win.posthog.opt_in_capturing();
     }
   };
 

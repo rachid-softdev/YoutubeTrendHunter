@@ -36,23 +36,28 @@ const messages: Record<
 export function PaywallToast({ context, limit = 5, className }: PaywallToastProps) {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !!localStorage.getItem(`paywall-toast-${context}-shown`);
+    }
+    return false;
+  });
 
   const { message: messageFn, icon: Icon } = messages[context];
   const message = typeof messageFn === "function" ? messageFn(limit) : messageFn;
 
+  const handleDismiss = useCallback(() => {
+    setIsVisible(false);
+    localStorage.setItem(`paywall-toast-${context}-shown`, "true");
+  }, [context]);
+
   useEffect(() => {
-    // Check if already shown
-    const shown = localStorage.getItem(`paywall-toast-${context}-shown`);
-    if (shown) {
-      setIsDismissed(true);
-      return;
-    }
+    if (isDismissed) return;
 
     // Show after a delay
     const timer = setTimeout(() => setIsVisible(true), 2000);
     return () => clearTimeout(timer);
-  }, [context]);
+  }, [context, isDismissed]);
 
   useEffect(() => {
     // Auto-dismiss after 10 seconds
@@ -62,13 +67,7 @@ export function PaywallToast({ context, limit = 5, className }: PaywallToastProp
       }, 10000);
       return () => clearTimeout(timer);
     }
-  }, [isVisible]);
-
-  const handleDismiss = () => {
-    setIsVisible(false);
-    setIsDismissed(true);
-    localStorage.setItem(`paywall-toast-${context}-shown`, "true");
-  };
+  }, [isVisible, handleDismiss]);
 
   const handleUpgrade = () => {
     router.push("/pricing");

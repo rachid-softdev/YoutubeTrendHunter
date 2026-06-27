@@ -6,16 +6,13 @@ import {
   Sparkles,
   Bell,
   BarChart3,
-  Zap,
   Target,
   Rocket,
-  Shield,
   ArrowRight,
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 export const metadata: Metadata = {
   title: "Fonctionnalités - TrendHunter",

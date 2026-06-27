@@ -27,7 +27,7 @@ export default function LoginPage() {
               Accès Privé
             </div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-              Hacker <span className="text-yt-red">l'Algorithme.</span>
+              Hacker <span className="text-yt-red">l&apos;Algorithme.</span>
             </h1>
             <p className="text-dark-ink-secondary text-lg font-medium leading-relaxed">
               Connectez-vous pour débloquer les tendances de demain.

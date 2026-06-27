@@ -63,7 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         }
       }
     }
-  } catch (error) {
+  } catch {
     // Blog content not available, skip
     console.log("Blog articles not available, skipping from sitemap");
   }

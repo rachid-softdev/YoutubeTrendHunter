@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
     const limit = parseInt(searchParams.get("limit") || "20");
     const search = searchParams.get("search") || "";
-    const sort = searchParams.get("sort") || "createdAt:desc";
 
     const skip = (page - 1) * limit;
 
@@ -32,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
-        where: where as any,
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: "desc" },
@@ -73,9 +72,10 @@ export async function GET(req: NextRequest) {
         hasPrev: page > 1,
       },
     });
-  } catch (error: any) {
-    if (error.status === 401 || error.status === 403) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+  } catch (error: unknown) {
+    const err = error as { status?: number; message?: string };
+    if (err.status === 401 || err.status === 403) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
     }
     console.error("[Admin/Users] Error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

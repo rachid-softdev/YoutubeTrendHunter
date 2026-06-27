@@ -18,8 +18,8 @@ describe("analytics", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = await import("posthog-js");
-    posthog = module.default;
+    const posthogModule = await import("posthog-js");
+    posthog = posthogModule.default;
   });
 
   describe("user lifecycle", () => {
@@ -189,8 +189,8 @@ describe("analytics", () => {
 
 describe("identifyUser", () => {
   it("identifies user with traits", async () => {
-    const module = await import("posthog-js");
-    const posthog = module.default;
+    const posthogModule = await import("posthog-js");
+    const posthog = posthogModule.default;
     identifyUser("user_123", { name: "John", email: "john@example.com" });
     expect(posthog.identify).toHaveBeenCalledWith("user_123", {
       name: "John",
@@ -203,8 +203,8 @@ describe("identifyUser", () => {
 
 describe("setUserProperties", () => {
   it("sets user properties", async () => {
-    const module = await import("posthog-js");
-    const posthog = module.default;
+    const posthogModule = await import("posthog-js");
+    const posthog = posthogModule.default;
     setUserProperties({ plan: "PRO" });
     expect(posthog.people.set).toHaveBeenCalledWith({ plan: "PRO" });
   });
@@ -212,8 +212,8 @@ describe("setUserProperties", () => {
 
 describe("resetUser", () => {
   it("resets user data", async () => {
-    const module = await import("posthog-js");
-    const posthog = module.default;
+    const posthogModule = await import("posthog-js");
+    const posthog = posthogModule.default;
     resetUser();
     expect(posthog.reset).toHaveBeenCalled();
   });

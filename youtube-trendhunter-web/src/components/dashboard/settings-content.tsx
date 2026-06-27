@@ -8,7 +8,12 @@ import { Separator } from "@/components/ui/separator";
 import { User, ShieldAlert, Trash2, LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
 
-export function SettingsContent({ user }: { user: any }) {
+interface SettingsUser {
+  name?: string | null;
+  email?: string | null;
+}
+
+export function SettingsContent({ user }: { user: SettingsUser }) {
   const [activeTab, setActiveTab] = useState<"infos" | "data">("infos");
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -95,7 +100,7 @@ export function SettingsContent({ user }: { user: any }) {
                 className="rounded-none bg-dark-overlay border-hairline-dark"
               />
               <p className="text-[10px] text-dark-ink-tertiary italic">
-                L'email est géré par votre compte Google.
+                L&apos;email est géré par votre compte Google.
               </p>
             </div>
 
