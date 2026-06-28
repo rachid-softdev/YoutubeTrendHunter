@@ -6,7 +6,7 @@
 // and cache statistics.
 // ============================================
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { metrics } from "@/lib/observability";
 import { countJobsByStatus } from "@/lib/services/job.service";
@@ -14,7 +14,7 @@ import redis from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
     await requireAdmin();
 

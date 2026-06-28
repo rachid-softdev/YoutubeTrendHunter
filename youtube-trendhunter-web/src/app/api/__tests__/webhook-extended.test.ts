@@ -39,7 +39,6 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

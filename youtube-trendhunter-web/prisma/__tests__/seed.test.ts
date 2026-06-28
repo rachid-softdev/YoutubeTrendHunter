@@ -14,8 +14,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Mock } from "vitest";
-
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
 // On mocke PrismaClient pour capturer les appels sans BDD

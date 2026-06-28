@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { trendsQuerySchema } from "@/lib/schemas";
 
 // Mock Prisma
@@ -49,8 +49,6 @@ describe("GET /api/trends", () => {
   describe("Authentication", () => {
     it("should return 401 when user is not authenticated", async () => {
       (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-      const { NextRequest } = await import("next/server");
-      const req = new NextRequest("http://localhost/api/trends?niche=tech");
 
       const handler = async () => {
         const session = await auth();

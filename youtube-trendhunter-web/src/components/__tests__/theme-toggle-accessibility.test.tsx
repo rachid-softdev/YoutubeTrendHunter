@@ -37,11 +37,9 @@ vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
   return {
     ...actual,
-    useSyncExternalStore: vi.fn(
-      (_subscribe: any, getSnapshot: () => any, _getServerSnapshot?: () => any) => {
-        return getSnapshot();
-      },
-    ),
+    useSyncExternalStore: vi.fn((_subscribe: any, getSnapshot: () => any) => {
+      return getSnapshot();
+    }),
   };
 });
 

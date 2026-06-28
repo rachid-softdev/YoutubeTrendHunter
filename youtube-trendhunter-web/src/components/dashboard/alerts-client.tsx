@@ -30,16 +30,16 @@ interface AlertsClientProps {
 export function AlertsClient({ alerts: initialAlerts, userNiches, canCreate }: AlertsClientProps) {
   const [alerts, setAlerts] = useState<AlertData[]>(initialAlerts);
   const [isCreating, setIsCreating] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   // Cleanup all pending requests on unmount
   useEffect(() => {
+    const controllers = abortControllersRef.current;
     return () => {
-      abortControllersRef.current.forEach((controller) => {
+      controllers.forEach((controller) => {
         controller.abort();
       });
-      abortControllersRef.current.clear();
+      controllers.clear();
     };
   }, []);
 
@@ -53,7 +53,6 @@ export function AlertsClient({ alerts: initialAlerts, userNiches, canCreate }: A
       const controller = new AbortController();
       abortControllersRef.current.set("create", controller);
 
-      setIsLoading(true);
       try {
         const response = await fetch("/api/alerts", {
           method: "POST",
@@ -77,7 +76,6 @@ export function AlertsClient({ alerts: initialAlerts, userNiches, canCreate }: A
         }
         throw error;
       } finally {
-        setIsLoading(false);
         abortControllersRef.current.delete("create");
       }
     },
