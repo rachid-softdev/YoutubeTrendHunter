@@ -13,10 +13,7 @@ export const dynamic = "force-dynamic";
 
 // ─── GET /api/admin/plans/:planKey/features ───
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ planKey: string }> },
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ planKey: string }> }) {
   try {
     await requireAdmin();
     const { planKey } = await params;
@@ -33,9 +30,10 @@ export async function GET(
     });
 
     return NextResponse.json({ data: planFeatures });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Admin/PlanFeatures] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
@@ -44,10 +42,7 @@ export async function GET(
 
 // ─── POST /api/admin/plans/:planKey/features ───
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ planKey: string }> },
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ planKey: string }> }) {
   try {
     await requireAdmin();
     const { planKey } = await params;
@@ -69,7 +64,10 @@ export async function POST(
 
     const feature = await prisma.feature.findUnique({ where: { key: featureKey } });
     if (!feature) {
-      return NextResponse.json({ error: "NOT_FOUND", details: "Feature not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "NOT_FOUND", details: "Feature not found" },
+        { status: 404 },
+      );
     }
 
     // Upsert the plan-feature association
@@ -102,9 +100,10 @@ export async function POST(
     });
 
     return NextResponse.json({ data: planFeature }, { status: 201 });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Admin/PlanFeatures] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

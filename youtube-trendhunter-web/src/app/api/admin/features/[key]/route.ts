@@ -9,10 +9,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ key: string }> },
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   try {
     await requireAdmin();
     const { key } = await params;
@@ -20,7 +17,10 @@ export async function PUT(
 
     const existing = await prisma.feature.findUnique({ where: { key } });
     if (!existing) {
-      return NextResponse.json({ error: "NOT_FOUND", details: "Feature not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "NOT_FOUND", details: "Feature not found" },
+        { status: 404 },
+      );
     }
 
     const { name, description, type, defaultConfig, isActive } = body;
@@ -44,9 +44,10 @@ export async function PUT(
     });
 
     return NextResponse.json({ data: feature });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Admin/Features] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

@@ -11,10 +11,7 @@ import { log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin();
     const { id } = await params;
@@ -22,7 +19,10 @@ export async function DELETE(
     // Get the override first to know scopeId for cache invalidation
     const existing = await prisma.entitlementOverride.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "NOT_FOUND", details: "Override not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "NOT_FOUND", details: "Override not found" },
+        { status: 404 },
+      );
     }
 
     await prisma.entitlementOverride.delete({ where: { id } });
@@ -41,9 +41,10 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Admin/Overrides] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

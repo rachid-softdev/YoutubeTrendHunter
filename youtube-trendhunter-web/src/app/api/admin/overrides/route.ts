@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const scope = searchParams.get("scope");
     const scopeId = searchParams.get("scopeId");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (scope) where.scope = scope;
     if (scopeId) where.scopeId = scopeId;
 
@@ -50,9 +50,10 @@ export async function GET(req: NextRequest) {
         hasPrev: page > 1,
       },
     });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Admin/Overrides] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
@@ -116,11 +117,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ data: override }, { status: 201 });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number; code?: string };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
-    if (err.code === "P2002") {
+    if (error.code === "P2002") {
       return NextResponse.json(
         { error: "CONFLICT", details: "Override already exists for this scope+scopeId+featureKey" },
         { status: 409 },

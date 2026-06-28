@@ -2,7 +2,7 @@
 // PrismaEntitlementRepository — IEntitlementRepository impl
 // ============================================
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { log } from "@/lib/logger";
 import type {
@@ -62,7 +62,10 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
   }
 
   async getActivePlans(): Promise<PlanRecord[]> {
-    const plans = await this.prisma.plan.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+    const plans = await this.prisma.plan.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    });
     return plans as unknown as PlanRecord[];
   }
 
@@ -162,9 +165,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
         stripePriceId: data?.stripePriceId ?? null,
         currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-        currentPeriodEnd:
-          data?.currentPeriodEnd ??
-          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
     return mapSubscription(sub as unknown as Record<string, unknown>);
@@ -221,7 +222,8 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         featureKey: data.featureKey,
         enabled: data.enabled,
         limitValue: data.limitValue ?? null,
-        configJson: (data.configJson ?? null) as any,
+        configJson:
+          (data.configJson as Prisma.InputJsonValue) ?? Prisma.NullableJsonNullValueInput.DbNull,
         expiresAt: data.expiresAt ?? null,
         reason: data.reason,
         organizationId: data.organizationId ?? null,
@@ -247,10 +249,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
 
   // ─── Usage ───
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     const usage = await this.prisma.usageTracking.findFirst({
       where: {
         orgId,
@@ -331,9 +330,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       );
 
       if (result > 0) {
-        const updated = (await this.prisma.$queryRawUnsafe<
-          Array<{ usageCount: number }>
-        >(
+        const updated = (await this.prisma.$queryRawUnsafe<Array<{ usageCount: number }>>(
           `SELECT "usageCount" FROM "UsageTracking"
            WHERE "orgId" = $1 AND "featureKey" = $2 AND "periodEnd" > NOW()
            ORDER BY "periodEnd" DESC LIMIT 1`,

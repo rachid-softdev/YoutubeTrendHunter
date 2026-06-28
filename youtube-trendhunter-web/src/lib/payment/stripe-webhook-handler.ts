@@ -6,6 +6,7 @@
  */
 
 import type Stripe from "stripe";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withRetry } from "@/lib/retry";
 import { stripe } from "@/lib/stripe";
@@ -77,7 +78,9 @@ const handlers: Record<string, WebhookEventHandler> = {
               status,
               stripeSubscriptionId: subscription.id,
               stripePriceId: priceId,
-              currentPeriodStart: new Date(getPeriodEnd(subscription) * 1000 - 30 * 24 * 60 * 60 * 1000),
+              currentPeriodStart: new Date(
+                getPeriodEnd(subscription) * 1000 - 30 * 24 * 60 * 60 * 1000,
+              ),
               currentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
               stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
             },
@@ -103,7 +106,9 @@ const handlers: Record<string, WebhookEventHandler> = {
             status,
             stripeSubscriptionId: subscription.id,
             stripePriceId: priceId,
-            currentPeriodStart: new Date(getPeriodEnd(subscription) * 1000 - 30 * 24 * 60 * 60 * 1000),
+            currentPeriodStart: new Date(
+              getPeriodEnd(subscription) * 1000 - 30 * 24 * 60 * 60 * 1000,
+            ),
             currentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
             stripeCurrentPeriodEnd: new Date(getPeriodEnd(subscription) * 1000),
           },
@@ -183,7 +188,9 @@ const handlers: Record<string, WebhookEventHandler> = {
           await downgrade.applyDowngradeStrategy(orgId, oldPlanKey, newPlanKey);
         } catch (downgradeErr) {
           log("error", "[Stripe Webhook] Downgrade failed, continuing", {
-            orgId, error: String(downgradeErr), eventId: event.id,
+            orgId,
+            error: String(downgradeErr),
+            eventId: event.id,
           });
         }
       }
@@ -201,7 +208,7 @@ const handlers: Record<string, WebhookEventHandler> = {
         // Update all subscriptions for this org
         await prisma.subscription.updateMany({
           where: { orgId },
-          data: updateData as Record<string, unknown>,
+          data: updateData as Prisma.SubscriptionUpdateManyMutationInput,
         });
       } else if (userId) {
         await prisma.subscription.upsert({
@@ -210,8 +217,8 @@ const handlers: Record<string, WebhookEventHandler> = {
             userId,
             ...updateData,
             stripeSubscriptionId: subscription.id,
-          } as any,
-          update: updateData as Record<string, unknown>,
+          } as Prisma.SubscriptionUncheckedCreateInput,
+          update: updateData as Prisma.SubscriptionUncheckedUpdateInput,
         });
       }
 
@@ -270,7 +277,9 @@ const handlers: Record<string, WebhookEventHandler> = {
           await downgrade.applyDowngradeStrategy(orgId, oldPlanKey, "free");
         } catch (downgradeErr) {
           log("error", "[Stripe Webhook] Downgrade on deletion failed, continuing", {
-            orgId, error: String(downgradeErr), eventId: event.id,
+            orgId,
+            error: String(downgradeErr),
+            eventId: event.id,
           });
         }
       }

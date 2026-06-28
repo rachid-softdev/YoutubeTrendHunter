@@ -79,9 +79,10 @@ export async function GET(req: NextRequest) {
         : null,
       planAvailability,
     });
-  } catch (err: any) {
-    if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
+  } catch (err: unknown) {
+    const error = err as { message?: string; status?: number };
+    if (error.message === "UNAUTHORIZED" || error.status === 401 || error.status === 403) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: error.status || 401 });
     }
     console.error("[Debug/Entitlements] Error:", err);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
