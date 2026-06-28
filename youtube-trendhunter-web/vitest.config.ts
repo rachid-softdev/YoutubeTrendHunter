@@ -9,6 +9,10 @@ export default defineConfig({
     globals: true,
     exclude: ["e2e/**", "node_modules/**", ".opencode/**", ".claude/**"],
     setupFiles: ["./src/lib/__tests__/setup.ts"],
+    // Suppress Node.js experimental warnings for clean CI output.
+    env: {
+      NODE_NO_WARNINGS: "1",
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov", "html"],

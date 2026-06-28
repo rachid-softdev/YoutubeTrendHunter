@@ -1,7 +1,6 @@
 // ============================================
-// GET /api/entitlements
-// Returns current user's entitlements via FeatureGateService.
-// No inline plan checks — everything passes through the service.
+// GET /api/me/entitlements
+// Returns current user's entitlements (cached 60s client-side)
 // ============================================
 
 import { NextResponse } from "next/server";
@@ -10,22 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { getFeatureGateService } from "@/lib/feature-flags";
 import { log } from "@/lib/logger";
 
-export interface EntitlementData {
-  plan: string;
-  planKey: string;
-  features: Record<string, boolean>;
-  limits: Record<string, number | null>;
-  usage: Record<string, number>;
-  resetAt: Record<string, string | null>;
-  experimentBuckets: Record<string, boolean>;
-}
+export const dynamic = "force-dynamic";
 
-/**
- * GET /api/entitlements
- *
- * Returns the current user's entitlements via FeatureGateService.
- * Used by the client-side EntitlementsProvider hook (use-entitlements.tsx).
- */
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -42,21 +27,10 @@ export async function GET() {
     });
     const orgId = user?.orgId;
 
-    // Get subscription info for the plan name
-    const sub = await prisma.subscription.findFirst({
-      where: orgId
-        ? { orgId, status: { in: ["ACTIVE", "TRIALING"] } }
-        : { userId, status: { in: ["ACTIVE", "TRIALING"] } },
-    });
-
-    const plan = sub?.plan ?? "FREE";
-    const planKey = sub?.planKey ?? "free";
-
-    // If no orgId, return minimal entitlements
     if (!orgId) {
       return NextResponse.json({
-        plan,
-        planKey,
+        plan: "FREE",
+        planKey: "free",
         features: {},
         limits: {},
         usage: {},
@@ -66,8 +40,6 @@ export async function GET() {
     }
 
     const gate = getFeatureGateService();
-
-    // Get all entitlements from the service (cached)
     const entitlements = await gate.getAllEntitlements(orgId);
 
     // Get usage for all limit features
@@ -94,9 +66,13 @@ export async function GET() {
       experimentBuckets[feat.key] = await gate.isInExperiment(userId, feat.key);
     }
 
-    const data: EntitlementData = {
-      plan,
-      planKey,
+    const sub = await prisma.subscription.findFirst({
+      where: { orgId, status: { in: ["ACTIVE", "TRIALING"] } },
+    });
+
+    const data = {
+      plan: sub?.plan ?? "FREE",
+      planKey: entitlements.planKey,
       features: entitlements.features,
       limits: entitlements.limits,
       usage,
@@ -104,15 +80,20 @@ export async function GET() {
       experimentBuckets,
     };
 
-    log("info", "[Entitlements] Fetched via FeatureGateService", {
+    log("info", "[Me/Entitlements] Fetched", {
       userId,
       orgId,
-      planKey,
+      planKey: entitlements.planKey,
     });
 
-    return NextResponse.json(data);
+    // Cache on client for 60 seconds
+    return NextResponse.json(data, {
+      headers: {
+        "Cache-Control": "private, max-age=60, s-maxage=0",
+      },
+    });
   } catch (error) {
-    console.error("Error fetching entitlements:", error);
+    console.error("[Me/Entitlements] Error:", error);
     return NextResponse.json({ error: "Erreur interne", code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
