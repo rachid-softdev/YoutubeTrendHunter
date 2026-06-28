@@ -136,7 +136,7 @@ vi.mock("@/lib/payment/stripe-adapter", () => ({
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
-import { auditLog, getAuditLogs } from "@/lib/audit-log";
+import { getAuditLogs } from "@/lib/audit-log";
 
 describe("User, Cron & Stripe", () => {
   beforeEach(() => {
@@ -402,7 +402,7 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should claim and process jobs when authorized", async () => {
-      const { claimJobs, completeJob, failJob } = await import("@/lib/services/job.service");
+      const { claimJobs, completeJob } = await import("@/lib/services/job.service");
 
       const mockJobs = [{ id: "job-1", type: "TREND_SCORE", payload: { nicheSlug: "tech" } }];
 

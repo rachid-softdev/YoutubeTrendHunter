@@ -3,13 +3,13 @@
 // GET /api/admin/metrics
 // ============================================
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { metrics } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
     await requireAdmin();
 

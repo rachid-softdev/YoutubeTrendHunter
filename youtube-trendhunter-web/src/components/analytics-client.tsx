@@ -23,6 +23,7 @@ interface UseAnalyticsOptions {
 }
 
 export function useAnalytics(_options?: UseAnalyticsOptions) {
+  void _options; // reserved for future use (userId, userTraits for analytics identify)
   const trackCta = useCallback((cta: string, destination: string) => {
     analytics.ctaClicked(cta, destination);
   }, []);

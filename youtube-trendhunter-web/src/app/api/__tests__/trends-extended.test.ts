@@ -8,7 +8,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Mock } from "vitest";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -41,7 +40,6 @@ vi.mock("@/lib/services/subscription.service", () => ({
 
 // ─── Imports (after mocks) ──────────────────────────────────────────────────
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -56,7 +54,8 @@ async function simulateTrendsHandler(
   authResult: { user: { id: string } } | null,
   plan: "FREE" | "PRO" | "TEAM",
   nicheExists: boolean,
-  trendsCount: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _trendsCount: number,
 ) {
   // 1 — Auth check
   if (!authResult?.user?.id) {

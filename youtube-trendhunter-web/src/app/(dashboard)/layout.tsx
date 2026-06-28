@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import Link from "next/link";
+import Image from "next/image";
 import { Play } from "lucide-react";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -26,9 +27,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </Link>
         <div className="w-8 h-8 rounded-none bg-dark-surface border border-hairline-dark overflow-hidden">
           {session.user.image ? (
-            <img
+            <Image
               src={session.user.image}
               alt=""
+              width={32}
+              height={32}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
