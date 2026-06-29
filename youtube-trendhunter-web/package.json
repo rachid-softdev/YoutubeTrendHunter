@@ -34,7 +34,7 @@
     "next-auth": "5.0.0-beta.31",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "resend": "^4.8.0"
+    "resend": "^6.16.0"
   },
   "devDependencies": {
     "@playwright/cli": "^0.1.14",
