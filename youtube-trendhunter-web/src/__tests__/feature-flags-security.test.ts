@@ -13,7 +13,7 @@
 //   - Experiment bucketing isolation
 // ============================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Hoisted mock for admin auth tests (G block). Without this, vi.mock inside a
 // test block triggers a warning and will become an error in future Vitest versions.
@@ -22,15 +22,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
-import {
-  isInExperiment as checkExperimentBucket,
-  murmurhash,
-} from "@/lib/feature-flags/experiment";
-import {
-  FeatureNotAvailableError,
-  LimitReachedError,
-  SubscriptionExpiredError,
-} from "@/lib/feature-flags/errors";
+
+import { FeatureNotAvailableError } from "@/lib/feature-flags/errors";
 import {
   requireFeature,
   requireLimit,
@@ -38,7 +31,6 @@ import {
   withFeature,
   withLimit,
   type SessionResolver,
-  type AuthSession,
 } from "@/lib/feature-flags/middleware";
 import type { Session } from "next-auth";
 import type { AuthError } from "@/lib/auth/require-admin";
@@ -561,7 +553,7 @@ describe("B. Session Resolver Security", () => {
   });
 
   it("B1: session resolver returning null orgId — service falls back to 'free'", async () => {
-    const resolveNull: SessionResolver = async () => ({
+    const _resolveNull: SessionResolver = async () => ({
       orgId: coerce<string>(null),
       userId: USER_A,
     });
@@ -626,7 +618,7 @@ describe("B. Session Resolver Security", () => {
       userId: "attacker_who_does_not_belong_to_org_a",
     });
 
-    const { orgId, userId } = await resolveWrongUser();
+    const { orgId, userId: _userId } = await resolveWrongUser();
     const result = await ctx.service.hasFeature(orgId, "AI_SUMMARY");
     expect(result).toBe(true); // Works fine — no userId/orgId binding check
 
@@ -1304,7 +1296,7 @@ describe("H. Experiment Security", () => {
     ctx.repository.features.set("NEW_DASHBOARD", mutatedFeature);
 
     // Now all users are in the experiment
-    const userNotOriginallyIn = await ctx.service.isInExperiment(USER_B, "NEW_DASHBOARD");
+    const _userNotOriginallyIn = await ctx.service.isInExperiment(USER_B, "NEW_DASHBOARD");
     // This could differ from the original pre-mutation value
     // 🔴 Config integrity is critical for experiment validity
     // DOCUMENTED: experiment config mutation affects all live bucketing
@@ -1322,7 +1314,7 @@ describe("H. Experiment Security", () => {
     });
 
     // User A is NOT affected by User B's override
-    const userAResult = await ctx.service.isInExperiment(USER_A, "NEW_DASHBOARD");
+    const _userAResult = await ctx.service.isInExperiment(USER_A, "NEW_DASHBOARD");
     // User A's bucket depends on config, not User B's override
 
     // User B IS affected by User B's override

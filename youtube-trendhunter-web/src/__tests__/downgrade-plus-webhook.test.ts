@@ -67,8 +67,6 @@ import type {
   FeatureRecord,
   SubscriptionRecord,
   UsageTrackingRecord,
-  CreateOverrideInput,
-  EntitlementOverrideRecord,
   DowngradeStrategy,
   FeatureType,
 } from "@/lib/feature-flags/types";
@@ -548,7 +546,7 @@ describe("DowngradeService", () => {
       mockRepo.getPlan.mockImplementation(async (key: string) =>
         key === "pro" ? proPlan : freePlan,
       );
-      mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
+      mockRepo.getPlanFeatures.mockImplementation(async (_planId: string) => {
         const feature = makeFeature("f1", "seats", "LIMIT");
         return [makePlanFeature({ featureKey: "seats", feature, limitValue: 100, enabled: true })];
       });
@@ -1384,7 +1382,7 @@ describe("Webhook → DowngradeService integration", () => {
     (prisma.subscription.update as Mock).mockResolvedValue({});
 
     // Default: stripe retrieve returns a subscription
-    const stripeModule = await import("@/lib/stripe");
+    const _stripeModule = await import("@/lib/stripe");
     stripeRetrieveMock.mockResolvedValue(createSubscription({ metadata: { orgId: "org_1" } }));
 
     // Feature gate mock (deep-mocked real instance)
@@ -1583,7 +1581,7 @@ describe("Webhook → DowngradeService integration", () => {
       const invoice = createInvoice({ subscription: "sub_mock_123" });
       const event = createEvent("invoice.payment_succeeded", invoice);
 
-      const stripeModule = await import("@/lib/stripe");
+      const _stripeModule = await import("@/lib/stripe");
       stripeRetrieveMock.mockResolvedValue(
         createSubscription({ metadata: { orgId: "org_1" }, status: "active" }),
       );

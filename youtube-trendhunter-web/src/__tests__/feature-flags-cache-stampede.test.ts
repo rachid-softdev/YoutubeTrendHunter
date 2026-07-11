@@ -10,7 +10,7 @@
 // backend to enable controlled failure injection and shared-state simulation.
 // ============================================
 
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Hoisted: Mock Redis BEFORE any imports ───
 // The shared store simulates a single Redis backend visible to multiple instances.
@@ -45,7 +45,6 @@ vi.mock("@/lib/redis", () => {
 import { CacheService } from "@/lib/feature-flags/cache-service";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
 import type {
-  ICacheService,
   IEntitlementRepository,
   PlanRecord,
   FeatureRecord,
@@ -56,7 +55,6 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
-  EntitlementMap,
   OrganizationRecord,
 } from "@/lib/feature-flags/types";
 
@@ -378,7 +376,7 @@ function createPlanFeature(
 describe("Multi-Instance Cache Simulation", () => {
   let instanceA: CacheService;
   let instanceB: CacheService;
-  let instanceC: CacheService;
+  let _instanceC: CacheService;
 
   beforeEach(async () => {
     // Run memory-only so tests don't depend on dynamic import mock behavior.
@@ -389,7 +387,7 @@ describe("Multi-Instance Cache Simulation", () => {
 
     instanceA = new CacheService();
     instanceB = new CacheService();
-    instanceC = new CacheService();
+    _instanceC = new CacheService();
   });
 
   it("Multiple instances operate independently in memory-only mode", async () => {
@@ -1018,7 +1016,7 @@ describe("Concurrent Invalidation + Read", () => {
       cache.get("other:key"),
     ];
 
-    const results = await Promise.all(ops);
+    const _results = await Promise.all(ops);
     // After all ops complete, entitlements keys should be gone
     expect(await cache.get("entitlements:org_a")).toBeNull();
     expect(await cache.get("entitlements:org_b")).toBeNull();

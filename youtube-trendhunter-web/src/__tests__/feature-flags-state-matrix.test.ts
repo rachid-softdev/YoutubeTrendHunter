@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
-import { isInExperiment } from "@/lib/feature-flags/experiment";
+
 import type {
   IEntitlementRepository,
   ICacheService,
@@ -424,7 +424,7 @@ describe("Feature-Flags State & Priority Matrix", () => {
       enabled: boolean,
       limitValue: number | null = null,
     ) {
-      const plan = repository.plans.get(planKey)!;
+      const _plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
@@ -680,7 +680,7 @@ describe("Feature-Flags State & Priority Matrix", () => {
       enabled: boolean,
       limitValue: number | null = null,
     ) {
-      const plan = repository.plans.get(planKey)!;
+      const _plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
@@ -919,7 +919,7 @@ describe("Feature-Flags State & Priority Matrix", () => {
       enabled: boolean,
       limitValue: number | null = null,
     ) {
-      const plan = repository.plans.get(planKey)!;
+      const _plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
@@ -1042,7 +1042,7 @@ describe("Feature-Flags State & Priority Matrix", () => {
         const now = new Date("2026-06-28T12:00:00.000Z");
         vi.setSystemTime(now);
 
-        const override = await repository.createOverride({
+        const _override = await repository.createOverride({
           scope: "ORG",
           scopeId: ORG_ID,
           featureKey: "AI_SUMMARY",
@@ -1241,7 +1241,7 @@ describe("Feature-Flags State & Priority Matrix", () => {
       it("getAllEntitlements: plan LIMIT disabled (enabled=false) with limitValue shows feature=false, limit=0", async () => {
         // Create a LIMIT feature where enabled=false but limitValue > 0
         repository.features.set("DISABLED_LIMIT", createFeature("DISABLED_LIMIT", "LIMIT"));
-        const plan = repository.plans.get("free")!;
+        const _plan = repository.plans.get("free")!;
         const feature = repository.features.get("DISABLED_LIMIT")!;
         repository.planFeatures.set("plan_free", [
           createPlanFeature("plan_free", feature, false, 50), // enabled=false, limitValue=50

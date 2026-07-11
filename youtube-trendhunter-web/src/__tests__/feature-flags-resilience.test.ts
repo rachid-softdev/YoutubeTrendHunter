@@ -7,7 +7,7 @@
 // and data integrity for the FeatureGateService.
 // ============================================
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
 import { CacheService } from "@/lib/feature-flags/cache-service";
 import { FeatureNotAvailableError, LimitReachedError } from "@/lib/feature-flags/errors";
@@ -20,7 +20,6 @@ import type {
   SubscriptionRecord,
   EntitlementOverrideRecord,
   UsageTrackingRecord,
-  ConsumeResult,
   EntitlementMap,
   OverrideScope,
   CreateOverrideInput,
@@ -546,7 +545,7 @@ class ControllableMockCache extends MockCacheService {
 // ============================================
 
 const ORG_ID = "org_1";
-const USER_ID = "user_1";
+const _USER_ID = "user_1";
 
 function setupBasicPlan(repo: MockEntitlementRepository): void {
   repo.plans.set("free", createPlan("free", "Free", 0));
@@ -568,7 +567,7 @@ function setupFeatures(repo: MockEntitlementRepository): void {
   repo.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
 }
 
-function setupProSubscription(repo: MockEntitlementRepository): void {
+function _setupProSubscription(repo: MockEntitlementRepository): void {
   repo.createSubscription(ORG_ID, "pro");
 }
 

@@ -7,10 +7,9 @@
 // Stripe webhook malformed payloads, and API route query parameter edge cases.
 // ============================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
-import { isInExperiment, murmurhash } from "@/lib/feature-flags/experiment";
-import { FeatureNotAvailableError, LimitReachedError } from "@/lib/feature-flags/errors";
+
 import { getWebhookHandler } from "@/lib/payment/stripe-webhook-handler";
 import type {
   IEntitlementRepository,

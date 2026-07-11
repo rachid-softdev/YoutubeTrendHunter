@@ -12,7 +12,7 @@
 //   G. MapSubscription edge cases
 // ============================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import type {
   IEntitlementRepository,
   PlanRecord,
@@ -499,7 +499,7 @@ function createFeature(key: string, type: "BOOLEAN" | "LIMIT" | "EXPERIMENT"): F
   };
 }
 
-function createPlanFeature(
+function _createPlanFeature(
   planId: string,
   feature: FeatureRecord,
   enabled: boolean,
@@ -1269,7 +1269,9 @@ describe("EntitlementRepository Integration Tests", () => {
         repo.consumeUsage(ORG_ID, FEATURE_KEY, 1),
       ]);
 
-      const allNonAtomic = results.every(() => repo.pathTracker.lastPath === "non-atomic-fallback");
+      const _allNonAtomic = results.every(
+        () => repo.pathTracker.lastPath === "non-atomic-fallback",
+      );
       // At minimum, the last operation was non-atomic
       expect(
         repo.pathTracker.paths.every((p) => p === "atomic" || p === "non-atomic-fallback"),
@@ -1392,7 +1394,7 @@ describe("EntitlementRepository Integration Tests", () => {
     it("G6: subscription with very long strings for IDs — stored and retrieved", async () => {
       const longOrgId = "org_" + "x".repeat(500);
       // Can't change orgId after creation easily with mock, but we can set it
-      const sub = await repo.createSubscription(longOrgId, "pro");
+      const _sub = await repo.createSubscription(longOrgId, "pro");
 
       const fetched = await repo.getActiveSubscription(longOrgId);
       expect(fetched?.orgId).toBe(longOrgId);
@@ -1734,7 +1736,7 @@ describe("EntitlementRepository Integration Tests", () => {
     it("L6: updateSubscription with partial data preserves other fields", async () => {
       await repo.createSubscription(ORG_ID, "pro");
       const before = await repo.getActiveSubscription(ORG_ID);
-      const originalPlan = before?.plan;
+      const _originalPlan = before?.plan;
 
       // Only update status
       await repo.updateSubscription(ORG_ID, { status: "PAST_DUE" as SubscriptionStatus });
@@ -1802,21 +1804,21 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("M3: multiple overrides for same org — all retrievable", async () => {
-      const o1 = await repo.createOverride({
+      const _o1 = await repo.createOverride({
         scope: "ORG",
         scopeId: ORG_ID,
         featureKey: "f1",
         enabled: true,
         reason: "R1",
       });
-      const o2 = await repo.createOverride({
+      const _o2 = await repo.createOverride({
         scope: "ORG",
         scopeId: ORG_ID,
         featureKey: "f2",
         enabled: false,
         reason: "R2",
       });
-      const o3 = await repo.createOverride({
+      const _o3 = await repo.createOverride({
         scope: "ORG",
         scopeId: ORG_ID,
         featureKey: "f3",

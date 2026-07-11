@@ -19,11 +19,6 @@ import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
 import { DowngradeService } from "@/lib/feature-flags/downgrade.service";
 import type {
   IEntitlementRepository,
-  EntitlementMap,
-  ConsumeResult,
-  DebugTrace,
-  DowngradePreview,
-  DowngradeFeatureImpact,
   SubscriptionRecord,
   FeatureRecord,
   EntitlementOverrideRecord,
