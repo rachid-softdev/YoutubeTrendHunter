@@ -25,6 +25,7 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
 
 // ─── Synchronization Barrier ───
@@ -183,10 +184,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.planFeatures.get(planId) ?? [];
   }
 
-  async getPlanFeature(
-    planId: string,
-    featureKey: string,
-  ): Promise<PlanFeatureRecord | null> {
+  async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureRecord | null> {
     const features = this.planFeatures.get(planId) ?? [];
     return features.find((f) => f.feature?.key === featureKey) ?? null;
   }
@@ -195,7 +193,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -229,12 +227,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-      currentPeriodEnd:
-        data?.currentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCurrentPeriodEnd:
-        data?.stripeCurrentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -264,20 +259,14 @@ class MockEntitlementRepository implements IEntitlementRepository {
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "ORG" &&
-        o.scopeId === orgId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "USER" &&
-        o.scopeId === userId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -314,10 +303,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.overrides = this.overrides.filter((o) => o.id !== id);
   }
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
@@ -399,10 +385,7 @@ class ControllableMockRepository extends MockEntitlementRepository {
   getCurrentUsageCallCount = 0;
   consumeUsageCallCount = 0;
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     this.getCurrentUsageCallCount++;
     if (this.getCurrentUsageBarrier) {
       await this.getCurrentUsageBarrier.wait();
@@ -452,7 +435,7 @@ class LimitEnforcingMockRepository extends MockEntitlementRepository {
     maxAllowed?: number,
   ): Promise<{ success: boolean; usageCount: number } | null> {
     const key = `${orgId}:${featureKey}`;
-    const limit = maxAllowed ?? this.enforcedLimits.get(key) as number | undefined;
+    const limit = (maxAllowed ?? this.enforcedLimits.get(key)) as number;
 
     if (limit !== null) {
       // Check if increment would exceed limit (simulating atomic UPDATE...RETURNING)
@@ -491,11 +474,11 @@ class LimitEnforcingMockRepository extends MockEntitlementRepository {
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -575,10 +558,13 @@ function setupFeatures(repo: MockEntitlementRepository): void {
   repo.features.set("EXPORT_PDF", createFeature("EXPORT_PDF", "LIMIT"));
   repo.features.set("AI_SUMMARY", createFeature("AI_SUMMARY", "BOOLEAN"));
   repo.features.set("API_ACCESS", createFeature("API_ACCESS", "BOOLEAN"));
-  repo.features.set("NEW_DASHBOARD", createFeature("NEW_DASHBOARD", "EXPERIMENT", {
-    percentage: 50,
-    seed: "NEW_DASHBOARD_v1",
-  }));
+  repo.features.set(
+    "NEW_DASHBOARD",
+    createFeature("NEW_DASHBOARD", "EXPERIMENT", {
+      percentage: 50,
+      seed: "NEW_DASHBOARD_v1",
+    }),
+  );
   repo.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
 }
 
@@ -1069,7 +1055,9 @@ describe("Error Propagation", () => {
 
     const throwingService = new FeatureGateService(throwingRepo, cache);
 
-    await expect(throwingService.hasFeature(ORG_ID, "AI_SUMMARY")).rejects.toThrow("DB_CONNECTION_LOST");
+    await expect(throwingService.hasFeature(ORG_ID, "AI_SUMMARY")).rejects.toThrow(
+      "DB_CONNECTION_LOST",
+    );
   });
 
   it("repository getActiveSubscription throws — error propagates", async () => {
@@ -1108,7 +1096,9 @@ describe("Error Propagation", () => {
     badCache.throwOnGet = true;
     const serviceWithBadCache = new FeatureGateService(repository, badCache);
 
-    await expect(serviceWithBadCache.getAllEntitlements(ORG_ID)).rejects.toThrow("Cache GET failure");
+    await expect(serviceWithBadCache.getAllEntitlements(ORG_ID)).rejects.toThrow(
+      "Cache GET failure",
+    );
   });
 
   it("cache service throws on set — error propagates (service lacks error handling for cache set)", async () => {
@@ -1118,7 +1108,9 @@ describe("Error Propagation", () => {
     badCache.throwOnSet = true;
     const serviceWithBadCache = new FeatureGateService(repository, badCache);
 
-    await expect(serviceWithBadCache.getAllEntitlements(ORG_ID)).rejects.toThrow("Cache SET failure");
+    await expect(serviceWithBadCache.getAllEntitlements(ORG_ID)).rejects.toThrow(
+      "Cache SET failure",
+    );
   });
 
   it("malformed experiment config (no percentage) — handled without crash", async () => {
@@ -1231,7 +1223,10 @@ describe("Bug List Edge Cases", () => {
 
   it("feature with isActive: false — not considered as available", async () => {
     // Create an inactive feature
-    repository.features.set("DEPRECATED_FEATURE", createFeature("DEPRECATED_FEATURE", "BOOLEAN", null, false));
+    repository.features.set(
+      "DEPRECATED_FEATURE",
+      createFeature("DEPRECATED_FEATURE", "BOOLEAN", null, false),
+    );
     repository.planFeatures.set("plan_pro", [
       createPlanFeature("plan_pro", repository.features.get("DEPRECATED_FEATURE")!, true),
     ]);
@@ -1470,7 +1465,9 @@ describe("Data Integrity", () => {
     await repository.createUsage(ORG_ID, "EXPORT_PDF", new Date(), new Date(Date.now() + 86400000));
 
     const results = await Promise.all(
-      Array(50).fill(0).map(() => service.consume(ORG_ID, "EXPORT_PDF", 1)),
+      Array(50)
+        .fill(0)
+        .map(() => service.consume(ORG_ID, "EXPORT_PDF", 1)),
     );
 
     const successes = results.filter((r) => r.success);
@@ -1597,7 +1594,9 @@ describe("Data Integrity", () => {
 
     // 20 concurrent consumes of 1 each
     await Promise.all(
-      Array(20).fill(0).map(() => service.consume(ORG_ID, "EXPORT_PDF", 1)),
+      Array(20)
+        .fill(0)
+        .map(() => service.consume(ORG_ID, "EXPORT_PDF", 1)),
     );
 
     const usage = await repository.getCurrentUsage(ORG_ID, "EXPORT_PDF");
@@ -1662,10 +1661,7 @@ describe("Experiment Resilience", () => {
   });
 
   it("getExperimentConfig returns null for malformed config (no percentage)", async () => {
-    repository.features.set(
-      "BAD_CFG",
-      createFeature("BAD_CFG", "EXPERIMENT", { seed: "test" }),
-    );
+    repository.features.set("BAD_CFG", createFeature("BAD_CFG", "EXPERIMENT", { seed: "test" }));
     const config = await service.getExperimentConfig("BAD_CFG");
     expect(config).toBeNull();
   });
@@ -1792,8 +1788,12 @@ describe("CacheService (real implementation)", () => {
     const notified1: string[] = [];
     const notified2: string[] = [];
 
-    realCache.subscribe((orgId) => { notified1.push(orgId); });
-    realCache.subscribe((orgId) => { notified2.push(orgId); });
+    realCache.subscribe((orgId) => {
+      notified1.push(orgId);
+    });
+    realCache.subscribe((orgId) => {
+      notified2.push(orgId);
+    });
 
     await realCache.publishInvalidation("org_multi");
 
@@ -1876,7 +1876,7 @@ describe("Override Expiry Edge Cases", () => {
     });
 
     // expiresAt > now is required, so an exact match is NOT > now
-    // Actually: `!orgOverride.expiresAt || orgOverride.expiresAt > new Date()` 
+    // Actually: `!orgOverride.expiresAt || orgOverride.expiresAt > new Date()`
     // If expiresAt === now, then `new Date()` will be >= expiresAt, so it's treated as expired
     expect(await service.hasFeature(ORG_ID, "AI_SUMMARY")).toBe(false);
   });
@@ -1984,7 +1984,9 @@ describe("Service Method Boundaries", () => {
   });
 
   it("assertFeature throws FeatureNotAvailableError for missing feature", async () => {
-    await expect(service.assertFeature(ORG_ID, "NONEXISTENT")).rejects.toThrow(FeatureNotAvailableError);
+    await expect(service.assertFeature(ORG_ID, "NONEXISTENT")).rejects.toThrow(
+      FeatureNotAvailableError,
+    );
   });
 
   it("assertFeature propagates repository errors", async () => {

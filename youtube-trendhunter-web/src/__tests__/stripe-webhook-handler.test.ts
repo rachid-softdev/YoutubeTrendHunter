@@ -3,7 +3,35 @@
 // ============================================
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Mock } from "vitest";
 import type Stripe from "stripe";
+import type { PrismaClient } from "@prisma/client";
+
+// Focused views of the deep-mocked modules used by this suite. We keep the
+// original parameter types but relax the return to `Promise<unknown>` so the
+// tests can pass partial fixtures to `mockResolvedValue` without `any`.
+type MockPrisma = {
+  user: {
+    findFirst: Mock<(...args: Parameters<PrismaClient["user"]["findFirst"]>) => Promise<unknown>>;
+    findUnique: Mock<(...args: Parameters<PrismaClient["user"]["findUnique"]>) => Promise<unknown>>;
+  };
+  subscription: {
+    findFirst: Mock<
+      (...args: Parameters<PrismaClient["subscription"]["findFirst"]>) => Promise<unknown>
+    >;
+    upsert: Mock<(...args: Parameters<PrismaClient["subscription"]["upsert"]>) => Promise<unknown>>;
+    updateMany: Mock<
+      (...args: Parameters<PrismaClient["subscription"]["updateMany"]>) => Promise<unknown>
+    >;
+    update: Mock<(...args: Parameters<PrismaClient["subscription"]["update"]>) => Promise<unknown>>;
+  };
+};
+
+type MockStripe = {
+  subscriptions: {
+    retrieve: Mock<(...args: Parameters<Stripe["subscriptions"]["retrieve"]>) => Promise<unknown>>;
+  };
+};
 
 // ─── Module-level mocks (hoisted by Vitest) ───
 
@@ -45,13 +73,14 @@ process.env.STRIPE_TEAM_PRICE_ID = "price_team";
 const NOW = Math.floor(Date.now() / 1000);
 const PERIOD_END = NOW + 30 * 24 * 60 * 60; // 30 days from now
 
+/** Type-safe coercion helper for partial third-party fixtures (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
+
 // ─── Event factories ───
 
-function createEvent(
-  type: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any,
-): Stripe.Event {
+function createEvent(type: string, data: unknown): Stripe.Event {
   return {
     id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     type,
@@ -61,12 +90,11 @@ function createEvent(
     pending_webhooks: 0,
     api_version: "2026-04-22",
     request: null,
-  } as unknown as Stripe.Event;
+  } as Stripe.Event;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createSubscription(overrides: any = {}): Stripe.Subscription {
-  return {
+function createSubscription(overrides: Record<string, unknown> = {}): Stripe.Subscription {
+  return coerce<Stripe.Subscription>({
     id: "sub_mock_123",
     object: "subscription",
     metadata: {} as Stripe.Metadata,
@@ -74,50 +102,45 @@ function createSubscription(overrides: any = {}): Stripe.Subscription {
     status: "active",
     current_period_end: PERIOD_END,
     ...overrides,
-  } as unknown as Stripe.Subscription;
+  });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createInvoice(overrides: any = {}): Stripe.Invoice {
-  return {
+function createInvoice(overrides: Record<string, unknown> = {}): Stripe.Invoice {
+  return coerce<Stripe.Invoice>({
     id: "in_mock_123",
     object: "invoice",
     subscription: "sub_mock_123",
     ...overrides,
-  } as unknown as Stripe.Invoice;
+  });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createCheckoutSession(overrides: any = {}): Stripe.Checkout.Session {
+function createCheckoutSession(overrides: Record<string, unknown> = {}): Stripe.Checkout.Session {
   return {
     id: "cs_mock_123",
     object: "checkout.session",
     mode: "subscription",
     subscription: "sub_mock_123",
     ...overrides,
-  } as unknown as Stripe.Checkout.Session;
+  } as Stripe.Checkout.Session;
 }
 
 // ─── Tests ───
 
 describe("Stripe Webhook Handlers", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let prisma: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let stripe: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let getFeatureGate: any;
+  let prisma: MockPrisma;
+  let stripe: MockStripe;
+  let getFeatureGate: Mock<() => unknown>;
   let mockGate: { invalidateCache: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     const prismaModule = await import("@/lib/prisma");
-    prisma = prismaModule.prisma;
+    prisma = vi.mocked(prismaModule.prisma, true);
     const stripeModule = await import("@/lib/stripe");
-    stripe = stripeModule.stripe;
+    stripe = vi.mocked(stripeModule.stripe, true);
     const ffModule = await import("@/lib/feature-flags");
-    getFeatureGate = ffModule.getFeatureGateService;
+    getFeatureGate = vi.mocked(ffModule.getFeatureGateService);
 
     // Default: no user found
     prisma.user.findFirst.mockResolvedValue(null);
@@ -152,14 +175,12 @@ describe("Stripe Webhook Handlers", () => {
         items: { data: [{ price: { id: "price_pro" } }] },
         status: "active",
       });
-      const event = createEvent("customer.subscription.created", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.created", sub);
 
       prisma.user.findFirst.mockResolvedValue({ id: "user_in_org" });
 
       // Act
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.created");
       const result = await handler!(event);
 
@@ -184,11 +205,9 @@ describe("Stripe Webhook Handlers", () => {
         metadata: { userId: "user_1" },
         status: "active",
       });
-      const event = createEvent("customer.subscription.created", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.created", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.created");
       const result = await handler!(event);
 
@@ -205,11 +224,9 @@ describe("Stripe Webhook Handlers", () => {
 
     it("returns handled:false when no orgId or userId in metadata", async () => {
       const sub = createSubscription({ metadata: {} });
-      const event = createEvent("customer.subscription.created", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.created", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.created");
       const result = await handler!(event);
 
@@ -221,14 +238,12 @@ describe("Stripe Webhook Handlers", () => {
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
       });
-      const event = createEvent("customer.subscription.created", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.created", sub);
 
       // No user in org
       prisma.user.findFirst.mockResolvedValue(null);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.created");
       const result = await handler!(event);
 
@@ -250,11 +265,9 @@ describe("Stripe Webhook Handlers", () => {
         metadata: { orgId: "org_1" },
         status: "past_due",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -270,11 +283,9 @@ describe("Stripe Webhook Handlers", () => {
 
     it("returns handled:false when no identifiers in metadata", async () => {
       const sub = createSubscription({ metadata: {} });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -292,11 +303,9 @@ describe("Stripe Webhook Handlers", () => {
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
       });
-      const event = createEvent("customer.subscription.deleted", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.deleted", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.deleted");
       const result = await handler!(event);
 
@@ -319,15 +328,13 @@ describe("Stripe Webhook Handlers", () => {
     it("renews period and sets status to ACTIVE via orgId path", async () => {
       // Arrange: invoice has subscription reference, retrieve returns sub with orgId
       const invoice = createInvoice({ subscription: "sub_mock_123" });
-      const event = createEvent("invoice.payment_succeeded", invoice as unknown as Record<string, unknown>);
+      const event = createEvent("invoice.payment_succeeded", invoice);
 
       stripe.subscriptions.retrieve.mockResolvedValue(
         createSubscription({ metadata: { orgId: "org_1" }, status: "active" }),
       );
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("invoice.payment_succeeded");
       const result = await handler!(event);
 
@@ -344,11 +351,9 @@ describe("Stripe Webhook Handlers", () => {
 
     it("returns handled:false when invoice has no subscription", async () => {
       const invoice = createInvoice({ subscription: null });
-      const event = createEvent("invoice.payment_succeeded", invoice as unknown as Record<string, unknown>);
+      const event = createEvent("invoice.payment_succeeded", invoice);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("invoice.payment_succeeded");
       const result = await handler!(event);
 
@@ -365,15 +370,13 @@ describe("Stripe Webhook Handlers", () => {
   describe("invoice.payment_failed", () => {
     it("sets subscription to PAST_DUE via orgId path", async () => {
       const invoice = createInvoice({ subscription: "sub_mock_123" });
-      const event = createEvent("invoice.payment_failed", invoice as unknown as Record<string, unknown>);
+      const event = createEvent("invoice.payment_failed", invoice);
 
       stripe.subscriptions.retrieve.mockResolvedValue(
         createSubscription({ metadata: { orgId: "org_1" }, status: "past_due" }),
       );
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("invoice.payment_failed");
       const result = await handler!(event);
 
@@ -398,10 +401,7 @@ describe("Stripe Webhook Handlers", () => {
         mode: "subscription",
         subscription: "sub_mock_123",
       });
-      const event = createEvent(
-        "checkout.session.completed",
-        session as unknown as Record<string, unknown>,
-      );
+      const event = createEvent("checkout.session.completed", session);
 
       // Stripe retrieve returns sub with userId
       stripe.subscriptions.retrieve.mockResolvedValue(
@@ -414,9 +414,7 @@ describe("Stripe Webhook Handlers", () => {
       // User lookup succeeds
       prisma.user.findUnique.mockResolvedValue({ id: "user_1", orgId: "org_1" });
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("checkout.session.completed");
       const result = await handler!(event);
 
@@ -441,14 +439,9 @@ describe("Stripe Webhook Handlers", () => {
         mode: "payment",
         subscription: null,
       });
-      const event = createEvent(
-        "checkout.session.completed",
-        session as unknown as Record<string, unknown>,
-      );
+      const event = createEvent("checkout.session.completed", session);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("checkout.session.completed");
       const result = await handler!(event);
 
@@ -461,19 +454,12 @@ describe("Stripe Webhook Handlers", () => {
         mode: "subscription",
         subscription: "sub_mock_123",
       });
-      const event = createEvent(
-        "checkout.session.completed",
-        session as unknown as Record<string, unknown>,
-      );
+      const event = createEvent("checkout.session.completed", session);
 
       // Retrieve returns sub with no userId
-      stripe.subscriptions.retrieve.mockResolvedValue(
-        createSubscription({ metadata: {} }),
-      );
+      stripe.subscriptions.retrieve.mockResolvedValue(createSubscription({ metadata: {} }));
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("checkout.session.completed");
       const result = await handler!(event);
 
@@ -486,21 +472,16 @@ describe("Stripe Webhook Handlers", () => {
         mode: "subscription",
         subscription: "sub_mock_123",
       });
-      const event = createEvent(
-        "checkout.session.completed",
-        session as unknown as Record<string, unknown>,
-      );
+      const event = createEvent("checkout.session.completed", session);
 
       stripe.subscriptions.retrieve.mockResolvedValue(
         createSubscription({
           metadata: { userId: "user_1" },
           items: { data: [] },
-        } as unknown as Record<string, unknown>),
+        }),
       );
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("checkout.session.completed");
       const result = await handler!(event);
 
@@ -520,50 +501,39 @@ describe("Stripe Webhook Handlers", () => {
       ["customer.subscription.deleted", "subscription"],
       ["invoice.payment_succeeded", "invoice"],
       ["invoice.payment_failed", "invoice"],
-    ] as const)(
-      "calls invalidateCache when orgId is present for %s",
-      async (eventType, dataKind) => {
-        // Build the right event data shape for each event type
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let eventData: any;
-        if (dataKind === "invoice") {
-          eventData = { subscription: "sub_mock_123" };
-        } else {
-          eventData = createSubscription({ metadata: { orgId: "org_1" } });
-        }
-        const event = createEvent(eventType, eventData);
+    ] as const)("calls invalidateCache when orgId is present for %s", async (eventType, dataKind) => {
+      // Build the right event data shape for each event type
+      let eventData: unknown;
+      if (dataKind === "invoice") {
+        eventData = { subscription: "sub_mock_123" };
+      } else {
+        eventData = createSubscription({ metadata: { orgId: "org_1" } });
+      }
+      const event = createEvent(eventType, eventData);
 
-        // For invoice events, retrieve returns sub with orgId so resolveOrgId works
-        stripe.subscriptions.retrieve.mockResolvedValue(
-          createSubscription({ metadata: { orgId: "org_1" } }),
-        );
+      // For invoice events, retrieve returns sub with orgId so resolveOrgId works
+      stripe.subscriptions.retrieve.mockResolvedValue(
+        createSubscription({ metadata: { orgId: "org_1" } }),
+      );
 
-        // For subscription.created, a user must exist in the org
-        if (eventType === "customer.subscription.created") {
-          prisma.user.findFirst.mockResolvedValue({ id: "user_in_org" });
-        }
+      // For subscription.created, a user must exist in the org
+      if (eventType === "customer.subscription.created") {
+        prisma.user.findFirst.mockResolvedValue({ id: "user_in_org" });
+      }
 
-        const { getWebhookHandler } = await import(
-          "@/lib/payment/stripe-webhook-handler"
-        );
-        const handler = getWebhookHandler(eventType);
-        const result = await handler!(event);
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
+      const handler = getWebhookHandler(eventType);
+      const result = await handler!(event);
 
-        expect(result.handled).toBe(true);
-        expect(mockGate.invalidateCache).toHaveBeenCalledWith("org_1");
-      },
-    );
+      expect(result.handled).toBe(true);
+      expect(mockGate.invalidateCache).toHaveBeenCalledWith("org_1");
+    });
 
     it("does not invalidate cache when no orgId resolved", async () => {
       const sub = createSubscription({ metadata: { userId: "user_1" } });
-      const event = createEvent(
-        "customer.subscription.updated",
-        sub as unknown as Record<string, unknown>,
-      );
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -577,9 +547,7 @@ describe("Stripe Webhook Handlers", () => {
   // ============================================
 
   it("getWebhookHandler returns null for unknown event type", async () => {
-    const { getWebhookHandler } = await import(
-      "@/lib/payment/stripe-webhook-handler"
-    );
+    const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
     const handler = getWebhookHandler("unknown.event.type");
     expect(handler).toBeNull();
   });

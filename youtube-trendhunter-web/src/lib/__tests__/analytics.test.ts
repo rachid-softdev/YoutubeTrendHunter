@@ -13,13 +13,24 @@ vi.mock("posthog-js", () => ({
   },
 }));
 
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
+
+type PosthogMock = {
+  capture: ReturnType<typeof vi.fn>;
+  identify: ReturnType<typeof vi.fn>;
+  people: { set: ReturnType<typeof vi.fn> };
+  reset: ReturnType<typeof vi.fn>;
+};
+
 describe("analytics", () => {
-  let posthog: any;
+  let posthog: PosthogMock;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     const posthogModule = await import("posthog-js");
-    posthog = posthogModule.default;
+    posthog = coerce<PosthogMock>(posthogModule.default);
   });
 
   describe("user lifecycle", () => {

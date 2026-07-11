@@ -12,7 +12,9 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+
+type SessionLike = { user?: { id?: string; name?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 // Simple test for the health check logic
 describe("Health Check API", () => {
@@ -70,20 +72,20 @@ describe("Extension Auth API", () => {
 
   describe("authentication logic", () => {
     it("requires authentication", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       const isAuthenticated = !!session?.user?.id;
 
       expect(isAuthenticated).toBe(false);
     });
 
     it("allows authenticated users", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user_123", name: "Test", email: "test@example.com" },
-      } as any);
+      });
 
-      const session = await auth();
+      const session = await sessionMock();
       const isAuthenticated = !!session?.user?.id;
 
       expect(isAuthenticated).toBe(true);
@@ -120,7 +122,7 @@ describe("Extension Analyze API", () => {
 
     it("returns falsy when no header", () => {
       const authHeader: string | null = null;
-       
+
       const token = authHeader != null ? (authHeader as string).replace("Bearer ", "") : undefined;
       expect(token).toBeFalsy();
     });

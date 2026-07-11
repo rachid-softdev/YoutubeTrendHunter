@@ -2,7 +2,16 @@
 // PrismaEntitlementRepository — IEntitlementRepository impl
 // ============================================
 
-import { PrismaClient, Prisma } from "@prisma/client";
+import {
+  PrismaClient,
+  Prisma,
+  Plan,
+  Feature,
+  Organization,
+  Subscription,
+  EntitlementOverride,
+  UsageTracking,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { log } from "@/lib/logger";
 import type {
@@ -17,28 +26,119 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  FeatureType,
+  DowngradeStrategy,
 } from "./types";
 
-/**
- * Maps Prisma Subscription fields to our domain interface.
- */
-function mapSubscription(sub: Record<string, unknown>): SubscriptionRecord {
+function jsonToRecord(json: Prisma.JsonValue | null | undefined): Record<string, unknown> | null {
+  if (json === null || json === undefined) return null;
+  if (typeof json === "object" && !Array.isArray(json)) {
+    return json as Record<string, unknown>;
+  }
+  return null;
+}
+
+function toPlanRecord(p: Plan): PlanRecord {
   return {
-    id: sub.id as string,
-    userId: sub.userId as string,
-    orgId: (sub.orgId as string) ?? null,
-    planKey: (sub.planKey as string) ?? null,
-    plan: sub.plan as string,
+    id: p.id,
+    key: p.key,
+    name: p.name,
+    priceMonthly: p.priceMonthly,
+    isActive: p.isActive,
+    sortOrder: p.sortOrder,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
+}
+
+function toFeatureRecord(f: Feature): FeatureRecord {
+  return {
+    id: f.id,
+    key: f.key,
+    name: f.name,
+    description: f.description,
+    type: f.type as FeatureType,
+    defaultConfig: jsonToRecord(f.defaultConfig),
+    isActive: f.isActive,
+    createdAt: f.createdAt,
+    updatedAt: f.updatedAt,
+  };
+}
+
+type PlanFeatureWithRelations = Prisma.PlanFeatureGetPayload<{
+  include: { feature: true; plan: true };
+}>;
+
+function toPlanFeatureRecord(pf: PlanFeatureWithRelations): PlanFeatureRecord {
+  return {
+    id: pf.id,
+    planId: pf.planId,
+    featureId: pf.featureId,
+    enabled: pf.enabled,
+    limitValue: pf.limitValue,
+    configJson: jsonToRecord(pf.configJson),
+    downgradeStrategy: pf.downgradeStrategy as DowngradeStrategy,
+    sortOrder: pf.sortOrder,
+    plan: toPlanRecord(pf.plan),
+    feature: toFeatureRecord(pf.feature),
+  };
+}
+
+function toOrganizationRecord(o: Organization): OrganizationRecord {
+  return {
+    id: o.id,
+    name: o.name,
+    stripeCustomerId: o.stripeCustomerId,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+  };
+}
+
+function mapSubscription(sub: Subscription): SubscriptionRecord {
+  return {
+    id: sub.id,
+    userId: sub.userId,
+    orgId: sub.orgId ?? null,
+    planKey: sub.planKey ?? null,
+    plan: sub.plan,
     status: sub.status as SubscriptionStatus,
-    stripeSubscriptionId: (sub.stripeSubscriptionId as string) ?? null,
-    stripePriceId: (sub.stripePriceId as string) ?? null,
-    currentPeriodStart: (sub.currentPeriodStart as Date) ?? null,
-    currentPeriodEnd: (sub.currentPeriodEnd as Date) ?? null,
-    stripeCurrentPeriodEnd: (sub.stripeCurrentPeriodEnd as Date) ?? null,
-    trialEnd: (sub.trialEnd as Date) ?? null,
-    trialStart: (sub.trialStart as Date) ?? null,
-    createdAt: sub.createdAt as Date,
-    updatedAt: sub.updatedAt as Date,
+    stripeSubscriptionId: sub.stripeSubscriptionId ?? null,
+    stripePriceId: sub.stripePriceId ?? null,
+    currentPeriodStart: sub.currentPeriodStart ?? null,
+    currentPeriodEnd: sub.currentPeriodEnd ?? null,
+    stripeCurrentPeriodEnd: sub.stripeCurrentPeriodEnd ?? null,
+    trialEnd: sub.trialEnd ?? null,
+    trialStart: sub.trialStart ?? null,
+    createdAt: sub.createdAt,
+    updatedAt: sub.updatedAt,
+  };
+}
+
+function toOverrideRecord(o: EntitlementOverride): EntitlementOverrideRecord {
+  return {
+    id: o.id,
+    scope: o.scope as OverrideScope,
+    scopeId: o.scopeId,
+    featureKey: o.featureKey,
+    enabled: o.enabled,
+    limitValue: o.limitValue,
+    configJson: jsonToRecord(o.configJson),
+    expiresAt: o.expiresAt ?? null,
+    reason: o.reason,
+    organizationId: o.organizationId ?? null,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt,
+  };
+}
+
+function toUsageRecord(u: UsageTracking): UsageTrackingRecord {
+  return {
+    id: u.id,
+    orgId: u.orgId,
+    featureKey: u.featureKey,
+    usageCount: u.usageCount,
+    periodStart: u.periodStart,
+    periodEnd: u.periodEnd,
   };
 }
 
@@ -53,12 +153,12 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
 
   async getPlan(planKey: string): Promise<PlanRecord | null> {
     const plan = await this.prisma.plan.findUnique({ where: { key: planKey } });
-    return plan as unknown as PlanRecord | null;
+    return plan ? toPlanRecord(plan) : null;
   }
 
   async getAllPlans(): Promise<PlanRecord[]> {
     const plans = await this.prisma.plan.findMany({ orderBy: { sortOrder: "asc" } });
-    return plans as unknown as PlanRecord[];
+    return plans.map(toPlanRecord);
   }
 
   async getActivePlans(): Promise<PlanRecord[]> {
@@ -66,24 +166,24 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
     });
-    return plans as unknown as PlanRecord[];
+    return plans.map(toPlanRecord);
   }
 
   // ─── Features ───
 
   async getFeature(featureKey: string): Promise<FeatureRecord | null> {
     const feature = await this.prisma.feature.findUnique({ where: { key: featureKey } });
-    return feature as unknown as FeatureRecord | null;
+    return feature ? toFeatureRecord(feature) : null;
   }
 
   async getAllFeatures(): Promise<FeatureRecord[]> {
     const features = await this.prisma.feature.findMany();
-    return features as unknown as FeatureRecord[];
+    return features.map(toFeatureRecord);
   }
 
   async getActiveFeatures(): Promise<FeatureRecord[]> {
     const features = await this.prisma.feature.findMany({ where: { isActive: true } });
-    return features as unknown as FeatureRecord[];
+    return features.map(toFeatureRecord);
   }
 
   // ─── Plan Features ───
@@ -94,7 +194,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       include: { feature: true, plan: true },
       orderBy: { sortOrder: "asc" },
     });
-    return pfs as unknown as PlanFeatureRecord[];
+    return pfs.map(toPlanFeatureRecord);
   }
 
   async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureRecord | null> {
@@ -102,7 +202,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       where: { planId, feature: { key: featureKey } },
       include: { feature: true, plan: true },
     });
-    return pf as unknown as PlanFeatureRecord | null;
+    return pf ? toPlanFeatureRecord(pf) : null;
   }
 
   async getPlanFeaturesForPlan(planId: string): Promise<PlanFeatureRecord[]> {
@@ -113,7 +213,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
 
   async getOrganization(orgId: string): Promise<OrganizationRecord | null> {
     const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
-    return org as unknown as OrganizationRecord | null;
+    return org ? toOrganizationRecord(org) : null;
   }
 
   // ─── Subscription ───
@@ -126,16 +226,16 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       },
       orderBy: { createdAt: "desc" },
     });
-    return sub ? mapSubscription(sub as unknown as Record<string, unknown>) : null;
+    return sub ? mapSubscription(sub) : null;
   }
 
   async updateSubscription(
     orgId: string,
     data: Partial<SubscriptionRecord>,
   ): Promise<SubscriptionRecord> {
-    const sub = await this.prisma.subscription.updateMany({
+    await this.prisma.subscription.updateMany({
       where: { orgId },
-      data: data as Record<string, unknown>,
+      data: data as Prisma.SubscriptionUpdateManyMutationInput,
     });
     // Fetch and return the updated subscription
     const updated = await this.prisma.subscription.findFirst({
@@ -143,7 +243,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       orderBy: { updatedAt: "desc" },
     });
     if (!updated) throw new Error(`No subscription found for org ${orgId}`);
-    return mapSubscription(updated as unknown as Record<string, unknown>);
+    return mapSubscription(updated);
   }
 
   async createSubscription(
@@ -168,7 +268,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       },
     });
-    return mapSubscription(sub as unknown as Record<string, unknown>);
+    return mapSubscription(sub);
   }
 
   // ─── Overrides ───
@@ -187,7 +287,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
     });
-    return override as unknown as EntitlementOverrideRecord | null;
+    return override ? toOverrideRecord(override) : null;
   }
 
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
@@ -199,7 +299,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
     });
-    return overrides as unknown as EntitlementOverrideRecord[];
+    return overrides.map(toOverrideRecord);
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
@@ -211,7 +311,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
       },
     });
-    return overrides as unknown as EntitlementOverrideRecord[];
+    return overrides.map(toOverrideRecord);
   }
 
   async createOverride(data: CreateOverrideInput): Promise<EntitlementOverrideRecord> {
@@ -229,7 +329,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         organizationId: data.organizationId ?? null,
       },
     });
-    return override as unknown as EntitlementOverrideRecord;
+    return toOverrideRecord(override);
   }
 
   async updateOverride(
@@ -238,9 +338,9 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
   ): Promise<EntitlementOverrideRecord> {
     const override = await this.prisma.entitlementOverride.update({
       where: { id },
-      data: data as Record<string, unknown>,
+      data: data as Prisma.EntitlementOverrideUpdateInput,
     });
-    return override as unknown as EntitlementOverrideRecord;
+    return toOverrideRecord(override);
   }
 
   async deleteOverride(id: string): Promise<void> {
@@ -258,7 +358,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       },
       orderBy: { periodEnd: "desc" },
     });
-    return usage as unknown as UsageTrackingRecord | null;
+    return usage ? toUsageRecord(usage) : null;
   }
 
   async getUsageForPeriod(
@@ -273,7 +373,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         periodStart,
       },
     });
-    return usage as unknown as UsageTrackingRecord | null;
+    return usage ? toUsageRecord(usage) : null;
   }
 
   async createUsage(
@@ -291,7 +391,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
         periodEnd,
       },
     });
-    return usage as unknown as UsageTrackingRecord;
+    return toUsageRecord(usage);
   }
 
   /**
@@ -330,13 +430,13 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
       );
 
       if (result > 0) {
-        const updated = (await this.prisma.$queryRawUnsafe<Array<{ usageCount: number }>>(
+        const updated = await this.prisma.$queryRawUnsafe<Array<{ usageCount: number }>>(
           `SELECT "usageCount" FROM "UsageTracking"
            WHERE "orgId" = $1 AND "featureKey" = $2 AND "periodEnd" > NOW()
            ORDER BY "periodEnd" DESC LIMIT 1`,
           orgId,
           featureKey,
-        )) as unknown as Array<{ usageCount: number }>;
+        );
 
         const usageCount = updated[0]?.usageCount ?? 0;
         return { success: true, usageCount };
@@ -377,7 +477,7 @@ export class PrismaEntitlementRepository implements IEntitlementRepository {
 
       const now = new Date();
       const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      const created = await this.createUsage(orgId, featureKey, now, periodEnd);
+      await this.createUsage(orgId, featureKey, now, periodEnd);
       return { success: true, usageCount: amount };
     }
   }

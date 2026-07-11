@@ -24,6 +24,7 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
 
 // ============================================
@@ -169,7 +170,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
 
   // ─── Organization ───
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     this.trackCall("getOrganization");
     this.checkThrow("getOrganization");
     return null;
@@ -216,12 +217,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-      currentPeriodEnd:
-        data?.currentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCurrentPeriodEnd:
-        data?.stripeCurrentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -257,10 +255,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.checkThrow("getOverridesForOrg");
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "ORG" &&
-        o.scopeId === orgId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -269,10 +264,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.checkThrow("getOverridesForUser");
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "USER" &&
-        o.scopeId === userId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -319,10 +311,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
 
   // ─── Usage ───
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     this.trackCall("getCurrentUsage");
     this.checkThrow("getCurrentUsage");
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
@@ -360,12 +349,12 @@ class MockEntitlementRepository implements IEntitlementRepository {
 
   /**
    * Simulates the real consumeUsage with atomic/non-atomic paths:
-   * 
+   *
    * Atomic path (simulated):
    *   - If atomicShouldThrow → simulates $executeRawUnsafe throwing
    *   - If atomicReturnsZero → simulates UPDATE returning 0 rows (no active period)
    *   - Otherwise → successful atomic update (increment and return)
-   * 
+   *
    * Non-atomic fallback:
    *   - If nonAtomicShouldThrow → simulates fallback also failing
    *   - Otherwise → getCurrentUsage → update or create
@@ -496,10 +485,7 @@ function createPlan(key: string, name: string, sortOrder = 0): PlanRecord {
   };
 }
 
-function createFeature(
-  key: string,
-  type: "BOOLEAN" | "LIMIT" | "EXPERIMENT",
-): FeatureRecord {
+function createFeature(key: string, type: "BOOLEAN" | "LIMIT" | "EXPERIMENT"): FeatureRecord {
   return {
     id: `feature_${key}`,
     key,
@@ -788,7 +774,10 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("C5: createOverride throws on duplicate key", async () => {
-      repo.throwOnNext("createOverride", Object.assign(new Error("Unique constraint"), { code: "P2002" }));
+      repo.throwOnNext(
+        "createOverride",
+        Object.assign(new Error("Unique constraint"), { code: "P2002" }),
+      );
       await expect(
         repo.createOverride({
           scope: "ORG",
@@ -802,9 +791,9 @@ describe("EntitlementRepository Integration Tests", () => {
 
     it("C6: updateSubscription throws when no rows match", async () => {
       // No subscription created for this org
-      await expect(
-        repo.updateSubscription("org_nonexistent", { planKey: "free" }),
-      ).rejects.toThrow("No subscription found");
+      await expect(repo.updateSubscription("org_nonexistent", { planKey: "free" })).rejects.toThrow(
+        "No subscription found",
+      );
     });
 
     it("C7: deleteOverride throws when ID not found", async () => {
@@ -852,9 +841,9 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("C13: updateOverride throws on not found", async () => {
-      await expect(
-        repo.updateOverride("nonexistent", { enabled: true }),
-      ).rejects.toThrow("Override not found");
+      await expect(repo.updateOverride("nonexistent", { enabled: true })).rejects.toThrow(
+        "Override not found",
+      );
     });
 
     it("C14: hasStripeEventBeenProcessed throws — error propagates", async () => {
@@ -1011,8 +1000,20 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("D9: getOverridesForOrg returns only ORG-scoped overrides", async () => {
-      await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat1", enabled: true, reason: "Org override" });
-      await repo.createOverride({ scope: "USER", scopeId: "user1", featureKey: "feat2", enabled: true, reason: "User override" });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat1",
+        enabled: true,
+        reason: "Org override",
+      });
+      await repo.createOverride({
+        scope: "USER",
+        scopeId: "user1",
+        featureKey: "feat2",
+        enabled: true,
+        reason: "User override",
+      });
 
       const orgOverrides = await repo.getOverridesForOrg(ORG_ID);
       expect(orgOverrides).toHaveLength(1);
@@ -1158,9 +1159,9 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("E18: updateSubscription on nonexistent org throws", async () => {
-      await expect(
-        repo.updateSubscription("org_nobody", { planKey: "free" }),
-      ).rejects.toThrow("No subscription found");
+      await expect(repo.updateSubscription("org_nobody", { planKey: "free" })).rejects.toThrow(
+        "No subscription found",
+      );
     });
 
     it("E19: deleteOverride on nonexistent ID throws", async () => {
@@ -1222,9 +1223,27 @@ describe("EntitlementRepository Integration Tests", () => {
 
     it("F4: deleteOverride while iterating overrides from getOverridesForOrg", async () => {
       // Create multiple overrides
-      const o1 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_a", enabled: true, reason: "A" });
-      const o2 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_b", enabled: true, reason: "B" });
-      const o3 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_c", enabled: true, reason: "C" });
+      const o1 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_a",
+        enabled: true,
+        reason: "A",
+      });
+      const o2 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_b",
+        enabled: true,
+        reason: "B",
+      });
+      const o3 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_c",
+        enabled: true,
+        reason: "C",
+      });
 
       // Get list
       const before = await repo.getOverridesForOrg(ORG_ID);
@@ -1252,7 +1271,9 @@ describe("EntitlementRepository Integration Tests", () => {
 
       const allNonAtomic = results.every(() => repo.pathTracker.lastPath === "non-atomic-fallback");
       // At minimum, the last operation was non-atomic
-      expect(repo.pathTracker.paths.every((p) => p === "atomic" || p === "non-atomic-fallback")).toBe(true);
+      expect(
+        repo.pathTracker.paths.every((p) => p === "atomic" || p === "non-atomic-fallback"),
+      ).toBe(true);
 
       const usage = await repo.getCurrentUsage(ORG_ID, FEATURE_KEY);
       expect(usage?.usageCount).toBe(6);
@@ -1260,8 +1281,20 @@ describe("EntitlementRepository Integration Tests", () => {
 
     it("F6: concurrent createOverride for same key — no duplicates in list", async () => {
       const results = await Promise.all([
-        repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "same_key", enabled: true, reason: "R1" }),
-        repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "same_key", enabled: true, reason: "R2" }),
+        repo.createOverride({
+          scope: "ORG",
+          scopeId: ORG_ID,
+          featureKey: "same_key",
+          enabled: true,
+          reason: "R1",
+        }),
+        repo.createOverride({
+          scope: "ORG",
+          scopeId: ORG_ID,
+          featureKey: "same_key",
+          enabled: true,
+          reason: "R2",
+        }),
       ]);
 
       // The mock allows duplicates (real DB would have unique constraint)
@@ -1279,7 +1312,7 @@ describe("EntitlementRepository Integration Tests", () => {
   describe("G. MapSubscription Edge Cases", () => {
     /**
      * The real mapSubscription function in entitlement-repository.ts:
-     * 
+     *
      *   function mapSubscription(sub: Record<string, unknown>): SubscriptionRecord {
      *     return {
      *       id: sub.id as string,
@@ -1289,7 +1322,7 @@ describe("EntitlementRepository Integration Tests", () => {
      *       ...
      *     };
      *   }
-     * 
+     *
      * These tests validate that edge cases in the mapping logic are handled.
      */
 
@@ -1507,17 +1540,47 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("J2: multiple overrides for same org but different features — all returned", async () => {
-      await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_a", enabled: true, reason: "A" });
-      await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_b", enabled: false, reason: "B" });
-      await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "feat_c", enabled: true, reason: "C" });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_a",
+        enabled: true,
+        reason: "A",
+      });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_b",
+        enabled: false,
+        reason: "B",
+      });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "feat_c",
+        enabled: true,
+        reason: "C",
+      });
 
       const overrides = await repo.getOverridesForOrg(ORG_ID);
       expect(overrides).toHaveLength(3);
     });
 
     it("J3: overrides for different orgs don't mix", async () => {
-      await repo.createOverride({ scope: "ORG", scopeId: "org_a", featureKey: "feat_1", enabled: true, reason: "Org A" });
-      await repo.createOverride({ scope: "ORG", scopeId: "org_b", featureKey: "feat_2", enabled: true, reason: "Org B" });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: "org_a",
+        featureKey: "feat_1",
+        enabled: true,
+        reason: "Org A",
+      });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: "org_b",
+        featureKey: "feat_2",
+        enabled: true,
+        reason: "Org B",
+      });
 
       const orgAOverrides = await repo.getOverridesForOrg("org_a");
       expect(orgAOverrides).toHaveLength(1);
@@ -1529,8 +1592,20 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("J4: user-scoped overrides not returned by getOverridesForOrg", async () => {
-      await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "org_feat", enabled: true, reason: "Org" });
-      await repo.createOverride({ scope: "USER", scopeId: "user1", featureKey: "user_feat", enabled: true, reason: "User" });
+      await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "org_feat",
+        enabled: true,
+        reason: "Org",
+      });
+      await repo.createOverride({
+        scope: "USER",
+        scopeId: "user1",
+        featureKey: "user_feat",
+        enabled: true,
+        reason: "User",
+      });
 
       const orgOverrides = await repo.getOverridesForOrg(ORG_ID);
       expect(orgOverrides.every((o) => o.scope === "ORG")).toBe(true);
@@ -1676,8 +1751,11 @@ describe("EntitlementRepository Integration Tests", () => {
     it("M1: full lifecycle — create, read, update, delete override", async () => {
       // Create
       const created = await repo.createOverride({
-        scope: "ORG", scopeId: ORG_ID, featureKey: "lifecycle_feat",
-        enabled: true, reason: "Lifecycle test",
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "lifecycle_feat",
+        enabled: true,
+        reason: "Lifecycle test",
       });
       expect(created.id).toBeDefined();
 
@@ -1724,9 +1802,27 @@ describe("EntitlementRepository Integration Tests", () => {
     });
 
     it("M3: multiple overrides for same org — all retrievable", async () => {
-      const o1 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "f1", enabled: true, reason: "R1" });
-      const o2 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "f2", enabled: false, reason: "R2" });
-      const o3 = await repo.createOverride({ scope: "ORG", scopeId: ORG_ID, featureKey: "f3", enabled: true, reason: "R3" });
+      const o1 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "f1",
+        enabled: true,
+        reason: "R1",
+      });
+      const o2 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "f2",
+        enabled: false,
+        reason: "R2",
+      });
+      const o3 = await repo.createOverride({
+        scope: "ORG",
+        scopeId: ORG_ID,
+        featureKey: "f3",
+        enabled: true,
+        reason: "R3",
+      });
 
       expect(await repo.getOverride("ORG", ORG_ID, "f1")).not.toBeNull();
       expect(await repo.getOverride("ORG", ORG_ID, "f2")).not.toBeNull();

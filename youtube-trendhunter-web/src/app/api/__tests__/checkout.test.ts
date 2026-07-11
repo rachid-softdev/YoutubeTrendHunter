@@ -32,9 +32,13 @@ vi.mock("@/lib/rate-limit", () => ({
   withRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+
+type SessionLike = { user?: { id?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
+
+import { makeUser } from "@/__tests__/factories";
 
 describe("POST /api/stripe/checkout", () => {
   beforeEach(() => {
@@ -63,9 +67,9 @@ describe("POST /api/stripe/checkout", () => {
 
   describe("Authentication Check", () => {
     it("should return 401 when not authenticated", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       if (!session?.user?.id) {
         const response = new Response(JSON.stringify({ error: "Non authentifié" }), {
           status: 401,
@@ -75,11 +79,11 @@ describe("POST /api/stripe/checkout", () => {
     });
 
     it("should proceed when authenticated", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session?.user?.id).toBeDefined();
     });
   });
@@ -97,13 +101,9 @@ describe("POST /api/stripe/checkout", () => {
     });
 
     it("should find existing user", async () => {
-      const mockUser = {
-        id: "user-123",
-        email: "test@example.com",
-        name: "Test User",
-        stripeCustomerId: null,
-      };
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(
+        makeUser({ stripeCustomerId: null, email: "test@example.com", name: "Test User" }),
+      );
 
       const user = await prisma.user.findUnique({
         where: { id: "user-123" },
@@ -117,8 +117,10 @@ describe("POST /api/stripe/checkout", () => {
 
   describe("Stripe Customer Creation", () => {
     it("should create new Stripe customer if none exists", async () => {
-      const mockCustomer = { id: "cus_new123" };
-      vi.mocked(stripe.customers.create).mockResolvedValue(mockCustomer as any);
+      vi.mocked(stripe.customers.create).mockResolvedValue({
+        id: "cus_new123",
+        object: "customer",
+      } as Awaited<ReturnType<typeof stripe.customers.create>>);
 
       const customer = await stripe.customers.create({
         email: "test@example.com",
@@ -161,8 +163,11 @@ describe("POST /api/stripe/checkout", () => {
 
   describe("Checkout Session Creation", () => {
     it("should create checkout session with correct parameters", async () => {
-      const mockSession = { url: "https://checkout.stripe.com/session_123" };
-      vi.mocked(stripe.checkout.sessions.create).mockResolvedValue(mockSession as any);
+      vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
+        id: "session_123",
+        object: "checkout.session",
+        url: "https://checkout.stripe.com/session_123",
+      } as Awaited<ReturnType<typeof stripe.checkout.sessions.create>>);
 
       const session = await stripe.checkout.sessions.create({
         customer: "cus_123",

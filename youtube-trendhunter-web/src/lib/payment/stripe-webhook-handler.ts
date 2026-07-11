@@ -18,6 +18,11 @@ import type { WebhookResult } from "./provider";
 
 type WebhookEventHandler = (event: Stripe.Event) => Promise<WebhookResult>;
 
+/** View of a Stripe.Invoice exposing its `subscription` field (not present on the typed `Stripe.Invoice` in this Stripe version). */
+interface InvoiceSubscriptionView {
+  subscription?: string | Stripe.Subscription | null;
+}
+
 /** Safely extract the first price ID from a Stripe subscription's items list. */
 function getPriceIdFromSub(sub: Stripe.Subscription): string | null {
   return sub.items.data[0]?.price?.id ?? null;
@@ -336,8 +341,7 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_succeeded": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
-    const invSub = (invoice as unknown as { subscription: string | Stripe.Subscription | null })
-      .subscription;
+    const invSub = (invoice as InvoiceSubscriptionView).subscription;
     if (!invSub) {
       return { handled: false, eventType: event.type };
     }
@@ -407,8 +411,7 @@ const handlers: Record<string, WebhookEventHandler> = {
 
   "invoice.payment_failed": async (event) => {
     const invoice = event.data.object as Stripe.Invoice;
-    const invSub = (invoice as unknown as { subscription: string | Stripe.Subscription | null })
-      .subscription;
+    const invSub = (invoice as InvoiceSubscriptionView).subscription;
     if (!invSub) {
       return { handled: false, eventType: event.type };
     }

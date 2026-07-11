@@ -3,10 +3,6 @@ import { alertCreateSchema, alertUpdateSchema } from "@/lib/schemas";
 
 // ─── Module Mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     alert: {
@@ -83,10 +79,13 @@ vi.mock("@/lib/rate-limit", () => ({
   withRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getCached, setCached, invalidateCache } from "@/lib/cache";
 import { auditLog } from "@/lib/audit-log";
+import { makeAlert, makeNiche, makeUserNiche } from "@/__tests__/factories";
+
+type SessionLike = { user?: { id?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 describe("Alerts CRUD", () => {
   beforeEach(() => {
@@ -164,9 +163,9 @@ describe("Alerts CRUD", () => {
 
   describe("GET /api/alerts — business logic", () => {
     it("should return 401 when user is not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       if (!session?.user?.id) {
         const response = { status: 401, body: { error: "Non authentifié" } };
         expect(response.status).toBe(401);
@@ -174,21 +173,32 @@ describe("Alerts CRUD", () => {
     });
 
     it("should fetch alerts when user is authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
       const mockAlerts = [
-        { id: "alert-1", type: "SCORE_THRESHOLD", threshold: 70, isActive: true },
-        { id: "alert-2", type: "DAILY_DIGEST", threshold: 50, isActive: true },
+        {
+          ...makeAlert({ id: "alert-1", type: "SCORE_THRESHOLD", threshold: 70, isActive: true }),
+          niche: null,
+        },
+        {
+          ...makeAlert({ id: "alert-2", type: "DAILY_DIGEST", threshold: 50, isActive: true }),
+          niche: null,
+        },
       ];
-      const mockUserNiches = [{ nicheId: "niche-1" }];
+      const mockUserNiches = [
+        {
+          ...makeUserNiche({ nicheId: "niche-1" }),
+          niche: makeNiche({ id: "niche-1", slug: "niche-1", name: "Niche 1" }),
+        },
+      ];
 
       const { getUserAlerts } = await import("@/lib/services/alert.service");
       const { getUserNiches } = await import("@/lib/services/niche.service");
 
-      vi.mocked(getUserAlerts).mockResolvedValue(mockAlerts as any);
-      vi.mocked(getUserNiches).mockResolvedValue(mockUserNiches as any);
+      vi.mocked(getUserAlerts).mockResolvedValue(mockAlerts);
+      vi.mocked(getUserNiches).mockResolvedValue(mockUserNiches);
 
       const alerts = await getUserAlerts("user-123");
       const userNiches = await getUserNiches("user-123");
@@ -201,9 +211,9 @@ describe("Alerts CRUD", () => {
     });
 
     it("should return cached alerts when cache hit", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
       const cachedData = { alerts: [{ id: "cached-alert" }], plan: "PRO" };
       vi.mocked(getCached).mockResolvedValue(cachedData);
 
@@ -213,13 +223,13 @@ describe("Alerts CRUD", () => {
     });
 
     it("should set cache after fetching alerts", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      const mockAlerts = [{ id: "alert-1" }];
+      const mockAlerts = [{ ...makeAlert({ id: "alert-1" }), niche: null }];
       const { getUserAlerts } = await import("@/lib/services/alert.service");
-      vi.mocked(getUserAlerts).mockResolvedValue(mockAlerts as any);
+      vi.mocked(getUserAlerts).mockResolvedValue(mockAlerts);
 
       const alerts = await getUserAlerts("user-123");
       const data = { alerts, userNiches: [], plan: "PRO", canCreate: true };
@@ -244,9 +254,15 @@ describe("Alerts CRUD", () => {
       expect(parsed.success).toBe(true);
 
       if (parsed.success) {
-        const mockAlert = { id: "alert-new", ...parsed.data, userId: "user-123" };
+        const mockAlert = makeAlert({
+          id: "alert-new",
+          userId: "user-123",
+          type: parsed.data.type,
+          threshold: parsed.data.threshold,
+          channel: parsed.data.channel,
+        });
         const { createAlert } = await import("@/lib/services/alert.service");
-        vi.mocked(createAlert).mockResolvedValue(mockAlert as any);
+        vi.mocked(createAlert).mockResolvedValue(mockAlert);
 
         const alert = await createAlert({
           userId: "user-123",
@@ -312,8 +328,14 @@ describe("Alerts CRUD", () => {
 
       if (parsed.success) {
         const { createAlert } = await import("@/lib/services/alert.service");
-        const mockAlert = { id: "alert-webhook", ...parsed.data };
-        vi.mocked(createAlert).mockResolvedValue(mockAlert as any);
+        const mockAlert = makeAlert({
+          id: "alert-webhook",
+          type: parsed.data.type,
+          threshold: parsed.data.threshold,
+          channel: parsed.data.channel,
+          webhookUrl: parsed.data.webhookUrl,
+        });
+        vi.mocked(createAlert).mockResolvedValue(mockAlert);
 
         const alert = await createAlert({
           userId: "user-123",
@@ -332,12 +354,12 @@ describe("Alerts CRUD", () => {
 
   describe("GET /api/alerts/[id] — business logic", () => {
     it("should find alert by id for the current user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      const mockAlert = { id: "alert-1", userId: "user-123", type: "SCORE_THRESHOLD" };
-      vi.mocked(prisma.alert.findFirst).mockResolvedValue(mockAlert as any);
+      const mockAlert = makeAlert({ id: "alert-1", userId: "user-123", type: "SCORE_THRESHOLD" });
+      vi.mocked(prisma.alert.findFirst).mockResolvedValue(mockAlert);
 
       const alert = await prisma.alert.findFirst({
         where: { id: "alert-1", userId: "user-123" },
@@ -372,12 +394,16 @@ describe("Alerts CRUD", () => {
 
   describe("PATCH /api/alerts/[id] — business logic", () => {
     it("should update alert with valid data", async () => {
-      const existingAlert = { id: "alert-1", userId: "user-123", threshold: 70, isActive: true };
-      vi.mocked(prisma.alert.findFirst).mockResolvedValue(existingAlert as any);
-      vi.mocked(prisma.alert.findUnique).mockResolvedValue({
-        ...existingAlert,
-        threshold: 85,
-      } as any);
+      const existingAlert = makeAlert({
+        id: "alert-1",
+        userId: "user-123",
+        threshold: 70,
+        isActive: true,
+      });
+      vi.mocked(prisma.alert.findFirst).mockResolvedValue(existingAlert);
+      vi.mocked(prisma.alert.findUnique).mockResolvedValue(
+        makeAlert({ id: "alert-1", userId: "user-123", threshold: 85, isActive: true }),
+      );
 
       const parsed = alertUpdateSchema.safeParse({ threshold: 85 });
       expect(parsed.success).toBe(true);
@@ -387,7 +413,9 @@ describe("Alerts CRUD", () => {
         if (parsed.data.threshold !== undefined) updateData.threshold = parsed.data.threshold;
 
         const { updateAlert } = await import("@/lib/alerts");
-        vi.mocked(updateAlert).mockResolvedValue({ ...existingAlert, threshold: 85 } as any);
+        vi.mocked(updateAlert).mockResolvedValue(
+          makeAlert({ id: "alert-1", userId: "user-123", threshold: 85, isActive: true }),
+        );
 
         const alert = await updateAlert("alert-1", "user-123", updateData);
         expect(alert.threshold).toBe(85);
@@ -409,12 +437,14 @@ describe("Alerts CRUD", () => {
 
   describe("DELETE /api/alerts/[id] — business logic", () => {
     it("should delete alert and audit log", async () => {
-      vi.mocked(prisma.alert.findFirst).mockResolvedValue({
-        id: "alert-1",
-        userId: "user-123",
-        type: "SCORE_THRESHOLD",
-        nicheId: "niche-1",
-      } as any);
+      vi.mocked(prisma.alert.findFirst).mockResolvedValue(
+        makeAlert({
+          id: "alert-1",
+          userId: "user-123",
+          type: "SCORE_THRESHOLD",
+          nicheId: "niche-1",
+        }),
+      );
 
       const existing = await prisma.alert.findFirst({
         where: { id: "alert-1", userId: "user-123" },

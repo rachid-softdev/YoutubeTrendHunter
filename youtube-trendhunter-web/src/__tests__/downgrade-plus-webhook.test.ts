@@ -8,7 +8,7 @@
 //   - Webhook → DowngradeService integration
 // ============================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mocked, type Mock } from "vitest";
 import type Stripe from "stripe";
 
 // ─── Module-level mocks (shared across all sections) ───
@@ -25,9 +25,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
+const stripeRetrieveMock = vi.hoisted(() =>
+  vi.fn<(id: string) => Promise<StripeSubscriptionStub>>(),
+);
+
 vi.mock("@/lib/stripe", () => ({
   stripe: {
-    subscriptions: { retrieve: vi.fn() },
+    subscriptions: { retrieve: stripeRetrieveMock },
   },
 }));
 
@@ -69,6 +73,86 @@ import type {
   FeatureType,
 } from "@/lib/feature-flags/types";
 import type { FeatureGateService } from "@/lib/feature-flags";
+import { FeatureGateService as FeatureGateServiceClass } from "@/lib/feature-flags/feature-gate.service";
+import { DowngradeService } from "@/lib/feature-flags/downgrade.service";
+
+// ─── Shared typed mock factories ───
+// FeatureGateService / DowngradeService are classes with private members, so a
+// partial object literal cannot be assigned to them. We build a real instance
+// and deep-mock it via vi.mocked(..., true) — the only rule-compliant way to
+// obtain a Mocked<X> that is assignable to the class type.
+
+function makeMockRepo(): Mocked<IEntitlementRepository> {
+  return {
+    getPlan: vi.fn(),
+    getAllPlans: vi.fn(),
+    getActivePlans: vi.fn(),
+    getFeature: vi.fn(),
+    getAllFeatures: vi.fn(),
+    getActiveFeatures: vi.fn(),
+    getPlanFeatures: vi.fn(),
+    getPlanFeature: vi.fn(),
+    getOrganization: vi.fn(),
+    getActiveSubscription: vi.fn(),
+    updateSubscription: vi.fn(),
+    createSubscription: vi.fn(),
+    getOverride: vi.fn(),
+    getOverridesForOrg: vi.fn(),
+    getOverridesForUser: vi.fn(),
+    createOverride: vi.fn(),
+    updateOverride: vi.fn(),
+    deleteOverride: vi.fn(),
+    getCurrentUsage: vi.fn(),
+    getUsageForPeriod: vi.fn(),
+    createUsage: vi.fn(),
+    consumeUsage: vi.fn(),
+    hasStripeEventBeenProcessed: vi.fn(),
+    markStripeEventProcessed: vi.fn(),
+    getPlanFeaturesForPlan: vi.fn(),
+  } as Mocked<IEntitlementRepository>;
+}
+
+function makeMockCache(): Mocked<ICacheService> {
+  return {
+    get: vi.fn(),
+    set: vi.fn(),
+    del: vi.fn(),
+    delPattern: vi.fn(),
+    publishInvalidation: vi.fn(),
+    subscribe: vi.fn(),
+  } as Mocked<ICacheService>;
+}
+
+function makeMockGate(
+  repo: Mocked<IEntitlementRepository>,
+  cache: Mocked<ICacheService>,
+): Mocked<FeatureGateService> {
+  const gate = new FeatureGateServiceClass(repo, cache);
+  gate.hasFeature = vi.fn();
+  gate.getLimit = vi.fn();
+  gate.assertFeature = vi.fn();
+  gate.canConsume = vi.fn();
+  gate.consume = vi.fn();
+  gate.getAllEntitlements = vi.fn();
+  gate.getDebugTrace = vi.fn();
+  gate.invalidateCache = vi.fn();
+  gate.isInExperiment = vi.fn();
+  gate.getExperimentConfig = vi.fn();
+  gate.getExperimentBucket = vi.fn();
+  return gate as Mocked<FeatureGateService>;
+}
+
+function makeMockDowngrade(
+  repo: Mocked<IEntitlementRepository>,
+  gate: Mocked<FeatureGateService>,
+  cache: Mocked<ICacheService>,
+): Mocked<DowngradeService> {
+  const downgrade = new DowngradeService(repo, gate, cache);
+  downgrade.previewDowngrade = vi.fn();
+  downgrade.applyDowngradeStrategy = vi.fn();
+  downgrade.processGracefulDowngrades = vi.fn();
+  return downgrade as Mocked<DowngradeService>;
+}
 
 // ─── Plan factory ───
 
@@ -107,12 +191,16 @@ function makeFeature(
 
 // ─── PlanFeature factory ───
 
-function makePlanFeature(overrides: Partial<PlanFeatureRecord> & { featureKey?: string }): PlanFeatureRecord {
-  const feature: FeatureRecord = overrides.feature as FeatureRecord ?? makeFeature(
-    `feat_${overrides.featureKey ?? "unknown"}`,
-    overrides.featureKey ?? "unknown",
-    "BOOLEAN",
-  );
+function makePlanFeature(
+  overrides: Partial<PlanFeatureRecord> & { featureKey?: string },
+): PlanFeatureRecord {
+  const feature: FeatureRecord =
+    (overrides.feature as FeatureRecord) ??
+    makeFeature(
+      `feat_${overrides.featureKey ?? "unknown"}`,
+      overrides.featureKey ?? "unknown",
+      "BOOLEAN",
+    );
   return {
     id: `pf_${feature.key}_${Date.now()}`,
     planId: "plan_mock",
@@ -129,7 +217,9 @@ function makePlanFeature(overrides: Partial<PlanFeatureRecord> & { featureKey?: 
 
 // ─── Subscription factory ───
 
-function makeSubscription(overrides: Partial<SubscriptionRecord> & { planKey: string }): SubscriptionRecord {
+function makeSubscription(
+  overrides: Partial<SubscriptionRecord> & { planKey: string },
+): SubscriptionRecord {
   return {
     id: "sub_mock",
     userId: "user_mock",
@@ -151,11 +241,12 @@ function makeSubscription(overrides: Partial<SubscriptionRecord> & { planKey: st
 
 // ─── Usage factory ───
 
-function makeUsage(overrides: Partial<UsageTrackingRecord> & { featureKey: string }): UsageTrackingRecord {
+function makeUsage(
+  overrides: Partial<UsageTrackingRecord> & { featureKey: string },
+): UsageTrackingRecord {
   return {
     id: `usage_${overrides.featureKey}`,
     orgId: "org_1",
-    featureKey: overrides.featureKey,
     usageCount: 42,
     periodStart: new Date("2025-01-01"),
     periodEnd: new Date("2025-02-01"),
@@ -170,9 +261,9 @@ function makeUsage(overrides: Partial<UsageTrackingRecord> & { featureKey: strin
 describe("DowngradeService", () => {
   // We import the real class (bypasses barrel mock)
   let DowngradeService: typeof import("@/lib/feature-flags/downgrade.service")["DowngradeService"];
-  let mockRepo: jest.Mocked<IEntitlementRepository>;
-  let mockGate: jest.Mocked<FeatureGateService>;
-  let mockCache: jest.Mocked<ICacheService>;
+  let mockRepo: Mocked<IEntitlementRepository>;
+  let mockGate: Mocked<FeatureGateService>;
+  let mockCache: Mocked<ICacheService>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -180,50 +271,11 @@ describe("DowngradeService", () => {
     const mod = await import("@/lib/feature-flags/downgrade.service");
     DowngradeService = mod.DowngradeService;
 
-    // Build mock repository
-    mockRepo = {
-      getActiveSubscription: vi.fn(),
-      getPlan: vi.fn(),
-      getPlanFeatures: vi.fn(),
-      getPlanFeature: vi.fn(),
-      getCurrentUsage: vi.fn(),
-      createOverride: vi.fn(),
-      getAllPlans: vi.fn(),
-      // Unused stubs
-      getFeature: vi.fn(),
-      getAllFeatures: vi.fn(),
-      getActiveFeatures: vi.fn(),
-      getOrganization: vi.fn(),
-      updateSubscription: vi.fn(),
-      createSubscription: vi.fn(),
-      getOverride: vi.fn(),
-      getOverridesForOrg: vi.fn(),
-      getOverridesForUser: vi.fn(),
-      updateOverride: vi.fn(),
-      deleteOverride: vi.fn(),
-      getUsageForPeriod: vi.fn(),
-      createUsage: vi.fn(),
-      consumeUsage: vi.fn(),
-      hasStripeEventBeenProcessed: vi.fn(),
-      markStripeEventProcessed: vi.fn(),
-      getPlanFeaturesForPlan: vi.fn(),
-      getActivePlans: vi.fn(),
-    } as unknown as jest.Mocked<IEntitlementRepository>;
-
-    // Mock gate service (needs invalidateCache)
-    mockGate = {
-      invalidateCache: vi.fn(),
-    } as unknown as jest.Mocked<FeatureGateService>;
-
-    // Mock cache service
-    mockCache = {
-      publishInvalidation: vi.fn(),
-      get: vi.fn(),
-      set: vi.fn(),
-      del: vi.fn(),
-      delPattern: vi.fn(),
-      subscribe: vi.fn(),
-    } as unknown as jest.Mocked<ICacheService>;
+    // Build mock repository / cache / gate (deep-mocked so they satisfy the
+    // class types that carry private members).
+    mockRepo = makeMockRepo();
+    mockCache = makeMockCache();
+    mockGate = makeMockGate(mockRepo, mockCache);
   });
 
   // ============================================
@@ -238,19 +290,39 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       const proFeatures = [
-        makePlanFeature({ featureKey: "analytics", feature: makeFeature("f1", "analytics", "BOOLEAN"), enabled: true }),
-        makePlanFeature({ featureKey: "api_access", feature: makeFeature("f2", "api_access", "BOOLEAN"), enabled: true, downgradeStrategy: "GRACEFUL" }),
-        makePlanFeature({ featureKey: "seats", feature: makeFeature("f3", "seats", "LIMIT"), limitValue: 10, downgradeStrategy: "FREEZE" }),
+        makePlanFeature({
+          featureKey: "analytics",
+          feature: makeFeature("f1", "analytics", "BOOLEAN"),
+          enabled: true,
+        }),
+        makePlanFeature({
+          featureKey: "api_access",
+          feature: makeFeature("f2", "api_access", "BOOLEAN"),
+          enabled: true,
+          downgradeStrategy: "GRACEFUL",
+        }),
+        makePlanFeature({
+          featureKey: "seats",
+          feature: makeFeature("f3", "seats", "LIMIT"),
+          limitValue: 10,
+          downgradeStrategy: "FREEZE",
+        }),
       ];
 
       const freeFeatures = [
-        makePlanFeature({ featureKey: "analytics", feature: makeFeature("f1", "analytics", "BOOLEAN"), enabled: true }),
+        makePlanFeature({
+          featureKey: "analytics",
+          feature: makeFeature("f1", "analytics", "BOOLEAN"),
+          enabled: true,
+        }),
         // api_access NOT in free plan → full_loss
         // seats NOT in free plan → full_loss
       ];
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) =>
         planId === "plan_pro" ? proFeatures : freeFeatures,
       );
@@ -329,7 +401,7 @@ describe("DowngradeService", () => {
       const sub = makeSubscription({ planKey: "pro", orgId: "org_1" });
       const proPlan = makePlan({ id: "plan_pro", key: "pro" });
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : null);
+      mockRepo.getPlan.mockImplementation(async (key: string) => (key === "pro" ? proPlan : null));
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
 
@@ -344,11 +416,20 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
-      mockRepo.getPlanFeatures.mockImplementation(async (planId: string) =>
-        planId === "plan_pro"
-          ? [makePlanFeature({ featureKey: "premium_feature", feature: makeFeature("f1", "premium_feature", "BOOLEAN"), enabled: true })]
-          : [], // free plan has no features
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
+      mockRepo.getPlanFeatures.mockImplementation(
+        async (planId: string) =>
+          planId === "plan_pro"
+            ? [
+                makePlanFeature({
+                  featureKey: "premium_feature",
+                  feature: makeFeature("f1", "premium_feature", "BOOLEAN"),
+                  enabled: true,
+                }),
+              ]
+            : [], // free plan has no features
       );
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
@@ -370,7 +451,9 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "analytics", "BOOLEAN");
         if (planId === "plan_pro") {
@@ -398,11 +481,15 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "seats", "LIMIT");
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "seats", feature, limitValue: null, enabled: true })]; // unlimited
+          return [
+            makePlanFeature({ featureKey: "seats", feature, limitValue: null, enabled: true }),
+          ]; // unlimited
         }
         return [makePlanFeature({ featureKey: "seats", feature, limitValue: 500, enabled: true })]; // limited to 500
       });
@@ -426,11 +513,15 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "seats", "LIMIT");
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "seats", feature, limitValue: 1000, enabled: true })];
+          return [
+            makePlanFeature({ featureKey: "seats", feature, limitValue: 1000, enabled: true }),
+          ];
         }
         return [makePlanFeature({ featureKey: "seats", feature, limitValue: 100, enabled: true })];
       });
@@ -454,12 +545,12 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "seats", "LIMIT");
-        return [
-          makePlanFeature({ featureKey: "seats", feature, limitValue: 100, enabled: true }),
-        ];
+        return [makePlanFeature({ featureKey: "seats", feature, limitValue: 100, enabled: true })];
       });
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
@@ -476,7 +567,9 @@ describe("DowngradeService", () => {
       const proPlan = makePlan({ id: "plan_pro", key: "pro" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "starter" ? starterPlan : proPlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "starter" ? starterPlan : proPlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "seats", "LIMIT");
         if (planId === "plan_starter") {
@@ -500,7 +593,9 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const feature = makeFeature("f1", "analytics", "BOOLEAN");
         if (planId === "plan_pro") {
@@ -529,22 +624,54 @@ describe("DowngradeService", () => {
       const seatsFeature = makeFeature("f4", "seats", "LIMIT");
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
           return [
-            makePlanFeature({ featureKey: "analytics", feature: analyticsFeature, enabled: true, downgradeStrategy: "IMMEDIATE" }),
-            makePlanFeature({ featureKey: "api_access", feature: apiFeature, enabled: true, downgradeStrategy: "GRACEFUL" }),
-            makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 1000, downgradeStrategy: "FREEZE" }),
-            makePlanFeature({ featureKey: "seats", feature: seatsFeature, limitValue: 50, downgradeStrategy: "IMMEDIATE" }),
+            makePlanFeature({
+              featureKey: "analytics",
+              feature: analyticsFeature,
+              enabled: true,
+              downgradeStrategy: "IMMEDIATE",
+            }),
+            makePlanFeature({
+              featureKey: "api_access",
+              feature: apiFeature,
+              enabled: true,
+              downgradeStrategy: "GRACEFUL",
+            }),
+            makePlanFeature({
+              featureKey: "storage",
+              feature: storageFeature,
+              limitValue: 1000,
+              downgradeStrategy: "FREEZE",
+            }),
+            makePlanFeature({
+              featureKey: "seats",
+              feature: seatsFeature,
+              limitValue: 50,
+              downgradeStrategy: "IMMEDIATE",
+            }),
           ];
         }
         return [
-          makePlanFeature({ featureKey: "analytics", feature: analyticsFeature, enabled: true, downgradeStrategy: "IMMEDIATE" }),
+          makePlanFeature({
+            featureKey: "analytics",
+            feature: analyticsFeature,
+            enabled: true,
+            downgradeStrategy: "IMMEDIATE",
+          }),
           // api_access missing → full_loss GRACEFUL
           // storage → limited to 100 FREEZE
           // seats missing → full_loss IMMEDIATE
-          makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 100, downgradeStrategy: "FREEZE" }),
+          makePlanFeature({
+            featureKey: "storage",
+            feature: storageFeature,
+            limitValue: 100,
+            downgradeStrategy: "FREEZE",
+          }),
         ];
       });
 
@@ -578,18 +705,33 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         const experimentFeature = makeFeature("f1", "new_dashboard", "EXPERIMENT");
         if (planId === "plan_pro") {
           return [
-            makePlanFeature({ featureKey: "new_dashboard", feature: experimentFeature, enabled: true, downgradeStrategy: "IMMEDIATE" }),
-            makePlanFeature({ featureKey: "analytics", feature: makeFeature("f2", "analytics", "BOOLEAN"), enabled: true }),
+            makePlanFeature({
+              featureKey: "new_dashboard",
+              feature: experimentFeature,
+              enabled: true,
+              downgradeStrategy: "IMMEDIATE",
+            }),
+            makePlanFeature({
+              featureKey: "analytics",
+              feature: makeFeature("f2", "analytics", "BOOLEAN"),
+              enabled: true,
+            }),
           ];
         }
         return [
           // new_dashboard NOT in free → full_loss
-          makePlanFeature({ featureKey: "analytics", feature: makeFeature("f2", "analytics", "BOOLEAN"), enabled: false }),
+          makePlanFeature({
+            featureKey: "analytics",
+            feature: makeFeature("f2", "analytics", "BOOLEAN"),
+            enabled: false,
+          }),
         ];
       });
 
@@ -612,12 +754,24 @@ describe("DowngradeService", () => {
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
           return [
             // Feature with null feature object
-            { id: "pf_orphan", planId: "plan_pro", featureId: "f_orphan", enabled: true, limitValue: null, configJson: null, downgradeStrategy: "IMMEDIATE", sortOrder: 0, feature: null },
+            {
+              id: "pf_orphan",
+              planId: "plan_pro",
+              featureId: "f_orphan",
+              enabled: true,
+              limitValue: null,
+              configJson: null,
+              downgradeStrategy: "IMMEDIATE",
+              sortOrder: 0,
+              feature: undefined,
+            },
           ] as PlanFeatureRecord[];
         }
         return [];
@@ -640,19 +794,35 @@ describe("DowngradeService", () => {
       const entPlan = makePlan({ id: "plan_ent", key: "enterprise" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : entPlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : entPlan,
+      );
 
       const storageFeature = makeFeature("f1", "storage", "LIMIT");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
           return [
-            makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 100, enabled: true }),
+            makePlanFeature({
+              featureKey: "storage",
+              feature: storageFeature,
+              limitValue: 100,
+              enabled: true,
+            }),
           ];
         }
         // Enterprise has storage + extra features
         return [
-          makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 500, enabled: true }),
-          makePlanFeature({ featureKey: "analytics", feature: makeFeature("f2", "analytics", "BOOLEAN"), enabled: true }),
+          makePlanFeature({
+            featureKey: "storage",
+            feature: storageFeature,
+            limitValue: 500,
+            enabled: true,
+          }),
+          makePlanFeature({
+            featureKey: "analytics",
+            feature: makeFeature("f2", "analytics", "BOOLEAN"),
+            enabled: true,
+          }),
         ];
       });
 
@@ -679,19 +849,32 @@ describe("DowngradeService", () => {
     beforeEach(() => {
       // Common setup for applyDowngradeStrategy tests:
       // The subscription currently has the OLD plan (pro) in DB
-      const sub = makeSubscription({ planKey: "pro", orgId: "org_1", currentPeriodEnd: new Date(PERIOD_END * 1000) });
+      const sub = makeSubscription({
+        planKey: "pro",
+        orgId: "org_1",
+        currentPeriodEnd: new Date(PERIOD_END * 1000),
+      });
       const proPlan = makePlan({ id: "plan_pro", key: "pro" });
       const freePlan = makePlan({ id: "plan_free", key: "free" });
 
       mockRepo.getActiveSubscription.mockResolvedValue(sub);
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
     });
 
     it("GRACEFUL strategy logs and returns impact", async () => {
       const graceFeature = makeFeature("f1", "api_access", "BOOLEAN");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "api_access", feature: graceFeature, enabled: true, downgradeStrategy: "GRACEFUL" })];
+          return [
+            makePlanFeature({
+              featureKey: "api_access",
+              feature: graceFeature,
+              enabled: true,
+              downgradeStrategy: "GRACEFUL",
+            }),
+          ];
         }
         return [];
       });
@@ -709,10 +892,14 @@ describe("DowngradeService", () => {
 
       // Should log a graceful downgrade notice
       const { log } = await import("@/lib/logger");
-      expect(log).toHaveBeenCalledWith("info", "[Downgrade] Graceful downgrade scheduled", expect.objectContaining({
-        orgId: "org_1",
-        feature: "api_access",
-      }));
+      expect(log).toHaveBeenCalledWith(
+        "info",
+        "[Downgrade] Graceful downgrade scheduled",
+        expect.objectContaining({
+          orgId: "org_1",
+          feature: "api_access",
+        }),
+      );
 
       // Cache should be invalidated
       expect(mockCache.publishInvalidation).toHaveBeenCalledWith("org_1");
@@ -722,7 +909,14 @@ describe("DowngradeService", () => {
       const immediateFeature = makeFeature("f1", "analytics", "BOOLEAN");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "analytics", feature: immediateFeature, enabled: true, downgradeStrategy: "IMMEDIATE" })];
+          return [
+            makePlanFeature({
+              featureKey: "analytics",
+              feature: immediateFeature,
+              enabled: true,
+              downgradeStrategy: "IMMEDIATE",
+            }),
+          ];
         }
         return [];
       });
@@ -740,14 +934,32 @@ describe("DowngradeService", () => {
       const storageFeature = makeFeature("f1", "storage", "LIMIT");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 1000, enabled: true, downgradeStrategy: "FREEZE" })];
+          return [
+            makePlanFeature({
+              featureKey: "storage",
+              feature: storageFeature,
+              limitValue: 1000,
+              enabled: true,
+              downgradeStrategy: "FREEZE",
+            }),
+          ];
         }
         // LIMIT reduction path uses targetPf.downgradeStrategy (line 97)
-        return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 100, enabled: true, downgradeStrategy: "FREEZE" })];
+        return [
+          makePlanFeature({
+            featureKey: "storage",
+            feature: storageFeature,
+            limitValue: 100,
+            enabled: true,
+            downgradeStrategy: "FREEZE",
+          }),
+        ];
       });
 
       // Current usage is 350
-      mockRepo.getCurrentUsage.mockResolvedValue(makeUsage({ featureKey: "storage", usageCount: 350 }));
+      mockRepo.getCurrentUsage.mockResolvedValue(
+        makeUsage({ featureKey: "storage", usageCount: 350 }),
+      );
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
 
@@ -774,10 +986,26 @@ describe("DowngradeService", () => {
       const storageFeature = makeFeature("f1", "storage", "LIMIT");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 1000, enabled: true, downgradeStrategy: "FREEZE" })];
+          return [
+            makePlanFeature({
+              featureKey: "storage",
+              feature: storageFeature,
+              limitValue: 1000,
+              enabled: true,
+              downgradeStrategy: "FREEZE",
+            }),
+          ];
         }
         // LIMIT reduction uses targetPf.downgradeStrategy (line 97)
-        return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 100, enabled: true, downgradeStrategy: "FREEZE" })];
+        return [
+          makePlanFeature({
+            featureKey: "storage",
+            feature: storageFeature,
+            limitValue: 100,
+            enabled: true,
+            downgradeStrategy: "FREEZE",
+          }),
+        ];
       });
 
       // No usage record exists
@@ -804,14 +1032,32 @@ describe("DowngradeService", () => {
       const storageFeature = makeFeature("f1", "storage", "LIMIT");
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
-          return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 1000, enabled: true, downgradeStrategy: "FREEZE" })];
+          return [
+            makePlanFeature({
+              featureKey: "storage",
+              feature: storageFeature,
+              limitValue: 1000,
+              enabled: true,
+              downgradeStrategy: "FREEZE",
+            }),
+          ];
         }
         // LIMIT reduction uses targetPf.downgradeStrategy (line 97)
-        return [makePlanFeature({ featureKey: "storage", feature: storageFeature, limitValue: 100, enabled: true, downgradeStrategy: "FREEZE" })];
+        return [
+          makePlanFeature({
+            featureKey: "storage",
+            feature: storageFeature,
+            limitValue: 100,
+            enabled: true,
+            downgradeStrategy: "FREEZE",
+          }),
+        ];
       });
 
       // Usage has grown to 500
-      mockRepo.getCurrentUsage.mockResolvedValue(makeUsage({ featureKey: "storage", usageCount: 500 }));
+      mockRepo.getCurrentUsage.mockResolvedValue(
+        makeUsage({ featureKey: "storage", usageCount: 500 }),
+      );
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
 
@@ -836,18 +1082,42 @@ describe("DowngradeService", () => {
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_pro") {
           return [
-            makePlanFeature({ featureKey: "feature_a", feature: aFeature, enabled: true, downgradeStrategy: "IMMEDIATE" }),
-            makePlanFeature({ featureKey: "feature_b", feature: bFeature, limitValue: 500, enabled: true, downgradeStrategy: "FREEZE" }),
-            makePlanFeature({ featureKey: "feature_c", feature: cFeature, enabled: true, downgradeStrategy: "GRACEFUL" }),
+            makePlanFeature({
+              featureKey: "feature_a",
+              feature: aFeature,
+              enabled: true,
+              downgradeStrategy: "IMMEDIATE",
+            }),
+            makePlanFeature({
+              featureKey: "feature_b",
+              feature: bFeature,
+              limitValue: 500,
+              enabled: true,
+              downgradeStrategy: "FREEZE",
+            }),
+            makePlanFeature({
+              featureKey: "feature_c",
+              feature: cFeature,
+              enabled: true,
+              downgradeStrategy: "GRACEFUL",
+            }),
           ];
         }
         return [
           // feature_b still in free but at limit 50 — LIMIT reduction uses targetPf.downgradeStrategy
-          makePlanFeature({ featureKey: "feature_b", feature: bFeature, limitValue: 50, enabled: true, downgradeStrategy: "FREEZE" }),
+          makePlanFeature({
+            featureKey: "feature_b",
+            feature: bFeature,
+            limitValue: 50,
+            enabled: true,
+            downgradeStrategy: "FREEZE",
+          }),
         ];
       });
 
-      mockRepo.getCurrentUsage.mockResolvedValue(makeUsage({ featureKey: "feature_b", usageCount: 30 }));
+      mockRepo.getCurrentUsage.mockResolvedValue(
+        makeUsage({ featureKey: "feature_b", usageCount: 30 }),
+      );
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
 
@@ -875,7 +1145,9 @@ describe("DowngradeService", () => {
 
     it("already at target plan → no-op (empty impactedFeatures)", async () => {
       // Subscription is on "free" already
-      mockRepo.getActiveSubscription.mockResolvedValue(makeSubscription({ planKey: "free", orgId: "org_1" }));
+      mockRepo.getActiveSubscription.mockResolvedValue(
+        makeSubscription({ planKey: "free", orgId: "org_1" }),
+      );
       mockRepo.getPlan.mockImplementation(async (key: string) =>
         makePlan({ id: `plan_${key}`, key }),
       );
@@ -892,10 +1164,14 @@ describe("DowngradeService", () => {
     });
 
     it("invalidates cache even when no features are impacted", async () => {
-      mockRepo.getActiveSubscription.mockResolvedValue(makeSubscription({ planKey: "pro", orgId: "org_1" }));
+      mockRepo.getActiveSubscription.mockResolvedValue(
+        makeSubscription({ planKey: "pro", orgId: "org_1" }),
+      );
       const proPlan = makePlan({ id: "plan_pro", key: "pro" });
       const freePlan = makePlan({ id: "plan_free", key: "free" });
-      mockRepo.getPlan.mockImplementation(async (key: string) => key === "pro" ? proPlan : freePlan);
+      mockRepo.getPlan.mockImplementation(async (key: string) =>
+        key === "pro" ? proPlan : freePlan,
+      );
       // Same features in both plans → no impact
       const feature = makeFeature("f1", "analytics", "BOOLEAN");
       mockRepo.getPlanFeatures.mockResolvedValue([
@@ -921,8 +1197,18 @@ describe("DowngradeService", () => {
       const planA = makePlan({ id: "plan_a", key: "plan_a" });
       mockRepo.getAllPlans.mockResolvedValue([planA]);
       mockRepo.getPlanFeatures.mockResolvedValue([
-        makePlanFeature({ featureKey: "feature_grace", feature: makeFeature("f1", "feature_grace", "BOOLEAN"), enabled: false, downgradeStrategy: "GRACEFUL" }),
-        makePlanFeature({ featureKey: "feature_imm", feature: makeFeature("f2", "feature_imm", "BOOLEAN"), enabled: false, downgradeStrategy: "IMMEDIATE" }),
+        makePlanFeature({
+          featureKey: "feature_grace",
+          feature: makeFeature("f1", "feature_grace", "BOOLEAN"),
+          enabled: false,
+          downgradeStrategy: "GRACEFUL",
+        }),
+        makePlanFeature({
+          featureKey: "feature_imm",
+          feature: makeFeature("f2", "feature_imm", "BOOLEAN"),
+          enabled: false,
+          downgradeStrategy: "IMMEDIATE",
+        }),
       ]);
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
@@ -950,13 +1236,28 @@ describe("DowngradeService", () => {
       mockRepo.getPlanFeatures.mockImplementation(async (planId: string) => {
         if (planId === "plan_a") {
           return [
-            makePlanFeature({ featureKey: "f1", feature: makeFeature("f1", "f1", "BOOLEAN"), enabled: false, downgradeStrategy: "GRACEFUL" }),
+            makePlanFeature({
+              featureKey: "f1",
+              feature: makeFeature("f1", "f1", "BOOLEAN"),
+              enabled: false,
+              downgradeStrategy: "GRACEFUL",
+            }),
           ];
         }
         // plan_b
         return [
-          makePlanFeature({ featureKey: "f2", feature: makeFeature("f2", "f2", "BOOLEAN"), enabled: false, downgradeStrategy: "GRACEFUL" }),
-          makePlanFeature({ featureKey: "f3", feature: makeFeature("f3", "f3", "BOOLEAN"), enabled: false, downgradeStrategy: "GRACEFUL" }),
+          makePlanFeature({
+            featureKey: "f2",
+            feature: makeFeature("f2", "f2", "BOOLEAN"),
+            enabled: false,
+            downgradeStrategy: "GRACEFUL",
+          }),
+          makePlanFeature({
+            featureKey: "f3",
+            feature: makeFeature("f3", "f3", "BOOLEAN"),
+            enabled: false,
+            downgradeStrategy: "GRACEFUL",
+          }),
         ];
       });
 
@@ -972,9 +1273,19 @@ describe("DowngradeService", () => {
       mockRepo.getAllPlans.mockResolvedValue([planA]);
       mockRepo.getPlanFeatures.mockResolvedValue([
         // Only non-graceful, disabled
-        makePlanFeature({ featureKey: "f1", feature: makeFeature("f1", "f1", "BOOLEAN"), enabled: false, downgradeStrategy: "IMMEDIATE" }),
+        makePlanFeature({
+          featureKey: "f1",
+          feature: makeFeature("f1", "f1", "BOOLEAN"),
+          enabled: false,
+          downgradeStrategy: "IMMEDIATE",
+        }),
         // Graceful but enabled → not counted
-        makePlanFeature({ featureKey: "f2", feature: makeFeature("f2", "f2", "BOOLEAN"), enabled: true, downgradeStrategy: "GRACEFUL" }),
+        makePlanFeature({
+          featureKey: "f2",
+          feature: makeFeature("f2", "f2", "BOOLEAN"),
+          enabled: true,
+          downgradeStrategy: "GRACEFUL",
+        }),
       ]);
 
       const service = new DowngradeService(mockRepo, mockGate, mockCache);
@@ -993,11 +1304,26 @@ describe("DowngradeService", () => {
 const NOW = Math.floor(Date.now() / 1000);
 const PERIOD_END = NOW + 30 * 24 * 60 * 60; // 30 days from now
 
-function createEvent(
-  type: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any,
-): Stripe.Event {
+// Stripe.Invoice does not expose `subscription` (it lives on InvoiceCreateParams),
+// so we declare a narrow view for tests that need to read invoice.subscription.
+interface StripeInvoiceWithSubscription extends Stripe.Invoice {
+  subscription?: string | Stripe.Subscription | null;
+}
+
+// Stripe.Subscription is a large interface; tests only need a handful of
+// fields. We model a standalone stub (with an index signature) so partial
+// literals are assignable without resorting to `as unknown as`.
+interface StripeSubscriptionStub {
+  id: string;
+  object: "subscription";
+  metadata: Stripe.Metadata;
+  items: { data: Array<{ price: { id: string } }> };
+  status: Stripe.Subscription.Status;
+  current_period_end: number;
+  [key: string]: unknown;
+}
+
+function createEvent(type: string, data: unknown): Stripe.Event {
   return {
     id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     type,
@@ -1007,40 +1333,36 @@ function createEvent(
     pending_webhooks: 0,
     api_version: "2026-04-22",
     request: null,
-  } as unknown as Stripe.Event;
+  } as Stripe.Event;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createSubscription(overrides: any = {}): Stripe.Subscription {
+function createSubscription(overrides: Record<string, unknown> = {}): StripeSubscriptionStub {
   return {
     id: "sub_mock_123",
     object: "subscription",
-    metadata: {} as Stripe.Metadata,
+    metadata: {},
     items: { data: [{ price: { id: "price_pro" } }] },
     status: "active",
     current_period_end: PERIOD_END,
     ...overrides,
-  } as unknown as Stripe.Subscription;
+  };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createInvoice(overrides: any = {}): Stripe.Invoice {
+function createInvoice(overrides: Record<string, unknown> = {}): StripeInvoiceWithSubscription {
   return {
     id: "in_mock_123",
     object: "invoice",
     subscription: "sub_mock_123",
     ...overrides,
-  } as unknown as Stripe.Invoice;
+  } as StripeInvoiceWithSubscription;
 }
 
 describe("Webhook → DowngradeService integration", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let prisma: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let getFeatureGate: any;
-  let getDowngrade: any;
-  let mockGate: { invalidateCache: ReturnType<typeof vi.fn> };
-  let mockDowngradeService: { applyDowngradeStrategy: ReturnType<typeof vi.fn> };
+  let prisma: typeof import("@/lib/prisma")["prisma"];
+  let getFeatureGate: Mock<() => FeatureGateService>;
+  let getDowngrade: Mock<() => DowngradeService>;
+  let mockGate: Mocked<FeatureGateService>;
+  let mockDowngradeService: Mocked<DowngradeService>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -1048,31 +1370,31 @@ describe("Webhook → DowngradeService integration", () => {
     const prismaModule = await import("@/lib/prisma");
     prisma = prismaModule.prisma;
     const ffModule = await import("@/lib/feature-flags");
-    getFeatureGate = ffModule.getFeatureGateService;
-    getDowngrade = ffModule.getDowngradeService;
+    getFeatureGate = ffModule.getFeatureGateService as Mock<() => FeatureGateService>;
+    getDowngrade = ffModule.getDowngradeService as Mock<() => DowngradeService>;
 
     // Default: no user found
-    prisma.user.findFirst.mockResolvedValue(null);
-    prisma.user.findUnique.mockResolvedValue(null);
+    (prisma.user.findFirst as Mock).mockResolvedValue(null);
+    (prisma.user.findUnique as Mock).mockResolvedValue(null);
 
     // Default: current subscription exists on "pro"
-    prisma.subscription.findFirst.mockResolvedValue({ planKey: "pro" });
-    prisma.subscription.upsert.mockResolvedValue({});
-    prisma.subscription.updateMany.mockResolvedValue({ count: 1 });
-    prisma.subscription.update.mockResolvedValue({});
+    (prisma.subscription.findFirst as Mock).mockResolvedValue({ planKey: "pro" });
+    (prisma.subscription.upsert as Mock).mockResolvedValue({});
+    (prisma.subscription.updateMany as Mock).mockResolvedValue({ count: 1 });
+    (prisma.subscription.update as Mock).mockResolvedValue({});
 
     // Default: stripe retrieve returns a subscription
     const stripeModule = await import("@/lib/stripe");
-    stripeModule.stripe.subscriptions.retrieve.mockResolvedValue(
-      createSubscription({ metadata: { orgId: "org_1" } }),
-    );
+    stripeRetrieveMock.mockResolvedValue(createSubscription({ metadata: { orgId: "org_1" } }));
 
-    // Feature gate mock
-    mockGate = { invalidateCache: vi.fn().mockResolvedValue(undefined) };
+    // Feature gate mock (deep-mocked real instance)
+    const repo = makeMockRepo();
+    const cache = makeMockCache();
+    mockGate = makeMockGate(repo, cache);
     getFeatureGate.mockReturnValue(mockGate);
 
-    // Downgrade service mock
-    mockDowngradeService = { applyDowngradeStrategy: vi.fn().mockResolvedValue([]) };
+    // Downgrade service mock (deep-mocked real instance)
+    mockDowngradeService = makeMockDowngrade(repo, mockGate, cache);
     getDowngrade.mockReturnValue(mockDowngradeService);
   });
 
@@ -1088,11 +1410,9 @@ describe("Webhook → DowngradeService integration", () => {
         items: { data: [{ price: { id: "price_team" } }] }, // price_team maps to a different plan
         status: "active",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -1109,18 +1429,16 @@ describe("Webhook → DowngradeService integration", () => {
 
     it("does NOT call applyDowngradeStrategy when plan is the same", async () => {
       // Current subscription already on "pro" and new subscription is also "pro"
-      prisma.subscription.findFirst.mockResolvedValue({ planKey: "pro" });
+      (prisma.subscription.findFirst as Mock).mockResolvedValue({ planKey: "pro" });
 
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
         items: { data: [{ price: { id: "price_pro" } }] }, // same price → same plan
         status: "active",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -1131,17 +1449,15 @@ describe("Webhook → DowngradeService integration", () => {
 
     it("skips downgrade when oldPlanKey is null (no existing subscription)", async () => {
       // No existing subscription found in DB
-      prisma.subscription.findFirst.mockResolvedValue(null);
+      (prisma.subscription.findFirst as Mock).mockResolvedValue(null);
 
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
         status: "active",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -1156,11 +1472,9 @@ describe("Webhook → DowngradeService integration", () => {
         metadata: { userId: "user_1" },
         status: "active",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
       const result = await handler!(event);
 
@@ -1181,11 +1495,9 @@ describe("Webhook → DowngradeService integration", () => {
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
       });
-      const event = createEvent("customer.subscription.deleted", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.deleted", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.deleted");
       const result = await handler!(event);
 
@@ -1202,16 +1514,14 @@ describe("Webhook → DowngradeService integration", () => {
 
     it("does NOT call applyDowngradeStrategy when already on 'free'", async () => {
       // Current subscription is already on "free"
-      prisma.subscription.findFirst.mockResolvedValue({ planKey: "free" });
+      (prisma.subscription.findFirst as Mock).mockResolvedValue({ planKey: "free" });
 
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
       });
-      const event = createEvent("customer.subscription.deleted", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.deleted", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.deleted");
       const result = await handler!(event);
 
@@ -1222,16 +1532,14 @@ describe("Webhook → DowngradeService integration", () => {
     });
 
     it("does NOT call downgrade when no existing subscription (oldPlanKey=null)", async () => {
-      prisma.subscription.findFirst.mockResolvedValue(null);
+      (prisma.subscription.findFirst as Mock).mockResolvedValue(null);
 
       const sub = createSubscription({
         metadata: { orgId: "org_1" },
       });
-      const event = createEvent("customer.subscription.deleted", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.deleted", sub);
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.deleted");
       const result = await handler!(event);
 
@@ -1251,13 +1559,11 @@ describe("Webhook → DowngradeService integration", () => {
         metadata: { orgId: "org_1" },
         status: "active",
       });
-      const event = createEvent("customer.subscription.created", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.created", sub);
 
-      prisma.user.findFirst.mockResolvedValue({ id: "user_in_org" });
+      (prisma.user.findFirst as Mock).mockResolvedValue({ id: "user_in_org" });
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.created");
       const result = await handler!(event);
 
@@ -1275,16 +1581,14 @@ describe("Webhook → DowngradeService integration", () => {
   describe("invoice.payment_succeeded does NOT call downgrade", () => {
     it("does not call applyDowngradeStrategy on payment success", async () => {
       const invoice = createInvoice({ subscription: "sub_mock_123" });
-      const event = createEvent("invoice.payment_succeeded", invoice as unknown as Record<string, unknown>);
+      const event = createEvent("invoice.payment_succeeded", invoice);
 
       const stripeModule = await import("@/lib/stripe");
-      stripeModule.stripe.subscriptions.retrieve.mockResolvedValue(
+      stripeRetrieveMock.mockResolvedValue(
         createSubscription({ metadata: { orgId: "org_1" }, status: "active" }),
       );
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("invoice.payment_succeeded");
       const result = await handler!(event);
 
@@ -1307,16 +1611,14 @@ describe("Webhook → DowngradeService integration", () => {
         items: { data: [{ price: { id: "price_team" } }] },
         status: "active",
       });
-      const event = createEvent("customer.subscription.updated", sub as unknown as Record<string, unknown>);
+      const event = createEvent("customer.subscription.updated", sub);
 
       // Downgrade throws
       mockDowngradeService.applyDowngradeStrategy.mockRejectedValue(
         new Error("Downgrade internal failure"),
       );
 
-      const { getWebhookHandler } = await import(
-        "@/lib/payment/stripe-webhook-handler"
-      );
+      const { getWebhookHandler } = await import("@/lib/payment/stripe-webhook-handler");
       const handler = getWebhookHandler("customer.subscription.updated");
 
       // FIXED: Error is caught by try-catch, handler completes normally

@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { TrendCard } from "@/components/dashboard/trend-card";
 
+/** Type-safe coercion helper for intentionally-invalid fixtures (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
+
 const baseTrend = {
   id: "1",
   title: "Investir dans l'or",
@@ -76,7 +81,7 @@ describe("TrendCard", () => {
       score: 50,
       velocity: 12.3,
       status: "EMERGING",
-      videoCount: undefined as unknown as number,
+      videoCount: coerce<number>(undefined),
       contentAngles: [] as string[],
     };
     render(<TrendCard trend={minimal} />);

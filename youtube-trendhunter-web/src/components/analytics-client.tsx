@@ -22,6 +22,10 @@ interface UseAnalyticsOptions {
   userTraits?: Record<string, unknown>;
 }
 
+interface PostHogWindow extends Window {
+  posthog?: { capture: (event: string, props?: Record<string, unknown>) => void };
+}
+
 export function useAnalytics(_options?: UseAnalyticsOptions) {
   void _options; // reserved for future use (userId, userTraits for analytics identify)
   const trackCta = useCallback((cta: string, destination: string) => {
@@ -30,11 +34,7 @@ export function useAnalytics(_options?: UseAnalyticsOptions) {
 
   const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
     if (typeof window !== "undefined") {
-      (
-        window as unknown as {
-          posthog: { capture: (event: string, props?: Record<string, unknown>) => void };
-        }
-      ).posthog?.capture(event, props);
+      (window as PostHogWindow).posthog?.capture(event, props);
     }
   }, []);
 

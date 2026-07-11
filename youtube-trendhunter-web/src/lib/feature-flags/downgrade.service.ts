@@ -2,7 +2,13 @@
 // DowngradeService — Graceful downgrade management
 // ============================================
 
-import type { IEntitlementRepository, ICacheService, DowngradePreview, DowngradeFeatureImpact, DowngradeStrategy, FeatureType } from "./types";
+import type {
+  IEntitlementRepository,
+  ICacheService,
+  DowngradePreview,
+  DowngradeFeatureImpact,
+  FeatureType,
+} from "./types";
 import { FeatureGateService } from "./feature-gate.service";
 import { log } from "@/lib/logger";
 
@@ -17,10 +23,7 @@ export class DowngradeService {
    * Preview what features will be impacted if an org downgrades from
    * their current plan to targetPlanKey.
    */
-  async previewDowngrade(
-    orgId: string,
-    targetPlanKey: string,
-  ): Promise<DowngradePreview> {
+  async previewDowngrade(orgId: string, targetPlanKey: string): Promise<DowngradePreview> {
     const sub = await this.repository.getActiveSubscription(orgId);
     const currentPlanKey = sub?.planKey ?? "free";
 
@@ -131,8 +134,9 @@ export class DowngradeService {
           log("info", "[Downgrade] Graceful downgrade scheduled", {
             orgId,
             feature: impact.featureKey,
-            currentPeriodEnd: (await this.repository.getActiveSubscription(orgId))
-              ?.currentPeriodEnd?.toISOString(),
+            currentPeriodEnd: (
+              await this.repository.getActiveSubscription(orgId)
+            )?.currentPeriodEnd?.toISOString(),
           });
           results.push(impact);
           break;

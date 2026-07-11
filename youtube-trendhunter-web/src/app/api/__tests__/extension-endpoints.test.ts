@@ -3,10 +3,6 @@ import { extensionAuthSchema, extensionAnalyzeSchema } from "@/lib/schemas";
 
 // ─── Module Mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     apiToken: {
@@ -94,9 +90,12 @@ vi.mock("@/lib/trend-scorer", () => ({
   scoreVideo: vi.fn(),
 }));
 
-import { auth } from "@/lib/auth";
 import { verifyApiToken, createApiToken, listApiTokens } from "@/lib/api-tokens";
 import { getCached, setCached } from "@/lib/redis";
+import { makeApiToken, makeNiche, makeTrend } from "@/__tests__/factories";
+
+type SessionLike = { user?: { id?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 describe("Extension Endpoints", () => {
   beforeEach(() => {
@@ -173,10 +172,10 @@ describe("Extension Endpoints", () => {
 
       const { prisma } = await import("@/lib/prisma");
       const mockTrends = [
-        { id: "trend-1", title: "AI Tools", score: 95 },
-        { id: "trend-2", title: "ChatGPT", score: 88 },
+        makeTrend({ id: "trend-1", title: "AI Tools", score: 95 }),
+        makeTrend({ id: "trend-2", title: "ChatGPT", score: 88 }),
       ];
-      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends as any);
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends);
 
       const trends = await prisma.trend.findMany({
         where: { nicheId: "niche-1", expiresAt: { gte: new Date() } },
@@ -281,16 +280,15 @@ describe("Extension Endpoints", () => {
 
       const { prisma } = await import("@/lib/prisma");
       const mockNiches = [
-        {
+        makeNiche({
           id: "niche-1",
           name: "Tech",
           slug: "tech",
           description: "Technology trends",
           language: "fr",
-          _count: { trends: 15 },
-        },
+        }),
       ];
-      vi.mocked(prisma.niche.findMany).mockResolvedValue(mockNiches as any);
+      vi.mocked(prisma.niche.findMany).mockResolvedValue(mockNiches);
 
       const niches = await prisma.niche.findMany({
         where: { isActive: true },
@@ -329,22 +327,22 @@ describe("Extension Endpoints", () => {
 
   describe("POST /api/extension/auth — token creation", () => {
     it("should require authentication", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       const isAuthenticated = !!session?.user?.id;
       expect(isAuthenticated).toBe(false);
     });
 
     it("should create token for authenticated user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
       vi.mocked(createApiToken).mockResolvedValue({
         plainText: "th_abc123.def456",
-        token: { id: "token-1", name: "Extension Chrome" },
-      } as any);
+        token: makeApiToken({ id: "token-1", name: "Extension Chrome" }),
+      });
 
       const result = await createApiToken("user-123", "Extension Chrome");
       expect(result.plainText).toContain("th_");
@@ -376,27 +374,27 @@ describe("Extension Endpoints", () => {
 
   describe("GET /api/extension/auth — list tokens", () => {
     it("should require authentication", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should return list of tokens for authenticated user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const mockTokens = [
-        {
+        makeApiToken({
           id: "token-1",
           name: "Extension Chrome",
           lastUsedAt: null,
           expiresAt: null,
           createdAt: new Date(),
-        },
+        }),
       ];
-      vi.mocked(listApiTokens).mockResolvedValue(mockTokens as any);
+      vi.mocked(listApiTokens).mockResolvedValue(mockTokens);
 
       const tokens = await listApiTokens("user-123");
       expect(tokens).toHaveLength(1);

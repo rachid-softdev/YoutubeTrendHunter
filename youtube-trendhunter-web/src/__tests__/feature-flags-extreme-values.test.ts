@@ -10,10 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
 import { isInExperiment, murmurhash } from "@/lib/feature-flags/experiment";
-import {
-  FeatureNotAvailableError,
-  LimitReachedError,
-} from "@/lib/feature-flags/errors";
+import { FeatureNotAvailableError, LimitReachedError } from "@/lib/feature-flags/errors";
 import { getWebhookHandler } from "@/lib/payment/stripe-webhook-handler";
 import type {
   IEntitlementRepository,
@@ -28,18 +25,24 @@ import type {
   CreateOverrideInput,
   SubscriptionStatus,
   FeatureType,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
+
+/** Type-safe coercion helper for intentionally-invalid fixtures (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
 
 // ============================================
 // Reusable Mock Implementations
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -116,7 +119,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -124,7 +127,10 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.subscriptions.get(orgId) ?? null;
   }
 
-  async updateSubscription(orgId: string, data: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async updateSubscription(
+    orgId: string,
+    data: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     const existing = this.subscriptions.get(orgId);
     if (!existing) throw new Error("No subscription");
     const updated = { ...existing, ...data };
@@ -132,7 +138,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return updated;
   }
 
-  async createSubscription(orgId: string, planKey: string, data?: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async createSubscription(
+    orgId: string,
+    planKey: string,
+    data?: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     const sub: SubscriptionRecord = {
       id: `sub_${orgId}`,
       userId: `user_${orgId}`,
@@ -144,7 +154,8 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
       currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      stripeCurrentPeriodEnd: data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      stripeCurrentPeriodEnd:
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -154,15 +165,21 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return sub;
   }
 
-  async getOverride(scope: OverrideScope, scopeId: string, featureKey: string): Promise<EntitlementOverrideRecord | null> {
+  async getOverride(
+    scope: OverrideScope,
+    scopeId: string,
+    featureKey: string,
+  ): Promise<EntitlementOverrideRecord | null> {
     const now = new Date();
-    return this.overrides.find(
-      (o) =>
-        o.scope === scope &&
-        o.scopeId === scopeId &&
-        o.featureKey === featureKey &&
-        (!o.expiresAt || o.expiresAt > now),
-    ) ?? null;
+    return (
+      this.overrides.find(
+        (o) =>
+          o.scope === scope &&
+          o.scopeId === scopeId &&
+          o.featureKey === featureKey &&
+          (!o.expiresAt || o.expiresAt > now),
+      ) ?? null
+    );
   }
 
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
@@ -198,7 +215,10 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return override;
   }
 
-  async updateOverride(id: string, data: Partial<EntitlementOverrideRecord>): Promise<EntitlementOverrideRecord> {
+  async updateOverride(
+    id: string,
+    data: Partial<EntitlementOverrideRecord>,
+  ): Promise<EntitlementOverrideRecord> {
     const idx = this.overrides.findIndex((o) => o.id === id);
     if (idx === -1) throw new Error("Override not found");
     this.overrides[idx] = { ...this.overrides[idx], ...data, updatedAt: new Date() };
@@ -213,11 +233,20 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
-  async getUsageForPeriod(orgId: string, featureKey: string, _periodStart: Date): Promise<UsageTrackingRecord | null> {
+  async getUsageForPeriod(
+    orgId: string,
+    featureKey: string,
+    _periodStart: Date,
+  ): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
-  async createUsage(orgId: string, featureKey: string, periodStart: Date, periodEnd: Date): Promise<UsageTrackingRecord> {
+  async createUsage(
+    orgId: string,
+    featureKey: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<UsageTrackingRecord> {
     const usage: UsageTrackingRecord = {
       id: `usage_${Date.now()}`,
       orgId,
@@ -230,7 +259,12 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return usage;
   }
 
-  async consumeUsage(orgId: string, featureKey: string, amount: number, maxAllowed?: number): Promise<{ success: boolean; usageCount: number } | null> {
+  async consumeUsage(
+    orgId: string,
+    featureKey: string,
+    amount: number,
+    maxAllowed?: number,
+  ): Promise<{ success: boolean; usageCount: number } | null> {
     if (amount <= 0) {
       const existing = this.usage.get(`${orgId}:${featureKey}`);
       return { success: false, usageCount: existing?.usageCount ?? 0 };
@@ -285,7 +319,11 @@ function createPlan(key: string, name: string, sortOrder = 0): PlanRecord {
   };
 }
 
-function createFeature(key: string, type: FeatureType, defaultConfig?: Record<string, unknown> | null): FeatureRecord {
+function createFeature(
+  key: string,
+  type: FeatureType,
+  defaultConfig?: Record<string, unknown> | null,
+): FeatureRecord {
   return {
     id: `feature_${key}`,
     key,
@@ -359,7 +397,12 @@ describe("A. Extreme Numeric Values", () => {
   it("A2: consume with Number.MAX_SAFE_INTEGER for unlimited feature succeeds", async () => {
     repository.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
     repository.planFeatures.set("plan_enterprise", [
-      createPlanFeature("plan_enterprise", repository.features.get("UNLIMITED_STORAGE")!, true, null),
+      createPlanFeature(
+        "plan_enterprise",
+        repository.features.get("UNLIMITED_STORAGE")!,
+        true,
+        null,
+      ),
     ]);
     await repository.createSubscription(ORG_ID, "enterprise");
 
@@ -374,7 +417,12 @@ describe("A. Extreme Numeric Values", () => {
   it("A3: getLimit returns Number.MAX_SAFE_INTEGER which is a valid huge limit", async () => {
     repository.features.set("BIG_LIMIT", createFeature("BIG_LIMIT", "LIMIT"));
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature("plan_pro", repository.features.get("BIG_LIMIT")!, true, Number.MAX_SAFE_INTEGER),
+      createPlanFeature(
+        "plan_pro",
+        repository.features.get("BIG_LIMIT")!,
+        true,
+        Number.MAX_SAFE_INTEGER,
+      ),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -389,7 +437,12 @@ describe("A. Extreme Numeric Values", () => {
   it("A4: getLimit with negative limit behaves as disabled", async () => {
     repository.features.set("NEGATIVE_LIMIT", createFeature("NEGATIVE_LIMIT", "LIMIT"));
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature("plan_pro", repository.features.get("NEGATIVE_LIMIT")!, true, Number.MIN_SAFE_INTEGER),
+      createPlanFeature(
+        "plan_pro",
+        repository.features.get("NEGATIVE_LIMIT")!,
+        true,
+        Number.MIN_SAFE_INTEGER,
+      ),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -417,7 +470,12 @@ describe("A. Extreme Numeric Values", () => {
     repository.features.set("EXPORT", createFeature("EXPORT", "LIMIT"));
     // Set a reasonable limit
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature("plan_pro", repository.features.get("EXPORT")!, true, Number.MAX_SAFE_INTEGER),
+      createPlanFeature(
+        "plan_pro",
+        repository.features.get("EXPORT")!,
+        true,
+        Number.MAX_SAFE_INTEGER,
+      ),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -454,7 +512,12 @@ describe("A. Extreme Numeric Values", () => {
   it("A7: consume with huge limit allows proportional consumption", async () => {
     repository.features.set("HUGE_LIMIT", createFeature("HUGE_LIMIT", "LIMIT"));
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature("plan_pro", repository.features.get("HUGE_LIMIT")!, true, Number.MAX_SAFE_INTEGER),
+      createPlanFeature(
+        "plan_pro",
+        repository.features.get("HUGE_LIMIT")!,
+        true,
+        Number.MAX_SAFE_INTEGER,
+      ),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -598,10 +661,10 @@ describe("B. String Boundary Inputs", () => {
     await repository.createSubscription(ORG_ID, "pro");
 
     const unicodeKeys = [
-      "\0",               // null byte
-      "🎯",               // emoji
-      "\u202E",           // RTL override
-      "\u0000",           // null char
+      "\0", // null byte
+      "🎯", // emoji
+      "\u202E", // RTL override
+      "\u0000", // null char
       "key_with_tab\t",
       "key_with_newline\n",
       "key_with_cr\r",
@@ -637,10 +700,13 @@ describe("B. String Boundary Inputs", () => {
   // ─── B6: UserId with special characters in isInExperiment ───
 
   it("B6: userId with special characters in isInExperiment does not crash", async () => {
-    repository.features.set("TEST_EXP", createFeature("TEST_EXP", "EXPERIMENT", {
-      percentage: 50,
-      seed: "test_seed",
-    }));
+    repository.features.set(
+      "TEST_EXP",
+      createFeature("TEST_EXP", "EXPERIMENT", {
+        percentage: 50,
+        seed: "test_seed",
+      }),
+    );
 
     const specialUserIds = [
       "",
@@ -689,23 +755,38 @@ describe("C. Malformed/Missing Data in Repository", () => {
       getPlanFeaturesForPlan: async () => [],
       getOrganization: async () => null,
       getActiveSubscription: async () => null,
-      updateSubscription: async () => { throw new Error("No subscription"); },
-      createSubscription: async () => { throw new Error("No user"); },
+      updateSubscription: async () => {
+        throw new Error("No subscription");
+      },
+      createSubscription: async () => {
+        throw new Error("No user");
+      },
       getOverride: async () => null,
       getOverridesForOrg: async () => [],
       getOverridesForUser: async () => [],
       createOverride: async (d) => ({
-        id: "mock", scope: d.scope, scopeId: d.scopeId, featureKey: d.featureKey,
-        enabled: d.enabled, limitValue: d.limitValue ?? null,
-        configJson: d.configJson ?? null, expiresAt: d.expiresAt ?? null,
-        reason: d.reason, organizationId: d.organizationId ?? null,
-        createdAt: new Date(), updatedAt: new Date(),
+        id: "mock",
+        scope: d.scope,
+        scopeId: d.scopeId,
+        featureKey: d.featureKey,
+        enabled: d.enabled,
+        limitValue: d.limitValue ?? null,
+        configJson: d.configJson ?? null,
+        expiresAt: d.expiresAt ?? null,
+        reason: d.reason,
+        organizationId: d.organizationId ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      updateOverride: async () => { throw new Error("Override not found"); },
+      updateOverride: async () => {
+        throw new Error("Override not found");
+      },
       deleteOverride: async () => {},
       getCurrentUsage: async () => null,
       getUsageForPeriod: async () => null,
-      createUsage: async () => { throw new Error("No user"); },
+      createUsage: async () => {
+        throw new Error("No user");
+      },
       consumeUsage: async () => null,
       hasStripeEventBeenProcessed: async () => false,
       markStripeEventProcessed: async () => {},
@@ -741,31 +822,58 @@ describe("C. Malformed/Missing Data in Repository", () => {
       getPlanFeaturesForPlan: async () => [],
       getOrganization: async () => null,
       getActiveSubscription: async () => ({
-        id: "sub_1", userId: "u1", orgId: ORG_ID, planKey: "free",
-        plan: "FREE", status: "ACTIVE",
-        stripeSubscriptionId: null, stripePriceId: null,
-        currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 86400000),
-        stripeCurrentPeriodEnd: null, trialEnd: null, trialStart: null,
-        createdAt: new Date(), updatedAt: new Date(),
+        id: "sub_1",
+        userId: "u1",
+        orgId: ORG_ID,
+        planKey: "free",
+        plan: "FREE",
+        status: "ACTIVE",
+        stripeSubscriptionId: null,
+        stripePriceId: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        stripeCurrentPeriodEnd: null,
+        trialEnd: null,
+        trialStart: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      updateSubscription: async () => { throw new Error("No subscription"); },
-      createSubscription: async () => { throw new Error("No user"); },
+      updateSubscription: async () => {
+        throw new Error("No subscription");
+      },
+      createSubscription: async () => {
+        throw new Error("No user");
+      },
       getOverride: async () => null,
       getOverridesForOrg: async () => [],
       getOverridesForUser: async () => [],
       createOverride: async (d) => ({
-        id: "mock", scope: d.scope, scopeId: d.scopeId, featureKey: d.featureKey,
-        enabled: d.enabled, limitValue: d.limitValue ?? null,
-        configJson: d.configJson ?? null, expiresAt: d.expiresAt ?? null,
-        reason: d.reason, organizationId: d.organizationId ?? null,
-        createdAt: new Date(), updatedAt: new Date(),
+        id: "mock",
+        scope: d.scope,
+        scopeId: d.scopeId,
+        featureKey: d.featureKey,
+        enabled: d.enabled,
+        limitValue: d.limitValue ?? null,
+        configJson: d.configJson ?? null,
+        expiresAt: d.expiresAt ?? null,
+        reason: d.reason,
+        organizationId: d.organizationId ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      updateOverride: async () => { throw new Error("Override not found"); },
+      updateOverride: async () => {
+        throw new Error("Override not found");
+      },
       deleteOverride: async () => {},
       getCurrentUsage: async () => null,
       getUsageForPeriod: async () => null,
       createUsage: async (_o, _f, ps, pe) => ({
-        id: "usage_1", orgId: _o, featureKey: _f, usageCount: 0, periodStart: ps, periodEnd: pe,
+        id: "usage_1",
+        orgId: _o,
+        featureKey: _f,
+        usageCount: 0,
+        periodStart: ps,
+        periodEnd: pe,
       }),
       consumeUsage: async () => ({ success: true, usageCount: 1 }),
       hasStripeEventBeenProcessed: async () => false,
@@ -806,10 +914,12 @@ describe("C. Malformed/Missing Data in Repository", () => {
       getPlan: async () => createPlan("pro", "Pro"),
       getAllPlans: async () => [createPlan("pro", "Pro")],
       getActivePlans: async () => [createPlan("pro", "Pro")],
-      getFeature: async () => ({
-        // Missing 'type' and 'key' — minimal partial
-        id: "feature_broken",
-      } as unknown as FeatureRecord),
+      getFeature: async () =>
+        coerce<FeatureRecord>({
+          // Missing 'type' and 'key' — minimal partial
+          id: "feature_broken",
+        }),
+
       getAllFeatures: async () => [],
       getActiveFeatures: async () => [],
       getPlanFeatures: async () => [],
@@ -817,31 +927,58 @@ describe("C. Malformed/Missing Data in Repository", () => {
       getPlanFeaturesForPlan: async () => [],
       getOrganization: async () => null,
       getActiveSubscription: async () => ({
-        id: "sub_1", userId: "u1", orgId: ORG_ID, planKey: "pro",
-        plan: "PRO", status: "ACTIVE",
-        stripeSubscriptionId: null, stripePriceId: null,
-        currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 86400000),
-        stripeCurrentPeriodEnd: null, trialEnd: null, trialStart: null,
-        createdAt: new Date(), updatedAt: new Date(),
+        id: "sub_1",
+        userId: "u1",
+        orgId: ORG_ID,
+        planKey: "pro",
+        plan: "PRO",
+        status: "ACTIVE",
+        stripeSubscriptionId: null,
+        stripePriceId: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        stripeCurrentPeriodEnd: null,
+        trialEnd: null,
+        trialStart: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      updateSubscription: async () => { throw new Error("No sub"); },
-      createSubscription: async () => { throw new Error("No user"); },
+      updateSubscription: async () => {
+        throw new Error("No sub");
+      },
+      createSubscription: async () => {
+        throw new Error("No user");
+      },
       getOverride: async () => null,
       getOverridesForOrg: async () => [],
       getOverridesForUser: async () => [],
       createOverride: async (d) => ({
-        id: "mock", scope: d.scope, scopeId: d.scopeId, featureKey: d.featureKey,
-        enabled: d.enabled, limitValue: d.limitValue ?? null,
-        configJson: d.configJson ?? null, expiresAt: d.expiresAt ?? null,
-        reason: d.reason, organizationId: d.organizationId ?? null,
-        createdAt: new Date(), updatedAt: new Date(),
+        id: "mock",
+        scope: d.scope,
+        scopeId: d.scopeId,
+        featureKey: d.featureKey,
+        enabled: d.enabled,
+        limitValue: d.limitValue ?? null,
+        configJson: d.configJson ?? null,
+        expiresAt: d.expiresAt ?? null,
+        reason: d.reason,
+        organizationId: d.organizationId ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       }),
-      updateOverride: async () => { throw new Error("Not found"); },
+      updateOverride: async () => {
+        throw new Error("Not found");
+      },
       deleteOverride: async () => {},
       getCurrentUsage: async () => null,
       getUsageForPeriod: async () => null,
       createUsage: async (_o, _f, ps, pe) => ({
-        id: "u1", orgId: _o, featureKey: _f, usageCount: 0, periodStart: ps, periodEnd: pe,
+        id: "u1",
+        orgId: _o,
+        featureKey: _f,
+        usageCount: 0,
+        periodStart: ps,
+        periodEnd: pe,
       }),
       consumeUsage: async () => ({ success: true, usageCount: 1 }),
       hasStripeEventBeenProcessed: async () => false,
@@ -930,7 +1067,7 @@ describe("C. Malformed/Missing Data in Repository", () => {
     await repo.createOverride({
       scope: "ORG",
       scopeId: ORG_ID,
-      featureKey: null as unknown as string, // force null
+      featureKey: coerce<string>(null), // force null
       enabled: true,
       reason: "corrupted override",
     });
@@ -987,7 +1124,7 @@ describe("D. JSON/Malformed Config", () => {
       true,
       null,
       // configJson should be Record<string, unknown> | null but we'll test with what the runtime could receive
-      { percentage: 75, seed: "override_seed" } as unknown as Record<string, unknown>,
+      coerce<Record<string, unknown>>({ percentage: 75, seed: "override_seed" }),
     );
     repository.planFeatures.set("plan_pro", [pf]);
     await repository.createSubscription(ORG_ID, "pro");
@@ -1000,10 +1137,13 @@ describe("D. JSON/Malformed Config", () => {
   // ─── D2: defaultConfig in Feature is malformed object ───
 
   it("D2: defaultConfig with unexpected types does not crash isInExperiment", async () => {
-    repository.features.set("MALFORMED_EXP", createFeature("MALFORMED_EXP", "EXPERIMENT", {
-      percentage: "fifty", // string instead of number
-      seed: 12345, // number instead of string
-    }));
+    repository.features.set(
+      "MALFORMED_EXP",
+      createFeature("MALFORMED_EXP", "EXPERIMENT", {
+        percentage: "fifty", // string instead of number
+        seed: 12345, // number instead of string
+      }),
+    );
 
     // isInExperiment checks: typeof config.percentage !== "number" || !config.seed
     // percentage is "fifty" (not number) → returns false
@@ -1014,10 +1154,13 @@ describe("D. JSON/Malformed Config", () => {
   // ─── D3: Experiment percentage is a string number like "50" ───
 
   it("D3: experiment config with percentage as string '50' is treated as invalid", async () => {
-    repository.features.set("STR_PCT", createFeature("STR_PCT", "EXPERIMENT", {
-      percentage: "50", // string, not number
-      seed: "test_seed",
-    }));
+    repository.features.set(
+      "STR_PCT",
+      createFeature("STR_PCT", "EXPERIMENT", {
+        percentage: "50", // string, not number
+        seed: "test_seed",
+      }),
+    );
 
     // typeof "50" !== "number" → true → returns false (safe fallback)
     const result = await service.isInExperiment("user1", "STR_PCT");
@@ -1030,10 +1173,13 @@ describe("D. JSON/Malformed Config", () => {
   // ─── D4: Experiment percentage is null ───
 
   it("D4: experiment config with percentage null is treated as invalid", async () => {
-    repository.features.set("NULL_PCT", createFeature("NULL_PCT", "EXPERIMENT", {
-      percentage: null,
-      seed: "test_seed",
-    }));
+    repository.features.set(
+      "NULL_PCT",
+      createFeature("NULL_PCT", "EXPERIMENT", {
+        percentage: null,
+        seed: "test_seed",
+      }),
+    );
 
     const result = await service.isInExperiment("user1", "NULL_PCT");
     expect(result).toBe(false);
@@ -1045,10 +1191,13 @@ describe("D. JSON/Malformed Config", () => {
   // ─── D5: Experiment seed is number instead of string ───
 
   it("D5: experiment config with seed as number is treated as invalid", async () => {
-    repository.features.set("NUM_SEED", createFeature("NUM_SEED", "EXPERIMENT", {
-      percentage: 50,
-      seed: 12345, // number, not string
-    }));
+    repository.features.set(
+      "NUM_SEED",
+      createFeature("NUM_SEED", "EXPERIMENT", {
+        percentage: 50,
+        seed: 12345, // number, not string
+      }),
+    );
 
     // !config.seed → 12345 is truthy → passes the guard? No.
     // typeof config.percentage !== "number" → false (50 is number)
@@ -1129,10 +1278,10 @@ describe("E. Stripe Webhook Malformed Payloads", () => {
   // ─── E4: getWebhookHandler with nullish values ───
 
   it("E4: getWebhookHandler with null/undefined returns null", () => {
-    const handler1 = getWebhookHandler(null as unknown as string);
+    const handler1 = getWebhookHandler(coerce<string>(null));
     expect(handler1).toBeNull();
 
-    const handler2 = getWebhookHandler(undefined as unknown as string);
+    const handler2 = getWebhookHandler(coerce<string>(undefined));
     expect(handler2).toBeNull();
   });
 
@@ -1277,11 +1426,10 @@ describe("F. API Route Query Parameter Edge Cases", () => {
   // ─── F11: typeFilter with invalid string ───
 
   it("F11: typeFilter=invalid should not throw (cast to any)", () => {
-    // const where = typeFilter ? { type: typeFilter as any } : {};
     // typeFilter is passed directly to Prisma — Prisma may reject it at DB level
     // but the route won't throw before that
     const typeFilter = "invalid_type";
-    const where = typeFilter ? { type: typeFilter as any } : {};
+    const where = typeFilter ? { type: typeFilter } : {};
     expect(where).toEqual({ type: "invalid_type" });
     // The route passes it through — Prisma will handle validation
   });
@@ -1370,14 +1518,14 @@ describe("G. Additional Boundary Conditions", () => {
   // ─── G2: hasFeature with null/undefined orgId ───
 
   it("G2: hasFeature with null orgId does not crash", async () => {
-    await expect(service.hasFeature(null as unknown as string, "TEST")).resolves.toBe(false);
+    await expect(service.hasFeature(coerce<string>(null), "TEST")).resolves.toBe(false);
   });
 
   // ─── G3: getLimit with null/undefined featureKey ───
 
   it("G3: getLimit with null/undefined featureKey returns 0", async () => {
-    await expect(service.getLimit(ORG_ID, null as unknown as string)).resolves.toBe(0);
-    await expect(service.getLimit(ORG_ID, undefined as unknown as string)).resolves.toBe(0);
+    await expect(service.getLimit(ORG_ID, coerce<string>(null))).resolves.toBe(0);
+    await expect(service.getLimit(ORG_ID, coerce<string>(undefined))).resolves.toBe(0);
   });
 
   // ─── G4: canConsume with 0 units (n=0) ───
@@ -1416,10 +1564,13 @@ describe("G. Additional Boundary Conditions", () => {
   // ─── G6: assertFeature for already-enabled feature ───
 
   it("G6: assertFeature with experiment type feature resolves", async () => {
-    repository.features.set("EXP_FEAT", createFeature("EXP_FEAT", "EXPERIMENT", {
-      percentage: 30,
-      seed: "exp_seed",
-    }));
+    repository.features.set(
+      "EXP_FEAT",
+      createFeature("EXP_FEAT", "EXPERIMENT", {
+        percentage: 30,
+        seed: "exp_seed",
+      }),
+    );
     repository.planFeatures.set("plan_pro", [
       createPlanFeature("plan_pro", repository.features.get("EXP_FEAT")!, true),
     ]);

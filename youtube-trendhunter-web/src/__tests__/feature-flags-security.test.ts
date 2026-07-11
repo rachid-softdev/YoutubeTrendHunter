@@ -22,7 +22,10 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
-import { isInExperiment as checkExperimentBucket, murmurhash } from "@/lib/feature-flags/experiment";
+import {
+  isInExperiment as checkExperimentBucket,
+  murmurhash,
+} from "@/lib/feature-flags/experiment";
 import {
   FeatureNotAvailableError,
   LimitReachedError,
@@ -37,6 +40,8 @@ import {
   type SessionResolver,
   type AuthSession,
 } from "@/lib/feature-flags/middleware";
+import type { Session } from "next-auth";
+import type { AuthError } from "@/lib/auth/require-admin";
 import type {
   IEntitlementRepository,
   ICacheService,
@@ -49,7 +54,14 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  EntitlementMap,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
+
+/** Type-safe coercion helper for intentionally-invalid fixtures (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
 
 // Mock next/server for middleware higher-order functions
 vi.mock("next/server", () => ({
@@ -104,10 +116,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.planFeatures.get(planId) ?? [];
   }
 
-  async getPlanFeature(
-    planId: string,
-    featureKey: string,
-  ): Promise<PlanFeatureRecord | null> {
+  async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureRecord | null> {
     const features = this.planFeatures.get(planId) ?? [];
     return features.find((f) => f.feature?.key === featureKey) ?? null;
   }
@@ -116,7 +125,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -150,12 +159,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-      currentPeriodEnd:
-        data?.currentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCurrentPeriodEnd:
-        data?.stripeCurrentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -185,20 +191,14 @@ class MockEntitlementRepository implements IEntitlementRepository {
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "ORG" &&
-        o.scopeId === orgId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "USER" &&
-        o.scopeId === userId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -235,10 +235,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.overrides = this.overrides.filter((o) => o.id !== id);
   }
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
@@ -312,11 +309,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -436,10 +433,13 @@ function createBaseSetup(): TestContext {
   repository.features.set("EXPORT_PDF", createFeature("EXPORT_PDF", "LIMIT"));
   repository.features.set("AI_SUMMARY", createFeature("AI_SUMMARY", "BOOLEAN"));
   repository.features.set("API_ACCESS", createFeature("API_ACCESS", "BOOLEAN"));
-  repository.features.set("NEW_DASHBOARD", createFeature("NEW_DASHBOARD", "EXPERIMENT", {
-    percentage: 50,
-    seed: "NEW_DASHBOARD_v1",
-  }));
+  repository.features.set(
+    "NEW_DASHBOARD",
+    createFeature("NEW_DASHBOARD", "EXPERIMENT", {
+      percentage: 50,
+      seed: "NEW_DASHBOARD_v1",
+    }),
+  );
   repository.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
 
   return { repository, cache, service };
@@ -527,15 +527,13 @@ describe("A. Cross-Org Data Access", () => {
 
   it("A5: assertFeature throws for cross-org feature check but doesn't validate caller", async () => {
     // User from Org A calls assertFeature for Org A's feature — passes
-    await expect(
-      ctx.service.assertFeature(ORG_A, "AI_SUMMARY"),
-    ).resolves.toBeUndefined();
+    await expect(ctx.service.assertFeature(ORG_A, "AI_SUMMARY")).resolves.toBeUndefined();
 
     // User from Org A calls assertFeature for Org B's feature — throws
     // (because Org B doesn't have it, not because of auth)
-    await expect(
-      ctx.service.assertFeature(ORG_B, "AI_SUMMARY"),
-    ).rejects.toThrow(FeatureNotAvailableError);
+    await expect(ctx.service.assertFeature(ORG_B, "AI_SUMMARY")).rejects.toThrow(
+      FeatureNotAvailableError,
+    );
   });
 
   it("A6: getLimit works across orgs with no caller validation", async () => {
@@ -564,21 +562,21 @@ describe("B. Session Resolver Security", () => {
 
   it("B1: session resolver returning null orgId — service falls back to 'free'", async () => {
     const resolveNull: SessionResolver = async () => ({
-      orgId: null as unknown as string,
+      orgId: coerce<string>(null),
       userId: USER_A,
     });
 
     // The middleware will pass null as orgId to the service
     // This could lead to unexpected behavior — null may be coerced to "null" string
     // in some DB queries, or treated as a valid but non-existent org
-    const result = await ctx.service.hasFeature(null as unknown as string, "AI_SUMMARY");
+    const result = await ctx.service.hasFeature(coerce<string>(null), "AI_SUMMARY");
     // Should not crash but returns false (fallback)
     expect(result).toBe(false);
   });
 
   it("B2: session resolver returning undefined orgId — service coerces to undefined string", async () => {
     // undefined orgId may be coerced to string "undefined" in some operations
-    const result = await ctx.service.hasFeature(undefined as unknown as string, "AI_SUMMARY");
+    const result = await ctx.service.hasFeature(coerce<string>(undefined), "AI_SUMMARY");
     // Should not crash but returns false
     expect(result).toBe(false);
 
@@ -594,9 +592,7 @@ describe("B. Session Resolver Security", () => {
 
     const featureMiddleware = requireFeature(ctx.service, resolveThrows);
 
-    await expect(
-      featureMiddleware("AI_SUMMARY")(),
-    ).rejects.toThrow("Session resolution failed");
+    await expect(featureMiddleware("AI_SUMMARY")()).rejects.toThrow("Session resolution failed");
   });
 
   it("B4: session resolver timeout — middleware doesn't hang indefinitely", async () => {
@@ -685,37 +681,37 @@ describe("C. Middleware Auth Bypass", () => {
 
     const middleware = requireFeature(ctx.service, resolveWithEmpty);
     // Empty orgId — feature may still resolve based on fallback
-    await expect(
-      middleware("AI_SUMMARY")(),
-    ).rejects.toThrow(FeatureNotAvailableError);
+    await expect(middleware("AI_SUMMARY")()).rejects.toThrow(FeatureNotAvailableError);
   });
 
   it("C2: requireLimit with empty featureKey — throws or handles gracefully", async () => {
     const limitMiddleware = requireLimit(ctx.service, resolveSession);
 
-    await expect(
-      limitMiddleware("", 1)(async () => "result"),
-    ).rejects.toThrow();
+    await expect(limitMiddleware("", 1)(async () => "result")).rejects.toThrow();
   });
 
   it("C3: consumeFeature with non-existent featureKey — fails with FeatureNotAvailableError", async () => {
     // Non-existent features resolve via "plan" with value=false → FEATURE_NOT_AVAILABLE
     const consumeMiddleware = consumeFeature(ctx.service, resolveSession);
 
-    await expect(
-      consumeMiddleware("NONEXISTENT_FEATURE", 1)(async () => "result"),
-    ).rejects.toThrow(FeatureNotAvailableError);
+    await expect(consumeMiddleware("NONEXISTENT_FEATURE", 1)(async () => "result")).rejects.toThrow(
+      FeatureNotAvailableError,
+    );
   });
 
   it("C4: withFeature wraps handler — gate runs BEFORE handler, blocking unauthorized access", async () => {
-    const sensitiveHandler = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ secret_data: "classified" }), { status: 200 }),
-    );
+    const sensitiveHandler = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ secret_data: "classified" }), { status: 200 }),
+      );
 
     // Org A doesn't have "SUPER_SECRET_FEATURE" — so the handler should never run
-    const wrapped = withFeature(ctx.service, resolveSession)("SUPER_SECRET_FEATURE")(sensitiveHandler);
+    const wrapped = withFeature(ctx.service, resolveSession)("SUPER_SECRET_FEATURE")(
+      sensitiveHandler,
+    );
 
-    const response = await wrapped({} as any);
+    const response = await wrapped({});
     expect(response.status).toBe(403);
 
     // Handler should NOT have been called — gate blocked before execution
@@ -728,19 +724,19 @@ describe("C. Middleware Auth Bypass", () => {
       createPlanFeature("plan_pro", ctx.repository.features.get("EXPORT_PDF")!, true, 1),
     ]);
 
-    const handler = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const handler = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
 
     const wrapped = withLimit(ctx.service, resolveSession)("EXPORT_PDF", 1)(handler);
 
     // First consumption should succeed
-    const res1 = await wrapped({} as any);
+    const res1 = await wrapped({});
     expect(res1.status).toBe(200);
     expect(handler).toHaveBeenCalledTimes(1);
 
     // Second consumption should be blocked because limit is reached
-    const res2 = await wrapped({} as any);
+    const res2 = await wrapped({});
     expect(res2.status).toBe(402);
     expect(handler).toHaveBeenCalledTimes(1); // handler not called again
   });
@@ -766,14 +762,14 @@ describe("C. Middleware Auth Bypass", () => {
   });
 
   it("C8: withLimit with amount=0 — should not consume (guard in service)", async () => {
-    const handler = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ success: true }), { status: 200 }),
-    );
+    const handler = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
 
     const wrapped = withLimit(ctx.service, resolveSession)("EXPORT_PDF", 0)(handler);
 
     // n=0 is rejected by the service's consume guard
-    const response = await wrapped({} as any);
+    const response = await wrapped({});
     // With n=0, consume returns LIMIT_REACHED — might return 402
     expect([402, 403]).toContain(response.status);
     expect(handler).not.toHaveBeenCalled();
@@ -812,7 +808,7 @@ describe("D. Injection Through Feature Keys", () => {
     expect(result).toBe(false);
 
     // Also check hasFeature didn't mutate the object's prototype
-    expect(({} as any).__proto__).toBe(Object.prototype);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 
   it("D4: feature key 'constructor' — does not cause unexpected behavior", async () => {
@@ -843,7 +839,7 @@ describe("D. Injection Through Feature Keys", () => {
     // If a route handler accidentally passes an array as featureKey,
     // e.g., from query parameters like ?features[]=EXPORT_PDF&features[]=AI_SUMMARY
     // TypeScript should prevent this, but runtime might not.
-    const arrayKey = ["EXPORT_PDF", "AI_SUMMARY"] as unknown as string;
+    const arrayKey = coerce<string>(["EXPORT_PDF", "AI_SUMMARY"]);
     const result = await ctx.service.hasFeature(ORG_A, arrayKey);
     // Array → string coersion gives "EXPORT_PDF,AI_SUMMARY"
     // which won't match any feature key
@@ -853,19 +849,17 @@ describe("D. Injection Through Feature Keys", () => {
   it("D8: feature key as object with toString override — does not execute arbitrary code", async () => {
     // If someone passes an object instead of a string, and the code uses it
     // in a way that calls toString(), the override would execute
-    const maliciousKey = {
+    const maliciousKey = coerce<string>({
       toString: () => {
         throw new Error("HACK: toString called on feature key");
       },
-    } as unknown as string;
+    });
 
     // hasFeature calls getDebugTrace which calls repository.getFeature(featureKey)
     // If featureKey is used in Map.get() — Map keys use SameValueZero comparison,
     // so the object reference itself is used, not the string value.
     // However, if it's used in string operations, toString() would be called.
-    await expect(
-      ctx.service.hasFeature(ORG_A, maliciousKey),
-    ).resolves.not.toThrow(); // Should not throw from toString
+    await expect(ctx.service.hasFeature(ORG_A, maliciousKey)).resolves.not.toThrow(); // Should not throw from toString
   });
 });
 
@@ -985,7 +979,7 @@ describe("E. Override Security", () => {
       scope: "ORG",
       scopeId: ORG_A,
       featureKey: "AI_SUMMARY",
-      enabled: null as unknown as boolean, // TypeScript would catch, but runtime could receive null
+      enabled: coerce<boolean>(null), // TypeScript would catch, but runtime could receive null
       reason: "Null enabled",
     });
 
@@ -1199,9 +1193,9 @@ describe("G. Admin API Security", () => {
 
     // Mock auth to return a non-admin user (USER role) using the top-level mock
     const { auth } = await import("@/lib/auth");
-    vi.mocked(auth).mockResolvedValue({
+    vi.mocked(auth as () => Promise<Session | null>).mockResolvedValue({
       user: { id: "u1", email: "a@b.com", role: "USER" },
-    } as any);
+    } as Session);
 
     const { requireAdmin } = await import("@/lib/auth/require-admin");
 
@@ -1254,7 +1248,7 @@ describe("G. Admin API Security", () => {
     // if (err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403) {
     //   return NextResponse.json({ error: "UNAUTHORIZED" }, { status: err.status || 401 });
     // }
-    const isUnauthorizedPattern = (err: any): boolean =>
+    const isUnauthorizedPattern = (err: AuthError): boolean =>
       err.message === "UNAUTHORIZED" || err.status === 401 || err.status === 403;
 
     expect(isUnauthorizedPattern(authError401)).toBe(true);
@@ -1365,9 +1359,7 @@ describe("H. Experiment Security", () => {
 
     for (const maliciousId of maliciousIds) {
       // None of these should cause errors or unexpected behavior
-      await expect(
-        ctx.service.isInExperiment(maliciousId, "NEW_DASHBOARD"),
-      ).resolves.not.toThrow();
+      await expect(ctx.service.isInExperiment(maliciousId, "NEW_DASHBOARD")).resolves.not.toThrow();
     }
   });
 
@@ -1408,9 +1400,9 @@ describe("I. Cache Security", () => {
     await ctx.service.getAllEntitlements(ORG_A);
     const cacheKeyA = `entitlements:${ORG_A}`;
 
-    const cachedA = await ctx.cache.get(cacheKeyA);
+    const cachedA = (await ctx.cache.get(cacheKeyA)) as EntitlementMap | null;
     expect(cachedA).not.toBeNull();
-    expect(cachedA.planKey).toBe("pro");
+    expect((cachedA as EntitlementMap).planKey).toBe("pro");
 
     // Org B's cache is separate
     const cacheKeyB = `entitlements:${ORG_B}`;

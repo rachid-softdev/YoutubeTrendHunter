@@ -64,6 +64,11 @@ type RedisMock = {
 
 let redis: RedisMock;
 
+/** Type-safe coercion helper for module→mock casts (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
+
 // ──────────────────────────────────────────────────────────────
 // MemoryLRUCache Behaviour (tested via CacheService)
 // ──────────────────────────────────────────────────────────────
@@ -388,7 +393,7 @@ describe("CacheService — redis mode", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    redis = (await import("@/lib/redis")) as unknown as RedisMock;
+    redis = coerce<RedisMock>(await import("@/lib/redis"));
   });
 
   it("get checks redis first when redis is available", async () => {
@@ -499,10 +504,7 @@ describe("CacheService — redis mode", () => {
     expect(redis.invalidateCache).toHaveBeenCalledWith("entitlements:org-555");
 
     // Should have published to redis pub/sub
-    expect(redis.default.publish).toHaveBeenCalledWith(
-      "entitlements:invalidate",
-      "org-555",
-    );
+    expect(redis.default.publish).toHaveBeenCalledWith("entitlements:invalidate", "org-555");
   });
 
   it("publishInvalidation notifies subscribers AND publishes to redis", async () => {
@@ -515,10 +517,7 @@ describe("CacheService — redis mode", () => {
     // Subscriber notified
     expect(subscriber).toHaveBeenCalledWith("org-777");
     // Redis pub/sub
-    expect(redis.default.publish).toHaveBeenCalledWith(
-      "entitlements:invalidate",
-      "org-777",
-    );
+    expect(redis.default.publish).toHaveBeenCalledWith("entitlements:invalidate", "org-777");
   });
 });
 
@@ -532,7 +531,7 @@ describe("CacheService — error resilience", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks(); // Use resetAllMocks to fully clear implementations
-    redis = (await import("@/lib/redis")) as unknown as RedisMock;
+    redis = coerce<RedisMock>(await import("@/lib/redis"));
   });
 
   it("get falls back gracefully when redis throws", async () => {
@@ -548,9 +547,7 @@ describe("CacheService — error resilience", () => {
   });
 
   it("set does not throw when redis setCached throws", async () => {
-    redis.setCached.mockImplementationOnce(() =>
-      Promise.reject(new Error("Redis write failed")),
-    );
+    redis.setCached.mockImplementationOnce(() => Promise.reject(new Error("Redis write failed")));
     const cache = new CacheService({ maxMemoryEntries: 10 });
 
     // Should not throw — catches internally
@@ -580,9 +577,7 @@ describe("CacheService — error resilience", () => {
     );
     const cache = new CacheService({ maxMemoryEntries: 10 });
 
-    await expect(
-      cache.publishInvalidation("org-throw"),
-    ).resolves.toBeUndefined();
+    await expect(cache.publishInvalidation("org-throw")).resolves.toBeUndefined();
   });
 
   it("subscriber errors do not propagate from publishInvalidation", async () => {
@@ -595,9 +590,7 @@ describe("CacheService — error resilience", () => {
     cache.subscribe(goodSub);
 
     // Should not throw despite the bad subscriber
-    await expect(
-      cache.publishInvalidation("org-crash"),
-    ).resolves.toBeUndefined();
+    await expect(cache.publishInvalidation("org-crash")).resolves.toBeUndefined();
 
     // Good subscriber should still have been called
     expect(goodSub).toHaveBeenCalledWith("org-crash");
@@ -611,18 +604,14 @@ describe("CacheService — error resilience", () => {
 describe("getCacheService singleton", () => {
   it("returns a CacheService instance", async () => {
     clearRedisEnv();
-    const { getCacheService: getCS } = await import(
-      "@/lib/feature-flags/cache-service"
-    );
+    const { getCacheService: getCS } = await import("@/lib/feature-flags/cache-service");
     const instance = getCS();
     expect(instance).toBeInstanceOf(CacheService);
   });
 
   it("returns the same instance on repeated calls", async () => {
     clearRedisEnv();
-    const { getCacheService: getCS } = await import(
-      "@/lib/feature-flags/cache-service"
-    );
+    const { getCacheService: getCS } = await import("@/lib/feature-flags/cache-service");
     const instance1 = getCS();
     const instance2 = getCS();
     expect(instance1).toBe(instance2);

@@ -5,7 +5,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
 import { isInExperiment, murmurhash } from "@/lib/feature-flags/experiment";
-import { FeatureNotAvailableError, LimitReachedError, SubscriptionExpiredError } from "@/lib/feature-flags/errors";
+import {
+  FeatureNotAvailableError,
+  LimitReachedError,
+  SubscriptionExpiredError,
+} from "@/lib/feature-flags/errors";
 import type {
   IEntitlementRepository,
   ICacheService,
@@ -18,6 +22,7 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
 
 // Mock next/server for withFeature/withLimit higher-order functions
@@ -73,10 +78,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.planFeatures.get(planId) ?? [];
   }
 
-  async getPlanFeature(
-    planId: string,
-    featureKey: string,
-  ): Promise<PlanFeatureRecord | null> {
+  async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureRecord | null> {
     const features = this.planFeatures.get(planId) ?? [];
     return features.find((f) => f.feature?.key === featureKey) ?? null;
   }
@@ -85,7 +87,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -119,12 +121,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-      currentPeriodEnd:
-        data?.currentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCurrentPeriodEnd:
-        data?.stripeCurrentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -154,20 +153,14 @@ class MockEntitlementRepository implements IEntitlementRepository {
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "ORG" &&
-        o.scopeId === orgId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "USER" &&
-        o.scopeId === userId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -204,10 +197,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.overrides = this.overrides.filter((o) => o.id !== id);
   }
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
@@ -282,11 +272,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -402,10 +392,13 @@ describe("FeatureGateService", () => {
     repository.features.set("EXPORT_PDF", createFeature("EXPORT_PDF", "LIMIT"));
     repository.features.set("AI_SUMMARY", createFeature("AI_SUMMARY", "BOOLEAN"));
     repository.features.set("API_ACCESS", createFeature("API_ACCESS", "BOOLEAN"));
-    repository.features.set("NEW_DASHBOARD", createFeature("NEW_DASHBOARD", "EXPERIMENT", {
-      percentage: 50,
-      seed: "NEW_DASHBOARD_v1",
-    }));
+    repository.features.set(
+      "NEW_DASHBOARD",
+      createFeature("NEW_DASHBOARD", "EXPERIMENT", {
+        percentage: 50,
+        seed: "NEW_DASHBOARD_v1",
+      }),
+    );
     repository.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
   });
 
@@ -737,12 +730,7 @@ describe("FeatureGateService", () => {
 
   it("consume returns success with remaining=null for unlimited LIMIT feature", async () => {
     repository.planFeatures.set("plan_enterprise", [
-      createPlanFeature(
-        "plan_enterprise",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        null,
-      ),
+      createPlanFeature("plan_enterprise", repository.features.get("EXPORT_PDF")!, true, null),
     ]);
     await repository.createSubscription(ORG_ID, "enterprise");
 
@@ -754,12 +742,7 @@ describe("FeatureGateService", () => {
 
   it("canConsume returns true for unlimited LIMIT feature", async () => {
     repository.planFeatures.set("plan_enterprise", [
-      createPlanFeature(
-        "plan_enterprise",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        null,
-      ),
+      createPlanFeature("plan_enterprise", repository.features.get("EXPORT_PDF")!, true, null),
     ]);
     await repository.createSubscription(ORG_ID, "enterprise");
 
@@ -1179,12 +1162,7 @@ describe("FeatureGateService", () => {
 
   it("allows unlimited consumption when limit is null", async () => {
     repository.planFeatures.set("plan_enterprise", [
-      createPlanFeature(
-        "plan_enterprise",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        null,
-      ),
+      createPlanFeature("plan_enterprise", repository.features.get("EXPORT_PDF")!, true, null),
     ]);
     await repository.createSubscription(ORG_ID, "enterprise");
 
@@ -1376,9 +1354,7 @@ describe("DowngradeService", () => {
     await repository.createSubscription(ORG_ID, "enterprise");
 
     const preview = await downgrade.previewDowngrade(ORG_ID, "pro");
-    const exportFeature = preview.impactedFeatures.find(
-      (f) => f.featureKey === "EXPORT_PDF",
-    );
+    const exportFeature = preview.impactedFeatures.find((f) => f.featureKey === "EXPORT_PDF");
     expect(exportFeature).toBeDefined();
     expect(exportFeature!.currentValue).toBeNull();
     expect(exportFeature!.newValue).toBe(50);
@@ -1684,11 +1660,9 @@ describe("Middleware factories", () => {
     const sessionResolver = async () => ({ orgId: ORG_ID, userId: USER_ID });
     const { withFeature } = await import("@/lib/feature-flags/middleware");
 
-    const handler = withFeature(service, sessionResolver)("AI_SUMMARY")(
-      async (_req: unknown) => {
-        throw new Error("DB crash");
-      },
-    );
+    const handler = withFeature(service, sessionResolver)("AI_SUMMARY")(async (_req: unknown) => {
+      throw new Error("DB crash");
+    });
     await expect(handler({})).rejects.toThrow("DB crash");
   });
 

@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { type HTMLAttributes } from "react";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -37,9 +38,11 @@ vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
   return {
     ...actual,
-    useSyncExternalStore: vi.fn((_subscribe: any, getSnapshot: () => any) => {
-      return getSnapshot();
-    }),
+    useSyncExternalStore: vi.fn(
+      (_subscribe: (onStoreChange: () => void) => () => void, getSnapshot: () => unknown) => {
+        return getSnapshot();
+      },
+    ),
   };
 });
 
@@ -59,7 +62,7 @@ vi.mock("@/components/ui/button", () => ({
     onClick,
     "aria-label": ariaLabel,
     ...props
-  }: any) => (
+  }: HTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }) => (
     <button
       onClick={onClick}
       aria-label={ariaLabel}

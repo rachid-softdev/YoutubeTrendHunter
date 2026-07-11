@@ -57,7 +57,18 @@ import type {
   CreateOverrideInput,
   SubscriptionStatus,
   EntitlementMap,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
+
+type RedisModule = typeof import("@/lib/redis");
+// The vi.mock above exposes these test harness helpers on the module; they are
+// not part of the real module's public type, so we intersect them here.
+interface RedisTestExports {
+  __resetStore?: () => void;
+  __getStore: () => Map<string, unknown>;
+  __getPublishMock: () => ReturnType<typeof vi.fn>;
+}
+type RedisTestModule = RedisModule & RedisTestExports;
 
 // ============================================
 // Mock Repository (same as feature-gate.test.ts)
@@ -73,7 +84,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
   stripeEvents: Set<string> = new Set();
   dbCallCount = 0; // Track DB hits for stampede detection
 
-  private trackDb(): void { this.dbCallCount++; }
+  private trackDb(): void {
+    this.dbCallCount++;
+  }
 
   async getPlan(planKey: string): Promise<PlanRecord | null> {
     this.trackDb();
@@ -112,12 +125,17 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.trackDb();
     return this.getPlanFeatures(planId);
   }
-  async getOrganization(_orgId: string): Promise<any> { return null; }
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
+    return null;
+  }
   async getActiveSubscription(orgId: string): Promise<SubscriptionRecord | null> {
     this.trackDb();
     return this.subscriptions.get(orgId) ?? null;
   }
-  async updateSubscription(orgId: string, data: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async updateSubscription(
+    orgId: string,
+    data: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     this.trackDb();
     const existing = this.subscriptions.get(orgId);
     if (!existing) throw new Error("No subscription");
@@ -125,49 +143,87 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.subscriptions.set(orgId, updated);
     return updated;
   }
-  async createSubscription(orgId: string, planKey: string, data?: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async createSubscription(
+    orgId: string,
+    planKey: string,
+    data?: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     this.trackDb();
     const sub: SubscriptionRecord = {
-      id: `sub_${orgId}`, userId: `user_${orgId}`, orgId, planKey,
-      plan: planKey.toUpperCase(), status: "ACTIVE" as SubscriptionStatus,
+      id: `sub_${orgId}`,
+      userId: `user_${orgId}`,
+      orgId,
+      planKey,
+      plan: planKey.toUpperCase(),
+      status: "ACTIVE" as SubscriptionStatus,
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
       currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      stripeCurrentPeriodEnd: data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      trialEnd: data?.trialEnd ?? null, trialStart: data?.trialStart ?? null,
-      createdAt: new Date(), updatedAt: new Date(),
+      stripeCurrentPeriodEnd:
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      trialEnd: data?.trialEnd ?? null,
+      trialStart: data?.trialStart ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.subscriptions.set(orgId, sub);
     return sub;
   }
-  async getOverride(scope: OverrideScope, scopeId: string, featureKey: string): Promise<EntitlementOverrideRecord | null> {
+  async getOverride(
+    scope: OverrideScope,
+    scopeId: string,
+    featureKey: string,
+  ): Promise<EntitlementOverrideRecord | null> {
     this.trackDb();
     const now = new Date();
-    return this.overrides.find((o) => o.scope === scope && o.scopeId === scopeId && o.featureKey === featureKey && (!o.expiresAt || o.expiresAt > now)) ?? null;
+    return (
+      this.overrides.find(
+        (o) =>
+          o.scope === scope &&
+          o.scopeId === scopeId &&
+          o.featureKey === featureKey &&
+          (!o.expiresAt || o.expiresAt > now),
+      ) ?? null
+    );
   }
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     this.trackDb();
     const now = new Date();
-    return this.overrides.filter((o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now));
+    return this.overrides.filter(
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
+    );
   }
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     this.trackDb();
     const now = new Date();
-    return this.overrides.filter((o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now));
+    return this.overrides.filter(
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
+    );
   }
   async createOverride(data: CreateOverrideInput): Promise<EntitlementOverrideRecord> {
     this.trackDb();
     const override: EntitlementOverrideRecord = {
-      id: `override_${Date.now()}_${Math.random()}`, scope: data.scope, scopeId: data.scopeId,
-      featureKey: data.featureKey, enabled: data.enabled, limitValue: data.limitValue ?? null,
-      configJson: data.configJson ?? null, expiresAt: data.expiresAt ?? null, reason: data.reason,
-      organizationId: data.organizationId ?? null, createdAt: new Date(), updatedAt: new Date(),
+      id: `override_${Date.now()}_${Math.random()}`,
+      scope: data.scope,
+      scopeId: data.scopeId,
+      featureKey: data.featureKey,
+      enabled: data.enabled,
+      limitValue: data.limitValue ?? null,
+      configJson: data.configJson ?? null,
+      expiresAt: data.expiresAt ?? null,
+      reason: data.reason,
+      organizationId: data.organizationId ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.overrides.push(override);
     return override;
   }
-  async updateOverride(id: string, data: Partial<EntitlementOverrideRecord>): Promise<EntitlementOverrideRecord> {
+  async updateOverride(
+    id: string,
+    data: Partial<EntitlementOverrideRecord>,
+  ): Promise<EntitlementOverrideRecord> {
     this.trackDb();
     const idx = this.overrides.findIndex((o) => o.id === id);
     if (idx === -1) throw new Error("Override not found");
@@ -182,17 +238,38 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.trackDb();
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
-  async getUsageForPeriod(orgId: string, featureKey: string, _periodStart: Date): Promise<UsageTrackingRecord | null> {
+  async getUsageForPeriod(
+    orgId: string,
+    featureKey: string,
+    _periodStart: Date,
+  ): Promise<UsageTrackingRecord | null> {
     this.trackDb();
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
-  async createUsage(orgId: string, featureKey: string, periodStart: Date, periodEnd: Date): Promise<UsageTrackingRecord> {
+  async createUsage(
+    orgId: string,
+    featureKey: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<UsageTrackingRecord> {
     this.trackDb();
-    const usage: UsageTrackingRecord = { id: `usage_${Date.now()}`, orgId, featureKey, usageCount: 0, periodStart, periodEnd };
+    const usage: UsageTrackingRecord = {
+      id: `usage_${Date.now()}`,
+      orgId,
+      featureKey,
+      usageCount: 0,
+      periodStart,
+      periodEnd,
+    };
     this.usage.set(`${orgId}:${featureKey}`, usage);
     return usage;
   }
-  async consumeUsage(orgId: string, featureKey: string, amount: number, maxAllowed?: number): Promise<{ success: boolean; usageCount: number } | null> {
+  async consumeUsage(
+    orgId: string,
+    featureKey: string,
+    amount: number,
+    maxAllowed?: number,
+  ): Promise<{ success: boolean; usageCount: number } | null> {
     this.trackDb();
     const key = `${orgId}:${featureKey}`;
     const existing = this.usage.get(key);
@@ -217,8 +294,12 @@ class MockEntitlementRepository implements IEntitlementRepository {
     created.usageCount = amount;
     return { success: true, usageCount: amount };
   }
-  async hasStripeEventBeenProcessed(eventId: string): Promise<boolean> { return this.stripeEvents.has(eventId); }
-  async markStripeEventProcessed(eventId: string, _type: string): Promise<void> { this.stripeEvents.add(eventId); }
+  async hasStripeEventBeenProcessed(eventId: string): Promise<boolean> {
+    return this.stripeEvents.has(eventId);
+  }
+  async markStripeEventProcessed(eventId: string, _type: string): Promise<void> {
+    this.stripeEvents.add(eventId);
+  }
 }
 
 // ============================================
@@ -227,32 +308,67 @@ class MockEntitlementRepository implements IEntitlementRepository {
 
 /** Helper to reset the mocked Redis store between tests */
 async function resetRedisStore(): Promise<void> {
-  const mod = await import("@/lib/redis");
-  const reset = (mod as any).__resetStore as () => void;
+  const mod = (await import("@/lib/redis")) as RedisTestModule;
+  const reset = mod.__resetStore;
   if (reset) reset();
 }
 
 /** Helper to get the shared Redis store for inspection */
 async function getRedisStore(): Promise<Map<string, unknown>> {
-  const mod = await import("@/lib/redis");
-  return (mod as any).__getStore() as Map<string, unknown>;
+  const mod = (await import("@/lib/redis")) as RedisTestModule;
+  return mod.__getStore();
 }
 
 /** Helper to get the publish mock */
 async function getPublishMock() {
-  const mod = await import("@/lib/redis");
-  return (mod as any).__getPublishMock() as ReturnType<typeof vi.fn>;
+  const mod = (await import("@/lib/redis")) as RedisTestModule;
+  return mod.__getPublishMock();
 }
 
 // Test data factories
 function createPlan(key: string, name: string, sortOrder = 0): PlanRecord {
-  return { id: `plan_${key}`, key, name, priceMonthly: key === "free" ? 0 : key === "pro" ? 1500 : 3900, isActive: true, sortOrder, createdAt: new Date(), updatedAt: new Date() };
+  return {
+    id: `plan_${key}`,
+    key,
+    name,
+    priceMonthly: key === "free" ? 0 : key === "pro" ? 1500 : 3900,
+    isActive: true,
+    sortOrder,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 }
 function createFeature(key: string, type: "BOOLEAN" | "LIMIT" | "EXPERIMENT"): FeatureRecord {
-  return { id: `feature_${key}`, key, name: key, description: `Feature ${key}`, type, defaultConfig: null, isActive: true, createdAt: new Date(), updatedAt: new Date() };
+  return {
+    id: `feature_${key}`,
+    key,
+    name: key,
+    description: `Feature ${key}`,
+    type,
+    defaultConfig: null,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 }
-function createPlanFeature(planId: string, feature: FeatureRecord, enabled: boolean, limitValue: number | null = null): PlanFeatureRecord {
-  return { id: `pf_${planId}_${feature.id}`, planId, featureId: feature.id, enabled, limitValue, configJson: null, downgradeStrategy: "GRACEFUL", sortOrder: 0, plan: undefined, feature };
+function createPlanFeature(
+  planId: string,
+  feature: FeatureRecord,
+  enabled: boolean,
+  limitValue: number | null = null,
+): PlanFeatureRecord {
+  return {
+    id: `pf_${planId}_${feature.id}`,
+    planId,
+    featureId: feature.id,
+    enabled,
+    limitValue,
+    configJson: null,
+    downgradeStrategy: "GRACEFUL",
+    sortOrder: 0,
+    plan: undefined,
+    feature,
+  };
 }
 
 // ============================================
@@ -431,7 +547,7 @@ describe("Cache Stampede Scenarios", () => {
 // ============================================
 
 describe("Redis Failure Modes", () => {
-  let redisModule: any;
+  let redisModule: RedisModule;
 
   beforeEach(async () => {
     await resetRedisStore();
@@ -524,7 +640,9 @@ describe("Redis Failure Modes", () => {
 
     const cache = new CacheService();
     const notified: string[] = [];
-    cache.subscribe((orgId) => { notified.push(orgId); });
+    cache.subscribe((orgId) => {
+      notified.push(orgId);
+    });
 
     // Should not throw — errors are caught silently
     await expect(cache.publishInvalidation("org_fail")).resolves.toBeUndefined();
@@ -729,7 +847,9 @@ describe("Cache Invalidation Fan-Out", () => {
     await cache.get(`entitlements:${ORG_ID}`);
 
     const notifiedOrgs: string[] = [];
-    cache.subscribe((oid) => { notifiedOrgs.push(oid); });
+    cache.subscribe((oid) => {
+      notifiedOrgs.push(oid);
+    });
 
     await cache.publishInvalidation(ORG_ID);
 
@@ -750,8 +870,12 @@ describe("Cache Invalidation Fan-Out", () => {
 
   it("Subscribers are notified in order", async () => {
     const notified: string[] = [];
-    cache.subscribe((oid) => { notified.push(`${oid}_1`); });
-    cache.subscribe((oid) => { notified.push(`${oid}_2`); });
+    cache.subscribe((oid) => {
+      notified.push(`${oid}_1`);
+    });
+    cache.subscribe((oid) => {
+      notified.push(`${oid}_2`);
+    });
 
     await cache.publishInvalidation(ORG_ID);
 
@@ -760,8 +884,12 @@ describe("Cache Invalidation Fan-Out", () => {
 
   it("Subscriber error does not prevent other subscribers", async () => {
     const notified: string[] = [];
-    cache.subscribe(() => { throw new Error("Subscriber crash"); });
-    cache.subscribe((oid) => { notified.push(oid); });
+    cache.subscribe(() => {
+      throw new Error("Subscriber crash");
+    });
+    cache.subscribe((oid) => {
+      notified.push(oid);
+    });
 
     // Should not throw despite the crashing subscriber
     await expect(cache.publishInvalidation(ORG_ID)).resolves.toBeUndefined();
@@ -770,7 +898,9 @@ describe("Cache Invalidation Fan-Out", () => {
 
   it("Unsubscribing removes subscriber", async () => {
     const notified: string[] = [];
-    const unsub = cache.subscribe((oid) => { notified.push(oid); });
+    const unsub = cache.subscribe((oid) => {
+      notified.push(oid);
+    });
     unsub();
 
     await cache.publishInvalidation(ORG_ID);
@@ -1040,7 +1170,9 @@ describe("CacheService Singleton", () => {
     const { getCacheService } = await import("@/lib/feature-flags/cache-service");
     const svc = getCacheService();
     const notified: string[] = [];
-    svc.subscribe((oid) => { notified.push(oid); });
+    svc.subscribe((oid) => {
+      notified.push(oid);
+    });
 
     const svc2 = getCacheService(); // same instance
     await svc2.publishInvalidation("org_singleton");

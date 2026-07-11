@@ -24,6 +24,15 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { makeSubscription } from "@/__tests__/factories";
+import type { Subscription } from "@prisma/client";
+import type { Mock } from "vitest";
+import type { Prisma } from "@prisma/client";
+
+type SubUpsertMock = Mock<(args: Prisma.SubscriptionUpsertArgs) => Promise<Subscription>>;
+type SubUpdateMock = Mock<(args: Prisma.SubscriptionUpdateArgs) => Promise<Subscription>>;
+const subscriptionUpsertMock = vi.mocked(prisma.subscription.upsert) as SubUpsertMock;
+const subscriptionUpdateMock = vi.mocked(prisma.subscription.update) as SubUpdateMock;
 
 describe("POST /api/stripe/webhook", () => {
   beforeEach(() => {
@@ -50,7 +59,7 @@ describe("POST /api/stripe/webhook", () => {
       const validPayload = { type: "checkout.session.completed" };
       const mockEvent = { type: "checkout.session.completed", data: { object: {} } };
 
-      vi.mocked(mockStripe.webhooks.constructEvent).mockReturnValue(mockEvent as any);
+      vi.mocked(mockStripe.webhooks.constructEvent).mockReturnValue(mockEvent);
 
       const event = mockStripe.webhooks.constructEvent(
         JSON.stringify(validPayload),
@@ -76,8 +85,8 @@ describe("POST /api/stripe/webhook", () => {
         current_period_end: 1735689600,
       };
 
-      vi.mocked(mockStripe.subscriptions.retrieve).mockResolvedValue(subscription as any);
-      vi.mocked(prisma.subscription.upsert).mockResolvedValue({} as any);
+      vi.mocked(mockStripe.subscriptions.retrieve).mockResolvedValue(subscription);
+      subscriptionUpsertMock.mockResolvedValue(makeSubscription({}));
 
       if (checkoutSession.mode === "subscription") {
         const sub = await mockStripe.subscriptions.retrieve(checkoutSession.subscription as string);
@@ -132,8 +141,8 @@ describe("POST /api/stripe/webhook", () => {
         current_period_end: 1738377600,
       };
 
-      vi.mocked(mockStripe.subscriptions.retrieve).mockResolvedValue(subscription as any);
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      vi.mocked(mockStripe.subscriptions.retrieve).mockResolvedValue(subscription);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       if (invoice.subscription) {
         const sub = await mockStripe.subscriptions.retrieve(invoice.subscription as string);
@@ -175,7 +184,7 @@ describe("POST /api/stripe/webhook", () => {
         metadata: { userId: "user-123" },
       };
 
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const userId = subscription.metadata.userId;
       await prisma.subscription.update({

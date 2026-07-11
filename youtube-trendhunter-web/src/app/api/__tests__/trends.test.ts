@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { trendsQuerySchema } from "@/lib/schemas";
+import { makeNiche, makeTrend } from "@/__tests__/factories";
+
+type SessionLike = { user?: { id?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 // Mock Prisma
 vi.mock("@/lib/prisma", () => ({
@@ -15,11 +19,6 @@ vi.mock("@/lib/prisma", () => ({
       count: vi.fn(),
     },
   },
-}));
-
-// Mock Auth
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
 }));
 
 // Mock Redis
@@ -39,7 +38,6 @@ vi.mock("@/lib/services/subscription.service", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 
 describe("GET /api/trends", () => {
   beforeEach(() => {
@@ -48,10 +46,10 @@ describe("GET /api/trends", () => {
 
   describe("Authentication", () => {
     it("should return 401 when user is not authenticated", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      sessionMock.mockResolvedValue(null);
 
       const handler = async () => {
-        const session = await auth();
+        const session = await sessionMock();
         if (!session?.user?.id) {
           return new Response(JSON.stringify({ error: "Non authentifié" }), { status: 401 });
         }
@@ -64,12 +62,12 @@ describe("GET /api/trends", () => {
     });
 
     it("should proceed when user is authenticated", async () => {
-      (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
       const handler = async () => {
-        const session = await auth();
+        const session = await sessionMock();
         if (!session?.user?.id) {
           return new Response(JSON.stringify({ error: "Non authentifié" }), { status: 401 });
         }
@@ -108,17 +106,17 @@ describe("GET /api/trends", () => {
   describe("Niche Lookup", () => {
     it("should return 404 when niche does not exist", async () => {
       vi.mocked(prisma.niche.findUnique).mockResolvedValue(null);
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const niche = await prisma.niche.findUnique({ where: { slug: "nonexistent" } });
       expect(niche).toBeNull();
     });
 
     it("should find niche with valid slug", async () => {
-      const mockNiche = { id: "niche-1", slug: "tech", name: "Tech" };
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche as any);
+      const mockNiche = makeNiche({ id: "niche-1", slug: "tech", name: "Tech" });
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche);
 
       const niche = await prisma.niche.findUnique({ where: { slug: "tech" } });
       expect(niche).not.toBeNull();
@@ -129,16 +127,16 @@ describe("GET /api/trends", () => {
   describe("Trends Fetching", () => {
     it("should fetch trends for authenticated user with valid niche", async () => {
       const mockTrends = [
-        { id: "trend-1", title: "AI Tools 2024", score: 95, velocity: 2.5 },
-        { id: "trend-2", title: "ChatGPT Tips", score: 88, velocity: 1.8 },
+        makeTrend({ id: "trend-1", title: "AI Tools 2024", score: 95, velocity: 2.5 }),
+        makeTrend({ id: "trend-2", title: "ChatGPT Tips", score: 88, velocity: 1.8 }),
       ];
-      const mockNiche = { id: "niche-1", slug: "tech", name: "Tech" };
+      const mockNiche = makeNiche({ id: "niche-1", slug: "tech", name: "Tech" });
 
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche as any);
-      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends as any);
+      });
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche);
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends);
 
       const trends = await prisma.trend.findMany({
         where: { nicheId: mockNiche.id, expiresAt: { gte: expect.any(Date) } },
@@ -152,8 +150,8 @@ describe("GET /api/trends", () => {
 
     it("should limit FREE plan to 5 trends", async () => {
       vi.mocked(prisma.userNiche.count).mockResolvedValue(0);
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue({ id: "niche-1" } as any);
-      vi.mocked(prisma.trend.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(makeNiche({ id: "niche-1" }));
+      vi.mocked(prisma.trend.findMany).mockResolvedValue([]);
 
       const count = await prisma.userNiche.count({ where: { userId: "user-free" } });
       expect(count).toBe(0);
@@ -176,11 +174,11 @@ describe("GET /api/trends", () => {
 
   describe("Response Format", () => {
     it("should return trends with plan information", async () => {
-      const mockTrends = [{ id: "trend-1", title: "Test" }];
-      const mockNiche = { id: "niche-1", slug: "tech" };
+      const mockTrends = [makeTrend({ id: "trend-1", title: "Test" })];
+      const mockNiche = makeNiche({ id: "niche-1", slug: "tech" });
 
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche as any);
-      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends as any);
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche);
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(mockTrends);
 
       const result = {
         trends: mockTrends,

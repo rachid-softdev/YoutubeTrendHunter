@@ -10,10 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
-import {
-  FeatureNotAvailableError,
-  LimitReachedError,
-} from "@/lib/feature-flags/errors";
+import { FeatureNotAvailableError, LimitReachedError } from "@/lib/feature-flags/errors";
 import type {
   IEntitlementRepository,
   ICacheService,
@@ -26,7 +23,13 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
+
+/** Type-safe coercion helper for intentionally-invalid fixtures (no `as unknown as`). */
+function coerce<T>(value: unknown): T {
+  return value as T;
+}
 
 // ─── Mock next/server for withFeature/withLimit ───
 
@@ -82,10 +85,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.planFeatures.get(planId) ?? [];
   }
 
-  async getPlanFeature(
-    planId: string,
-    featureKey: string,
-  ): Promise<PlanFeatureRecord | null> {
+  async getPlanFeature(planId: string, featureKey: string): Promise<PlanFeatureRecord | null> {
     const features = this.planFeatures.get(planId) ?? [];
     return features.find((f) => f.feature?.key === featureKey) ?? null;
   }
@@ -94,7 +94,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -128,12 +128,9 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripeSubscriptionId: data?.stripeSubscriptionId ?? null,
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
-      currentPeriodEnd:
-        data?.currentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       stripeCurrentPeriodEnd:
-        data?.stripeCurrentPeriodEnd ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -163,20 +160,14 @@ class MockEntitlementRepository implements IEntitlementRepository {
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "ORG" &&
-        o.scopeId === orgId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
     return this.overrides.filter(
-      (o) =>
-        o.scope === "USER" &&
-        o.scopeId === userId &&
-        (!o.expiresAt || o.expiresAt > now),
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
     );
   }
 
@@ -213,10 +204,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     this.overrides = this.overrides.filter((o) => o.id !== id);
   }
 
-  async getCurrentUsage(
-    orgId: string,
-    featureKey: string,
-  ): Promise<UsageTrackingRecord | null> {
+  async getCurrentUsage(orgId: string, featureKey: string): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
@@ -291,11 +279,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -411,10 +399,7 @@ function setupService(): {
   repository.features.set("EXPORT_PDF", createFeature("EXPORT_PDF", "LIMIT"));
   repository.features.set("AI_SUMMARY", createFeature("AI_SUMMARY", "BOOLEAN"));
   repository.features.set("API_ACCESS", createFeature("API_ACCESS", "BOOLEAN"));
-  repository.features.set(
-    "UNLIMITED_STORAGE",
-    createFeature("UNLIMITED_STORAGE", "LIMIT"),
-  );
+  repository.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
 
   return { repository, cache, service };
 }
@@ -457,9 +442,7 @@ describe("requireFeature middleware factory", () => {
     const { requireFeature } = await import("@/lib/feature-flags/middleware");
     const check = requireFeature(service, defaultSession())("AI_SUMMARY");
     await expect(check()).rejects.toThrow(FeatureNotAvailableError);
-    await expect(check()).rejects.toThrow(
-      'Feature "AI_SUMMARY" not available on plan "free"',
-    );
+    await expect(check()).rejects.toThrow('Feature "AI_SUMMARY" not available on plan "free"');
   });
 
   it("propagates session resolver errors", async () => {
@@ -473,7 +456,7 @@ describe("requireFeature middleware factory", () => {
   });
 
   it("throws TypeError when session resolver returns null", async () => {
-    const nullSession = async () => null as unknown as { orgId: string; userId: string };
+    const nullSession = async () => coerce<{ orgId: string; userId: string }>(null);
 
     const { requireFeature } = await import("@/lib/feature-flags/middleware");
     const check = requireFeature(service, nullSession)("AI_SUMMARY");
@@ -494,16 +477,9 @@ describe("requireFeature middleware factory", () => {
 
   it("handles special characters in feature key", async () => {
     // Feature with special chars registered on the plan
-    repository.features.set(
-      "FEATURE_@#$%",
-      createFeature("FEATURE_@#$%", "BOOLEAN"),
-    );
+    repository.features.set("FEATURE_@#$%", createFeature("FEATURE_@#$%", "BOOLEAN"));
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("FEATURE_@#$%")!,
-        true,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("FEATURE_@#$%")!, true),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -529,12 +505,7 @@ describe("requireLimit middleware factory", () => {
 
   it("passes when under limit and returns handler result", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -545,12 +516,7 @@ describe("requireLimit middleware factory", () => {
 
   it("uses default amount of 1 when n is omitted", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        3,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 3),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -561,12 +527,7 @@ describe("requireLimit middleware factory", () => {
 
   it("passes with larger n that is still under limit", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        100,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 100),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -593,12 +554,7 @@ describe("requireLimit middleware factory", () => {
 
   it("throws LimitReachedError when at limit", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -640,12 +596,7 @@ describe("requireLimit middleware factory", () => {
     // Negative n causes canConsume to evaluate: used + (-n) <= limit
     // For n=-5, used=0, and any limit > -5, this evaluates to true
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -672,12 +623,7 @@ describe("consumeFeature middleware factory", () => {
 
   it("consumes and returns handler result", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -693,12 +639,7 @@ describe("consumeFeature middleware factory", () => {
 
   it("consumption count is accurate after multiple calls", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -715,12 +656,7 @@ describe("consumeFeature middleware factory", () => {
 
   it("throws LimitReachedError when at limit", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        5,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 5),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -734,12 +670,7 @@ describe("consumeFeature middleware factory", () => {
 
   it("consumes exactly at limit boundary", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        5,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 5),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -847,11 +778,9 @@ describe("withFeature middleware factory", () => {
     await repository.createSubscription(ORG_ID, "pro");
 
     const { withFeature } = await import("@/lib/feature-flags/middleware");
-    const handler = withFeature(service, defaultSession())("AI_SUMMARY")(
-      async (_req: unknown) => {
-        throw new Error("Database connection failed");
-      },
-    );
+    const handler = withFeature(service, defaultSession())("AI_SUMMARY")(async (_req: unknown) => {
+      throw new Error("Database connection failed");
+    });
     await expect(handler({})).rejects.toThrow("Database connection failed");
   });
 
@@ -919,12 +848,7 @@ describe("withLimit middleware factory", () => {
 
   it("passes through when under limit and returns handler Response", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -943,12 +867,7 @@ describe("withLimit middleware factory", () => {
 
   it("returns 402 JSON response when limit is reached", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        3,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 3),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -1015,12 +934,7 @@ describe("withLimit middleware factory", () => {
 
   it("passes through with unlimited limit (null)", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("UNLIMITED_STORAGE")!,
-        true,
-        null,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("UNLIMITED_STORAGE")!, true, null),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -1035,18 +949,13 @@ describe("withLimit middleware factory", () => {
 
   it("handles handler returning undefined/null response gracefully", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
     const { withLimit } = await import("@/lib/feature-flags/middleware");
-    const handler = withLimit(service, defaultSession())("EXPORT_PDF", 1)(
-      async (_req: unknown) => undefined as unknown as Response,
+    const handler = withLimit(service, defaultSession())("EXPORT_PDF", 1)(async (_req: unknown) =>
+      coerce<Response>(undefined),
     );
     // The middleware expects a Response return - TypeScript would catch this,
     // but at runtime it returns undefined which is technically "fine" for JS
@@ -1095,12 +1004,7 @@ describe("Error response format verification", () => {
 
   it("402 response from withLimit has correct JSON shape", async () => {
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        5,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 5),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
@@ -1130,26 +1034,14 @@ describe("Error response format verification", () => {
     // FIXED: `return await handler(req)` now properly awaits the handler,
     // so rejections are caught by the try/catch block and formatted as 402.
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        5,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 5),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
 
     const { withLimit } = await import("@/lib/feature-flags/middleware");
-    const handler = withLimit(service, defaultSession())("EXPORT_PDF", 1)(
-      async (_req: unknown) => {
-        throw new LimitReachedError(
-          "EXPORT_PDF",
-          5,
-          5,
-          new Date().toISOString(),
-        );
-      },
-    );
+    const handler = withLimit(service, defaultSession())("EXPORT_PDF", 1)(async (_req: unknown) => {
+      throw new LimitReachedError("EXPORT_PDF", 5, 5, new Date().toISOString());
+    });
     // FIXED: Error is caught by try/catch and returned as 402 JSON response
     const response = await handler({});
     expect(response.status).toBe(402);
@@ -1177,12 +1069,7 @@ describe("Session resolver edge cases", () => {
     // Both features on the same plan
     repository.planFeatures.set("plan_pro", [
       createPlanFeature("plan_pro", repository.features.get("AI_SUMMARY")!, true),
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
   });
@@ -1207,8 +1094,9 @@ describe("Session resolver edge cases", () => {
       throw new CustomAuthError();
     };
 
-    const { requireFeature, requireLimit, consumeFeature, withFeature } =
-      await import("@/lib/feature-flags/middleware");
+    const { requireFeature, requireLimit, consumeFeature, withFeature } = await import(
+      "@/lib/feature-flags/middleware"
+    );
 
     // requireFeature
     const rfCheck = requireFeature(service, throwingSession)("AI_SUMMARY");
@@ -1231,8 +1119,7 @@ describe("Session resolver edge cases", () => {
 
   it("session resolver returns missing fields gracefully", async () => {
     // Session with missing orgId should cause issues downstream
-    const incompleteSession = async () =>
-      ({}) as unknown as { orgId: string; userId: string };
+    const incompleteSession = async () => coerce<{ orgId: string; userId: string }>({});
 
     const { requireFeature } = await import("@/lib/feature-flags/middleware");
     const check = requireFeature(service, incompleteSession)("AI_SUMMARY");
@@ -1249,9 +1136,7 @@ describe("Session resolver edge cases", () => {
       tenant: "acme",
     });
 
-    const { requireFeature, requireLimit } = await import(
-      "@/lib/feature-flags/middleware"
-    );
+    const { requireFeature, requireLimit } = await import("@/lib/feature-flags/middleware");
 
     const rfCheck = requireFeature(service, richSession)("AI_SUMMARY");
     await expect(rfCheck()).resolves.toBeUndefined();
@@ -1276,20 +1161,13 @@ describe("Middleware composition", () => {
 
     repository.planFeatures.set("plan_pro", [
       createPlanFeature("plan_pro", repository.features.get("AI_SUMMARY")!, true),
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
     await repository.createSubscription(ORG_ID, "pro");
   });
 
   it("withFeature wrapping withLimit: feature check + limit check work together", async () => {
-    const { withFeature, withLimit } = await import(
-      "@/lib/feature-flags/middleware"
-    );
+    const { withFeature, withLimit } = await import("@/lib/feature-flags/middleware");
 
     // Composition: feature gate outside, limit check inside
     const handler = withFeature(service, defaultSession())("AI_SUMMARY")(
@@ -1312,17 +1190,10 @@ describe("Middleware composition", () => {
   it("withFeature catches FeatureNotAvailableError before withLimit runs", async () => {
     // Remove AI_SUMMARY from plan
     repository.planFeatures.set("plan_pro", [
-      createPlanFeature(
-        "plan_pro",
-        repository.features.get("EXPORT_PDF")!,
-        true,
-        10,
-      ),
+      createPlanFeature("plan_pro", repository.features.get("EXPORT_PDF")!, true, 10),
     ]);
 
-    const { withFeature, withLimit } = await import(
-      "@/lib/feature-flags/middleware"
-    );
+    const { withFeature, withLimit } = await import("@/lib/feature-flags/middleware");
 
     const handler = withFeature(service, defaultSession())("AI_SUMMARY")(
       withLimit(service, defaultSession())("EXPORT_PDF", 1)(

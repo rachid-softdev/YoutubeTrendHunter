@@ -25,6 +25,7 @@ import type {
   OverrideScope,
   CreateOverrideInput,
   SubscriptionStatus,
+  OrganizationRecord,
 } from "@/lib/feature-flags/types";
 
 // Mock next/server for HOF middleware
@@ -89,7 +90,7 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.getPlanFeatures(planId);
   }
 
-  async getOrganization(_orgId: string): Promise<any> {
+  async getOrganization(_orgId: string): Promise<OrganizationRecord | null> {
     return null;
   }
 
@@ -97,7 +98,10 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.subscriptions.get(orgId) ?? null;
   }
 
-  async updateSubscription(orgId: string, data: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async updateSubscription(
+    orgId: string,
+    data: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     const existing = this.subscriptions.get(orgId);
     if (!existing) throw new Error("No subscription");
     const updated = { ...existing, ...data };
@@ -105,7 +109,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return updated;
   }
 
-  async createSubscription(orgId: string, planKey: string, data?: Partial<SubscriptionRecord>): Promise<SubscriptionRecord> {
+  async createSubscription(
+    orgId: string,
+    planKey: string,
+    data?: Partial<SubscriptionRecord>,
+  ): Promise<SubscriptionRecord> {
     const sub: SubscriptionRecord = {
       id: `sub_${orgId}`,
       userId: `user_${orgId}`,
@@ -117,7 +125,8 @@ class MockEntitlementRepository implements IEntitlementRepository {
       stripePriceId: data?.stripePriceId ?? null,
       currentPeriodStart: data?.currentPeriodStart ?? new Date(),
       currentPeriodEnd: data?.currentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      stripeCurrentPeriodEnd: data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      stripeCurrentPeriodEnd:
+        data?.stripeCurrentPeriodEnd ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       trialEnd: data?.trialEnd ?? null,
       trialStart: data?.trialStart ?? null,
       createdAt: new Date(),
@@ -129,7 +138,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return sub;
   }
 
-  async getOverride(scope: OverrideScope, scopeId: string, featureKey: string): Promise<EntitlementOverrideRecord | null> {
+  async getOverride(
+    scope: OverrideScope,
+    scopeId: string,
+    featureKey: string,
+  ): Promise<EntitlementOverrideRecord | null> {
     const now = new Date();
     return (
       this.overrides.find(
@@ -144,12 +157,16 @@ class MockEntitlementRepository implements IEntitlementRepository {
 
   async getOverridesForOrg(orgId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
-    return this.overrides.filter((o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now));
+    return this.overrides.filter(
+      (o) => o.scope === "ORG" && o.scopeId === orgId && (!o.expiresAt || o.expiresAt > now),
+    );
   }
 
   async getOverridesForUser(userId: string): Promise<EntitlementOverrideRecord[]> {
     const now = new Date();
-    return this.overrides.filter((o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now));
+    return this.overrides.filter(
+      (o) => o.scope === "USER" && o.scopeId === userId && (!o.expiresAt || o.expiresAt > now),
+    );
   }
 
   async createOverride(data: CreateOverrideInput): Promise<EntitlementOverrideRecord> {
@@ -171,7 +188,10 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return override;
   }
 
-  async updateOverride(id: string, data: Partial<EntitlementOverrideRecord>): Promise<EntitlementOverrideRecord> {
+  async updateOverride(
+    id: string,
+    data: Partial<EntitlementOverrideRecord>,
+  ): Promise<EntitlementOverrideRecord> {
     const idx = this.overrides.findIndex((o) => o.id === id);
     if (idx === -1) throw new Error("Override not found");
     this.overrides[idx] = { ...this.overrides[idx], ...data, updatedAt: new Date() };
@@ -186,11 +206,20 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
-  async getUsageForPeriod(orgId: string, featureKey: string, _periodStart: Date): Promise<UsageTrackingRecord | null> {
+  async getUsageForPeriod(
+    orgId: string,
+    featureKey: string,
+    _periodStart: Date,
+  ): Promise<UsageTrackingRecord | null> {
     return this.usage.get(`${orgId}:${featureKey}`) ?? null;
   }
 
-  async createUsage(orgId: string, featureKey: string, periodStart: Date, periodEnd: Date): Promise<UsageTrackingRecord> {
+  async createUsage(
+    orgId: string,
+    featureKey: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ): Promise<UsageTrackingRecord> {
     const usage: UsageTrackingRecord = {
       id: `usage_${Date.now()}`,
       orgId,
@@ -203,7 +232,12 @@ class MockEntitlementRepository implements IEntitlementRepository {
     return usage;
   }
 
-  async consumeUsage(orgId: string, featureKey: string, amount: number, maxAllowed?: number): Promise<{ success: boolean; usageCount: number } | null> {
+  async consumeUsage(
+    orgId: string,
+    featureKey: string,
+    amount: number,
+    maxAllowed?: number,
+  ): Promise<{ success: boolean; usageCount: number } | null> {
     const key = `${orgId}:${featureKey}`;
     const existing = this.usage.get(key);
 
@@ -242,11 +276,11 @@ class MockEntitlementRepository implements IEntitlementRepository {
 // ============================================
 
 class MockCacheService implements ICacheService {
-  cache = new Map<string, any>();
+  cache = new Map<string, unknown>();
   subscribers: Array<(orgId: string) => void> = [];
 
   async get<T>(key: string): Promise<T | null> {
-    return this.cache.get(key) ?? null;
+    return (this.cache.get(key) ?? null) as T | null;
   }
 
   async set<T>(key: string, data: T, _ttlSeconds: number): Promise<void> {
@@ -298,7 +332,11 @@ function createPlan(key: string, name: string, sortOrder = 0): PlanRecord {
   };
 }
 
-function createFeature(key: string, type: "BOOLEAN" | "LIMIT" | "EXPERIMENT", defaultConfig?: Record<string, unknown> | null): FeatureRecord {
+function createFeature(
+  key: string,
+  type: "BOOLEAN" | "LIMIT" | "EXPERIMENT",
+  defaultConfig?: Record<string, unknown> | null,
+): FeatureRecord {
   return {
     id: `feature_${key}`,
     key,
@@ -312,7 +350,13 @@ function createFeature(key: string, type: "BOOLEAN" | "LIMIT" | "EXPERIMENT", de
   };
 }
 
-function createPlanFeature(planId: string, feature: FeatureRecord, enabled: boolean, limitValue: number | null = null, configJson?: Record<string, unknown> | null): PlanFeatureRecord {
+function createPlanFeature(
+  planId: string,
+  feature: FeatureRecord,
+  enabled: boolean,
+  limitValue: number | null = null,
+  configJson?: Record<string, unknown> | null,
+): PlanFeatureRecord {
   return {
     id: `pf_${planId}_${feature.id}`,
     planId,
@@ -354,10 +398,13 @@ describe("Feature-Flags State & Priority Matrix", () => {
     repository.features.set("EXPORT_PDF", createFeature("EXPORT_PDF", "LIMIT"));
     repository.features.set("UNLIMITED_STORAGE", createFeature("UNLIMITED_STORAGE", "LIMIT"));
     repository.features.set("API_ACCESS", createFeature("API_ACCESS", "BOOLEAN"));
-    repository.features.set("NEW_DASHBOARD", createFeature("NEW_DASHBOARD", "EXPERIMENT", {
-      percentage: 50,
-      seed: "NEW_DASHBOARD_v1",
-    }));
+    repository.features.set(
+      "NEW_DASHBOARD",
+      createFeature("NEW_DASHBOARD", "EXPERIMENT", {
+        percentage: 50,
+        seed: "NEW_DASHBOARD_v1",
+      }),
+    );
     repository.features.set("EXTRA_BOOLEAN", createFeature("EXTRA_BOOLEAN", "BOOLEAN"));
     repository.features.set("EXTRA_LIMIT", createFeature("EXTRA_LIMIT", "LIMIT"));
   });
@@ -371,12 +418,20 @@ describe("Feature-Flags State & Priority Matrix", () => {
     // when the mock returns a subscription record.
     // The service does NOT filter by status—it only checks subscription existence.
 
-    function setupPlanWithFeature(planKey: string, featureKey: string, enabled: boolean, limitValue: number | null = null) {
+    function setupPlanWithFeature(
+      planKey: string,
+      featureKey: string,
+      enabled: boolean,
+      limitValue: number | null = null,
+    ) {
       const plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
-      repository.planFeatures.set(planId, [...existingFeatures, createPlanFeature(planId, feature, enabled, limitValue)]);
+      repository.planFeatures.set(planId, [
+        ...existingFeatures,
+        createPlanFeature(planId, feature, enabled, limitValue),
+      ]);
     }
 
     // ── Active statuses (ACTIVE / TRIALING) ──
@@ -590,7 +645,11 @@ describe("Feature-Flags State & Priority Matrix", () => {
 
         // Change plan behind the scenes
         setupPlanWithFeature("free", "AI_SUMMARY", false);
-        await repository.updateSubscription(ORG_ID, { status: "CANCELED", planKey: "free", plan: "FREE" });
+        await repository.updateSubscription(ORG_ID, {
+          status: "CANCELED",
+          planKey: "free",
+          plan: "FREE",
+        });
 
         // Without invalidation, cache returns old data
         const cached = await service.getAllEntitlements(ORG_ID);
@@ -615,12 +674,20 @@ describe("Feature-Flags State & Priority Matrix", () => {
     // at the org level. They only affect isInExperiment.
     // Resolution order for org-level methods: org_override > plan > fallback
 
-    function setupPlanWithFeature(planKey: string, featureKey: string, enabled: boolean, limitValue: number | null = null) {
+    function setupPlanWithFeature(
+      planKey: string,
+      featureKey: string,
+      enabled: boolean,
+      limitValue: number | null = null,
+    ) {
       const plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
-      repository.planFeatures.set(planId, [...existingFeatures, createPlanFeature(planId, feature, enabled, limitValue)]);
+      repository.planFeatures.set(planId, [
+        ...existingFeatures,
+        createPlanFeature(planId, feature, enabled, limitValue),
+      ]);
     }
 
     // ── BOOLEAN feature: org_override × plan × fallback ──
@@ -846,12 +913,20 @@ describe("Feature-Flags State & Priority Matrix", () => {
   // ============================================
 
   describe("C. Edge Cases", () => {
-    function setupPlanWithFeature(planKey: string, featureKey: string, enabled: boolean, limitValue: number | null = null) {
+    function setupPlanWithFeature(
+      planKey: string,
+      featureKey: string,
+      enabled: boolean,
+      limitValue: number | null = null,
+    ) {
       const plan = repository.plans.get(planKey)!;
       const feature = repository.features.get(featureKey)!;
       const planId = `plan_${planKey}`;
       const existingFeatures = repository.planFeatures.get(planId) ?? [];
-      repository.planFeatures.set(planId, [...existingFeatures, createPlanFeature(planId, feature, enabled, limitValue)]);
+      repository.planFeatures.set(planId, [
+        ...existingFeatures,
+        createPlanFeature(planId, feature, enabled, limitValue),
+      ]);
     }
 
     // ── Time boundary overrides ──
@@ -1210,10 +1285,13 @@ describe("Feature-Flags State & Priority Matrix", () => {
   describe("D. isInExperiment with Override", () => {
     it("user override enabled → experiment active regardless of experiment config (even 0% rollout)", async () => {
       // Create an experiment with 0% rollout
-      repository.features.set("ZERO_PCT_EXP", createFeature("ZERO_PCT_EXP", "EXPERIMENT", {
-        percentage: 0,
-        seed: "zero_pct",
-      }));
+      repository.features.set(
+        "ZERO_PCT_EXP",
+        createFeature("ZERO_PCT_EXP", "EXPERIMENT", {
+          percentage: 0,
+          seed: "zero_pct",
+        }),
+      );
 
       // User override enables it
       await repository.createOverride({
@@ -1230,10 +1308,13 @@ describe("Feature-Flags State & Priority Matrix", () => {
 
     it("user override disabled → experiment disabled regardless of experiment config (even 100% rollout)", async () => {
       // Create an experiment with 100% rollout
-      repository.features.set("ALL_IN_EXP", createFeature("ALL_IN_EXP", "EXPERIMENT", {
-        percentage: 100,
-        seed: "all_in",
-      }));
+      repository.features.set(
+        "ALL_IN_EXP",
+        createFeature("ALL_IN_EXP", "EXPERIMENT", {
+          percentage: 100,
+          seed: "all_in",
+        }),
+      );
 
       // User override disables it
       await repository.createOverride({
@@ -1249,10 +1330,13 @@ describe("Feature-Flags State & Priority Matrix", () => {
     });
 
     it("only org override for experiment feature → no effect on isInExperiment (ignores org override)", async () => {
-      repository.features.set("EXP_FOR_ORG", createFeature("EXP_FOR_ORG", "EXPERIMENT", {
-        percentage: 10,
-        seed: "org_test",
-      }));
+      repository.features.set(
+        "EXP_FOR_ORG",
+        createFeature("EXP_FOR_ORG", "EXPERIMENT", {
+          percentage: 10,
+          seed: "org_test",
+        }),
+      );
 
       // Org-level override (should be ignored by isInExperiment)
       await repository.createOverride({
@@ -1271,10 +1355,13 @@ describe("Feature-Flags State & Priority Matrix", () => {
     });
 
     it("user override + org override for experiment → user override wins (checked first)", async () => {
-      repository.features.set("CONFLICT_EXP", createFeature("CONFLICT_EXP", "EXPERIMENT", {
-        percentage: 50,
-        seed: "conflict",
-      }));
+      repository.features.set(
+        "CONFLICT_EXP",
+        createFeature("CONFLICT_EXP", "EXPERIMENT", {
+          percentage: 50,
+          seed: "conflict",
+        }),
+      );
 
       // Org override enables (should be ignored)
       await repository.createOverride({
@@ -1313,20 +1400,26 @@ describe("Feature-Flags State & Priority Matrix", () => {
     });
 
     it("experiment with no user override, 0% config → false", async () => {
-      repository.features.set("ZERO_EXP", createFeature("ZERO_EXP", "EXPERIMENT", {
-        percentage: 0,
-        seed: "zero",
-      }));
+      repository.features.set(
+        "ZERO_EXP",
+        createFeature("ZERO_EXP", "EXPERIMENT", {
+          percentage: 0,
+          seed: "zero",
+        }),
+      );
 
       const result = await service.isInExperiment("any_user", "ZERO_EXP");
       expect(result).toBe(false);
     });
 
     it("experiment with no user override, 100% config → true", async () => {
-      repository.features.set("FULL_EXP", createFeature("FULL_EXP", "EXPERIMENT", {
-        percentage: 100,
-        seed: "full",
-      }));
+      repository.features.set(
+        "FULL_EXP",
+        createFeature("FULL_EXP", "EXPERIMENT", {
+          percentage: 100,
+          seed: "full",
+        }),
+      );
 
       const result = await service.isInExperiment("any_user", "FULL_EXP");
       expect(result).toBe(true);

@@ -11,9 +11,11 @@ process.emitWarning = (warning, ...args) => {
   ) {
     return;
   }
-  if (typeof warning === "object" && (warning as any)?.name === "ExperimentalWarning") {
+  if (
+    typeof warning === "object" &&
+    (warning as { name?: string }).name === "ExperimentalWarning"
+  ) {
     return;
   }
-  // @ts-expect-error - rest args forwarding
-  origEmitWarning(warning, ...args);
+  (origEmitWarning as (warning: string | Error, ...args: unknown[]) => void)(warning, ...args);
 };

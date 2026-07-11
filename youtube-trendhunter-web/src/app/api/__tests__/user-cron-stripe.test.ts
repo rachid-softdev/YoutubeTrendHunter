@@ -3,10 +3,6 @@ import { deleteAccountSchema, userExportQuerySchema, portalSessionSchema } from 
 
 // ─── Module Mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: {
@@ -133,10 +129,17 @@ vi.mock("@/lib/payment/stripe-adapter", () => ({
   },
 }));
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { getAuditLogs } from "@/lib/audit-log";
+import { makeSubscription, makeUser } from "@/__tests__/factories";
+import type { User } from "@prisma/client";
+import type { Mock } from "vitest";
+
+type SessionLike = { user?: { id?: string; email?: string; role?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
+
+const getAuditLogsMock = vi.mocked(getAuditLogs) as Mock;
 
 describe("User, Cron & Stripe", () => {
   beforeEach(() => {
@@ -191,9 +194,9 @@ describe("User, Cron & Stripe", () => {
 
   describe("DELETE /api/user — account deletion logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
@@ -203,14 +206,14 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should delete user with confirm: true", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        id: "user-123",
+        ...makeUser({ id: "user-123" }),
         subscription: null,
-      } as any);
+      } as User);
 
       const user = await prisma.user.findUnique({
         where: { id: "user-123" },
@@ -221,18 +224,18 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should cancel Stripe subscription if exists before deleting", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        id: "user-123",
-        subscription: {
+        ...makeUser({ id: "user-123" }),
+        subscription: makeSubscription({
           stripeSubscriptionId: "sub_stripe123",
           plan: "PRO",
           status: "ACTIVE",
-        },
-      } as any);
+        }),
+      } as User);
 
       const user = await prisma.user.findUnique({
         where: { id: "user-123" },
@@ -247,9 +250,9 @@ describe("User, Cron & Stripe", () => {
 
     it("should not cancel Stripe when no subscription", async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        id: "user-123",
+        ...makeUser({ id: "user-123" }),
         subscription: null,
-      } as any);
+      } as User);
 
       const user = await prisma.user.findUnique({
         where: { id: "user-123" },
@@ -265,23 +268,21 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/user/audit-logs — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should return audit logs for authenticated user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      const mockLogs = [
+      getAuditLogsMock.mockResolvedValue([
         { id: "log-1", action: "user_login", createdAt: new Date() },
         { id: "log-2", action: "niche_select", createdAt: new Date() },
-      ];
-
-      vi.mocked(getAuditLogs).mockResolvedValue(mockLogs as any);
+      ]);
 
       const logs = await getAuditLogs("user-123");
       expect(logs).toHaveLength(2);
@@ -289,9 +290,9 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should forbid accessing another user's logs", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const userId: string = "user-123";
       const requestedUserId = "user-456";
@@ -305,16 +306,16 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/user/export — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should return CSV export for PRO user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const { getUserPlan } = await import("@/lib/services/subscription.service");
       vi.mocked(getUserPlan).mockResolvedValue("PRO");
@@ -403,11 +404,13 @@ describe("User, Cron & Stripe", () => {
 
     it("should claim and process jobs when authorized", async () => {
       const { claimJobs, completeJob } = await import("@/lib/services/job.service");
+      const claimJobsMock = claimJobs as Mock;
+      const completeJobMock = completeJob as Mock;
 
-      const mockJobs = [{ id: "job-1", type: "TREND_SCORE", payload: { nicheSlug: "tech" } }];
-
-      vi.mocked(claimJobs).mockResolvedValue(mockJobs as any);
-      vi.mocked(completeJob).mockResolvedValue({} as any);
+      claimJobsMock.mockResolvedValue([
+        { id: "job-1", type: "TREND_SCORE", payload: { nicheSlug: "tech" } },
+      ]);
+      completeJobMock.mockResolvedValue({});
 
       const jobs = await claimJobs("worker-1");
       expect(jobs).toHaveLength(1);
@@ -422,11 +425,11 @@ describe("User, Cron & Stripe", () => {
 
     it("should handle unknown job types", async () => {
       const { claimJobs, failJob } = await import("@/lib/services/job.service");
+      const claimJobsMock = claimJobs as Mock;
+      const failJobMock = failJob as Mock;
 
-      vi.mocked(claimJobs).mockResolvedValue([
-        { id: "job-unknown", type: "UNKNOWN_TYPE", payload: {} },
-      ] as any);
-      vi.mocked(failJob).mockResolvedValue({} as any);
+      claimJobsMock.mockResolvedValue([{ id: "job-unknown", type: "UNKNOWN_TYPE", payload: {} }]);
+      failJobMock.mockResolvedValue({});
 
       const jobs = await claimJobs("worker-1");
       for (const job of jobs) {
@@ -439,10 +442,9 @@ describe("User, Cron & Stripe", () => {
 
     it("should handle VIDEO_SCORE as not yet implemented", async () => {
       const { claimJobs, failJob } = await import("@/lib/services/job.service");
+      const claimJobsMock = claimJobs as Mock;
 
-      vi.mocked(claimJobs).mockResolvedValue([
-        { id: "job-video", type: "VIDEO_SCORE", payload: {} },
-      ] as any);
+      claimJobsMock.mockResolvedValue([{ id: "job-video", type: "VIDEO_SCORE", payload: {} }]);
 
       const jobs = await claimJobs("worker-1");
       for (const job of jobs) {
@@ -484,8 +486,8 @@ describe("User, Cron & Stripe", () => {
       try {
         await stripeAdapter.handleWebhook('{"id":"evt_123"}', "invalid_sig");
         expect.fail("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toContain("Signature webhook invalide");
+      } catch (err) {
+        expect((err as Error).message).toContain("Signature webhook invalide");
       }
     });
 
@@ -505,20 +507,20 @@ describe("User, Cron & Stripe", () => {
 
   describe("POST /api/stripe/portal — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should create portal session for authenticated user with stripeCustomerId", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        stripeCustomerId: "cus_12345",
-      } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(
+        makeUser({ stripeCustomerId: "cus_12345" }),
+      );
 
       const { stripeAdapter } = await import("@/lib/payment/stripe-adapter");
       vi.mocked(stripeAdapter.createPortalSession).mockResolvedValue({
@@ -540,13 +542,11 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should return 400 when user has no stripeCustomerId", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        stripeCustomerId: null,
-      } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(makeUser({ stripeCustomerId: null }));
 
       const user = await prisma.user.findUnique({
         where: { id: "user-123" },
@@ -558,9 +558,9 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should handle portal session creation failure", async () => {
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        stripeCustomerId: "cus_12345",
-      } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(
+        makeUser({ stripeCustomerId: "cus_12345" }),
+      );
 
       const { stripeAdapter } = await import("@/lib/payment/stripe-adapter");
       vi.mocked(stripeAdapter.createPortalSession).mockRejectedValue(
@@ -573,8 +573,8 @@ describe("User, Cron & Stripe", () => {
           returnUrl: "https://app.example.com",
         });
         expect.fail("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toBe("CUSTOMER_NOT_FOUND");
+      } catch (err) {
+        expect((err as Error).message).toBe("CUSTOMER_NOT_FOUND");
       }
     });
   });
@@ -583,19 +583,20 @@ describe("User, Cron & Stripe", () => {
 
   describe("GET /api/jobs/[id] — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should return job when found and owned by user", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const { getJob } = await import("@/lib/services/job.service");
-      const mockJob = {
+      const getJobMock = getJob as Mock;
+      getJobMock.mockResolvedValue({
         id: "job-1",
         type: "TREND_SCORE",
         status: "COMPLETED",
@@ -605,9 +606,7 @@ describe("User, Cron & Stripe", () => {
         userId: "user-123",
         createdAt: new Date(),
         completedAt: new Date(),
-      };
-
-      vi.mocked(getJob).mockResolvedValue(mockJob as any);
+      });
 
       const job = await getJob("job-1");
       expect(job).not.toBeNull();
@@ -624,19 +623,18 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should return 404 when job belongs to another user (non-admin)", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", role: "USER" },
-      } as any);
+      });
 
       const { getJob } = await import("@/lib/services/job.service");
-      const mockJob = {
+      const getJobMock = getJob as Mock;
+      getJobMock.mockResolvedValue({
         id: "job-other",
         userId: "user-456", // different user
         type: "TREND_SCORE",
         status: "PENDING",
-      };
-
-      vi.mocked(getJob).mockResolvedValue(mockJob as any);
+      });
 
       const job = await getJob("job-other");
       expect(job).not.toBeNull();
@@ -649,16 +647,17 @@ describe("User, Cron & Stripe", () => {
     });
 
     it("should allow admin to see any job", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "admin-1", role: "ADMIN" },
-      } as any);
+      });
 
       const { getJob } = await import("@/lib/services/job.service");
-      vi.mocked(getJob).mockResolvedValue({
+      const getJobMock = getJob as Mock;
+      getJobMock.mockResolvedValue({
         id: "job-other",
         userId: "user-456",
         type: "TREND_SCORE",
-      } as any);
+      });
 
       const job = await getJob("job-other");
       expect(job).not.toBeNull();

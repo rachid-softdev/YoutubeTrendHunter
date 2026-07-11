@@ -3,10 +3,6 @@ import { z } from "zod";
 
 // ─── Module Mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
 vi.mock("@/lib/auth/require-admin", () => ({
   requireAdmin: vi.fn(),
   AuthError: class AuthError extends Error {
@@ -91,9 +87,15 @@ vi.mock("@/lib/redis", () => ({
   invalidateCache: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { makeNiche, makePlan, makeSubscription, makeUser } from "@/__tests__/factories";
+import type { Niche, Subscription, User } from "@prisma/client";
+import type { Mock } from "vitest";
+import type { Prisma } from "@prisma/client";
+
+type SessionLike = { user?: { id?: string; role?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 // Inline schema matching the admin niches route
 const nicheCreateSchema = z.object({
@@ -186,27 +188,27 @@ describe("Admin CRUD", () => {
       try {
         await requireAdmin();
         expect.fail("Should have thrown");
-      } catch (err: any) {
-        expect(err.message).toBe("UNAUTHORIZED");
+      } catch (err) {
+        expect((err as Error).message).toBe("UNAUTHORIZED");
       }
     });
 
     it("should check role from session for admin stats route", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "admin-1", role: "ADMIN" },
-      } as any);
+      });
 
-      const session = await auth();
+      const session = await sessionMock();
       const isAdmin = session?.user?.role === "ADMIN";
       expect(isAdmin).toBe(true);
     });
 
     it("should reject non-admin role from session", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-1", role: "USER" },
-      } as any);
+      });
 
-      const session = await auth();
+      const session = await sessionMock();
       const isAdmin = session?.user?.role === "ADMIN";
       expect(isAdmin).toBe(false);
     });
@@ -216,12 +218,10 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/users — business logic", () => {
     it("should fetch users with pagination", async () => {
-      const mockUsers = [
-        { id: "user-1", name: "Alice", email: "alice@test.com", role: "USER" },
-        { id: "user-2", name: "Bob", email: "bob@test.com", role: "ADMIN" },
-      ];
-
-      vi.mocked(prisma.user.findMany).mockResolvedValue(mockUsers as any);
+      vi.mocked(prisma.user.findMany).mockResolvedValue([
+        makeUser({ id: "user-1", name: "Alice", email: "alice@test.com", role: "USER" }),
+        makeUser({ id: "user-2", name: "Bob", email: "bob@test.com", role: "ADMIN" }),
+      ]);
       vi.mocked(prisma.user.count).mockResolvedValue(2);
 
       const page = 1;
@@ -261,8 +261,8 @@ describe("Admin CRUD", () => {
       };
 
       vi.mocked(prisma.user.findMany).mockResolvedValue([
-        { id: "user-1", name: "Alice", email: "alice@test.com" },
-      ] as any);
+        makeUser({ id: "user-1", name: "Alice", email: "alice@test.com" }),
+      ]);
 
       const users = await prisma.user.findMany({ where });
       expect(users).toHaveLength(1);
@@ -284,9 +284,9 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/stats — business logic", () => {
     it("should compute MRR from pro and team counts", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "admin-1", role: "ADMIN" },
-      } as any);
+      });
 
       vi.mocked(prisma.user.count).mockResolvedValue(100);
       vi.mocked(prisma.subscription.count).mockResolvedValue(50);
@@ -312,8 +312,8 @@ describe("Admin CRUD", () => {
 
     it("should fetch recent users", async () => {
       vi.mocked(prisma.user.findMany).mockResolvedValue([
-        { id: "user-1", name: "New User", email: "new@test.com", createdAt: new Date() },
-      ] as any);
+        makeUser({ id: "user-1", name: "New User", email: "new@test.com", createdAt: new Date() }),
+      ]);
 
       const recentUsers = await prisma.user.findMany({
         take: 10,
@@ -328,16 +328,14 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/plans — business logic", () => {
     it("should sort plans by name asc when requested", async () => {
-      const mockPlans = [
-        { key: "pro", name: "Pro", sortOrder: 2 },
-        { key: "free", name: "Free", sortOrder: 1 },
-        { key: "team", name: "Team", sortOrder: 3 },
-      ];
-
-      vi.mocked(prisma.plan.findMany).mockResolvedValue(mockPlans as any);
+      vi.mocked(prisma.plan.findMany).mockResolvedValue([
+        makePlan({ key: "pro", name: "Pro", sortOrder: 2 }),
+        makePlan({ key: "free", name: "Free", sortOrder: 1 }),
+        makePlan({ key: "team", name: "Team", sortOrder: 3 }),
+      ]);
 
       const plans = await prisma.plan.findMany({ orderBy: { sortOrder: "asc" } });
-      const sorted = [...plans].sort((a: any, b: any) => a.name?.localeCompare(b.name));
+      const sorted = [...plans].sort((a, b) => a.name.localeCompare(b.name));
 
       expect(sorted[0].name).toBe("Free");
       expect(sorted[1].name).toBe("Pro");
@@ -345,13 +343,11 @@ describe("Admin CRUD", () => {
     });
 
     it("should paginate plans", async () => {
-      const mockPlans = Array.from({ length: 5 }, (_, i) => ({
-        key: `plan-${i}`,
-        name: `Plan ${i}`,
-        sortOrder: i,
-      }));
-
-      vi.mocked(prisma.plan.findMany).mockResolvedValue(mockPlans as any);
+      vi.mocked(prisma.plan.findMany).mockResolvedValue(
+        Array.from({ length: 5 }, (_, i) =>
+          makePlan({ key: `plan-${i}`, name: `Plan ${i}`, sortOrder: i }),
+        ),
+      );
 
       const page = 1;
       const limit = 2;
@@ -367,22 +363,13 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/niches — business logic", () => {
     it("should fetch niches with trend count", async () => {
-      const mockNiches = [
-        {
-          id: "niche-1",
-          name: "Tech",
-          slug: "tech",
-          _count: { trends: 25 },
-        },
-        {
-          id: "niche-2",
-          name: "Gaming",
-          slug: "gaming",
-          _count: { trends: 15 },
-        },
+      type NicheWithCount = Niche & { _count: { trends: number } };
+      const mockNiches: NicheWithCount[] = [
+        { ...makeNiche({ id: "niche-1", name: "Tech", slug: "tech" }), _count: { trends: 25 } },
+        { ...makeNiche({ id: "niche-2", name: "Gaming", slug: "gaming" }), _count: { trends: 15 } },
       ];
 
-      vi.mocked(prisma.niche.findMany).mockResolvedValue(mockNiches as any);
+      vi.mocked(prisma.niche.findMany).mockResolvedValue(mockNiches as Niche[]);
 
       const niches = await prisma.niche.findMany({
         orderBy: { name: "asc" },
@@ -412,21 +399,29 @@ describe("Admin CRUD", () => {
 
       if (parsed.success) {
         vi.mocked(prisma.niche.findUnique).mockResolvedValue(null);
-        vi.mocked(prisma.niche.create).mockResolvedValue({ id: "niche-new", ...body } as any);
+        vi.mocked(prisma.niche.create).mockResolvedValue(
+          makeNiche({
+            id: "niche-new",
+            name: body.name,
+            slug: body.slug,
+            description: body.description,
+            language: body.language,
+            isActive: body.isActive,
+          }),
+        );
 
         const existing = await prisma.niche.findUnique({ where: { slug: "ai" } });
         expect(existing).toBeNull();
 
-        const niche = await prisma.niche.create({ data: body as any });
+        const niche = await prisma.niche.create({ data: body });
         expect(niche.id).toBe("niche-new");
       }
     });
 
     it("should return 409 when slug already exists", async () => {
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue({
-        id: "niche-existing",
-        slug: "tech",
-      } as any);
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(
+        makeNiche({ id: "niche-existing", slug: "tech" }),
+      );
 
       const existing = await prisma.niche.findUnique({ where: { slug: "tech" } });
       const conflict = existing !== null;
@@ -438,14 +433,9 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/niches/[id] — business logic", () => {
     it("should find niche by id", async () => {
-      const mockNiche = {
-        id: "niche-1",
-        name: "Tech",
-        slug: "tech",
-        _count: { trends: 25, userNiches: 10 },
-      };
-
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue(mockNiche as any);
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(
+        makeNiche({ id: "niche-1", name: "Tech", slug: "tech" }),
+      );
 
       const niche = await prisma.niche.findUnique({ where: { id: "niche-1" } });
       expect(niche).not.toBeNull();
@@ -464,12 +454,11 @@ describe("Admin CRUD", () => {
 
   describe("PATCH /api/admin/niches/[id] — business logic", () => {
     it("should update niche with valid data", async () => {
-      const existingNiche = { id: "niche-1", name: "Tech", slug: "tech" };
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue(existingNiche as any);
-      vi.mocked(prisma.niche.update).mockResolvedValue({
-        ...existingNiche,
-        name: "Technology",
-      } as any);
+      const existingNiche = makeNiche({ id: "niche-1", name: "Tech", slug: "tech" });
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(existingNiche);
+      vi.mocked(prisma.niche.update).mockResolvedValue(
+        makeNiche({ id: "niche-1", name: "Technology", slug: "tech" }),
+      );
 
       const niche = await prisma.niche.update({
         where: { id: "niche-1" },
@@ -480,17 +469,20 @@ describe("Admin CRUD", () => {
     });
 
     it("should check slug uniqueness when changing slug", async () => {
-      // Setup: finding a different niche with same slug indicates a conflict
-      vi.mocked(prisma.niche.findUnique).mockImplementation((async ({ where }: any) => {
-        if (where.slug === "tech") return { id: "niche-2", slug: "tech" };
-        if (where.id === "niche-1") return { id: "niche-1", name: "Tech", slug: "old-slug" };
+      const nicheFindUniqueMock = vi.mocked(prisma.niche.findUnique) as Mock<
+        (args: Prisma.NicheFindUniqueArgs) => Promise<Niche | null>
+      >;
+      nicheFindUniqueMock.mockImplementation(async (args: Prisma.NicheFindUniqueArgs) => {
+        if (args.where.slug === "tech") return makeNiche({ id: "niche-2", slug: "tech" });
+        if (args.where.id === "niche-1")
+          return makeNiche({ id: "niche-1", name: "Tech", slug: "old-slug" });
         return null;
-      }) as any);
+      });
 
-      const existingNiche = (await prisma.niche.findUnique({ where: { id: "niche-1" } })) as any;
+      const existingNiche = await prisma.niche.findUnique({ where: { id: "niche-1" } });
       const slugExists = await prisma.niche.findUnique({ where: { slug: "tech" } });
 
-      const conflict = slugExists !== null && slugExists.id !== existingNiche.id;
+      const conflict = slugExists !== null && slugExists.id !== existingNiche?.id;
       expect(conflict).toBe(true);
     });
   });
@@ -499,13 +491,11 @@ describe("Admin CRUD", () => {
 
   describe("DELETE /api/admin/niches/[id] — cascade logic", () => {
     it("should cascade delete userNiche, trends, and niche", async () => {
-      vi.mocked(prisma.niche.findUnique).mockResolvedValue({
-        id: "niche-1",
-        name: "Tech",
-        slug: "tech",
-      } as any);
+      vi.mocked(prisma.niche.findUnique).mockResolvedValue(
+        makeNiche({ id: "niche-1", name: "Tech", slug: "tech" }),
+      );
 
-      vi.mocked(prisma.$transaction).mockResolvedValue([{}, {}, {}] as any);
+      vi.mocked(prisma.$transaction).mockResolvedValue([{}, {}, {}]);
 
       const niche = await prisma.niche.findUnique({ where: { id: "niche-1" } });
       expect(niche).not.toBeNull();
@@ -533,9 +523,10 @@ describe("Admin CRUD", () => {
 
   describe("DELETE /api/admin/users/[id] — cascade logic", () => {
     it("should cascade delete all user-related data", async () => {
-      const mockUser = { id: "user-1", name: "Test User" };
-      vi.mocked(prisma.user.findUnique).mockResolvedValue(mockUser as any);
-      vi.mocked(prisma.$transaction).mockResolvedValue([] as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue(
+        makeUser({ id: "user-1", name: "Test User" }),
+      );
+      vi.mocked(prisma.$transaction).mockResolvedValue([]);
 
       const user = await prisma.user.findUnique({ where: { id: "user-1" } });
       expect(user).not.toBeNull();
@@ -570,20 +561,23 @@ describe("Admin CRUD", () => {
 
   describe("GET /api/admin/users/export — CSV logic", () => {
     it("should produce CSV content", async () => {
-      const mockUsers = [
+      type ExportUser = User & { subscription: Subscription | null };
+      const mockUsers: ExportUser[] = [
         {
-          name: "Alice",
-          email: "alice@test.com",
-          role: "USER",
-          createdAt: new Date("2024-01-01"),
-          updatedAt: new Date("2024-01-02"),
-          subscription: { plan: "PRO", status: "ACTIVE" },
+          ...makeUser({
+            name: "Alice",
+            email: "alice@test.com",
+            role: "USER",
+            createdAt: new Date("2024-01-01"),
+            updatedAt: new Date("2024-01-02"),
+          }),
+          subscription: makeSubscription({ plan: "PRO", status: "ACTIVE" }),
         },
       ];
 
-      vi.mocked(prisma.user.findMany).mockResolvedValue(mockUsers as any);
+      vi.mocked(prisma.user.findMany).mockResolvedValue(mockUsers as User[]);
 
-      const users = await prisma.user.findMany();
+      const users = await prisma.user.findMany({ include: { subscription: true } });
 
       const headers = [
         "name",
@@ -594,7 +588,7 @@ describe("Admin CRUD", () => {
         "createdAt",
         "updatedAt",
       ];
-      const rows = users.map((u: any) => [
+      const rows = users.map((u) => [
         escapeCsv(u.name || ""),
         escapeCsv(u.email || ""),
         escapeCsv(u.role || "USER"),
@@ -604,7 +598,7 @@ describe("Admin CRUD", () => {
         escapeCsv(u.updatedAt?.toISOString() || ""),
       ]);
 
-      const csvContent = [headers.join(","), ...rows.map((r: string[]) => r.join(","))].join("\n");
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
 
       expect(csvContent).toContain("alice@test.com");
       expect(csvContent).toContain("PRO");

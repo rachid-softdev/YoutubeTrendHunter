@@ -4,15 +4,46 @@
 // error, edge-case, and cache invalidation tests.
 // ============================================
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, type Mocked } from "vitest";
 import { NextRequest } from "next/server";
+import type {
+  Feature,
+  User,
+  Subscription,
+  EntitlementOverride,
+  UsageTracking,
+  Plan,
+  PlanFeature,
+} from "@prisma/client";
+import { FeatureGateService } from "@/lib/feature-flags/feature-gate.service";
+import { DowngradeService } from "@/lib/feature-flags/downgrade.service";
+import type {
+  IEntitlementRepository,
+  EntitlementMap,
+  ConsumeResult,
+  DebugTrace,
+  DowngradePreview,
+  DowngradeFeatureImpact,
+  SubscriptionRecord,
+  FeatureRecord,
+  EntitlementOverrideRecord,
+  UsageTrackingRecord,
+  PlanRecord,
+  PlanFeatureRecord,
+} from "@/lib/feature-flags/types";
+import { CacheService } from "@/lib/feature-flags/cache-service";
 
 // ────────────────────────────────────────────────────────────
 // Module Mocks (hoisted before all imports)
 // ────────────────────────────────────────────────────────────
 
+// `auth` resolves to a session-like object (or null) at runtime; the test
+// controls it via `authMock`. Typed as `Promise<unknown>` so any mock value
+// (session object or null) is assignable without resorting to `any`.
+const authMock = vi.hoisted(() => vi.fn<() => Promise<unknown>>());
+
 vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
+  auth: authMock,
 }));
 
 vi.mock("@/lib/auth/require-admin", () => ({
@@ -87,7 +118,6 @@ vi.mock("@/lib/logger", () => ({
 // Imports (resolved against the mocked modules)
 // ────────────────────────────────────────────────────────────
 
-import { auth } from "@/lib/auth";
 import { requireAdmin, AuthError } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
 import {
@@ -99,10 +129,19 @@ import {
 // Route handlers (all 11 endpoints)
 import { GET as GET_Entitlements } from "@/app/api/entitlements/route";
 import { GET as GET_MeEntitlements } from "@/app/api/me/entitlements/route";
-import { GET as GET_AdminFeatures, POST as POST_AdminFeatures } from "@/app/api/admin/features/route";
+import {
+  GET as GET_AdminFeatures,
+  POST as POST_AdminFeatures,
+} from "@/app/api/admin/features/route";
 import { PUT as PUT_AdminFeature } from "@/app/api/admin/features/[key]/route";
-import { GET as GET_AdminPlanFeatures, POST as POST_AdminPlanFeatures } from "@/app/api/admin/plans/[planKey]/features/route";
-import { GET as GET_AdminOverrides, POST as POST_AdminOverrides } from "@/app/api/admin/overrides/route";
+import {
+  GET as GET_AdminPlanFeatures,
+  POST as POST_AdminPlanFeatures,
+} from "@/app/api/admin/plans/[planKey]/features/route";
+import {
+  GET as GET_AdminOverrides,
+  POST as POST_AdminOverrides,
+} from "@/app/api/admin/overrides/route";
 import { DELETE as DELETE_AdminOverride } from "@/app/api/admin/overrides/[id]/route";
 import { GET as GET_AdminOrgEntitlements } from "@/app/api/admin/orgs/[orgId]/entitlements/route";
 import { GET as GET_AdminDowngradePreview } from "@/app/api/admin/orgs/[orgId]/downgrade-preview/route";
@@ -114,42 +153,65 @@ import { GET as GET_DebugEntitlements } from "@/app/api/debug/entitlements/route
 // ────────────────────────────────────────────────────────────
 
 /**
- * Create a mock FeatureGateService with all methods as vi.fn().
+ * Create a Mocked<FeatureGateService> (deep-mocked real instance).
  */
-function createMockGate() {
-  return {
-    getAllEntitlements: vi.fn(),
-    isInExperiment: vi.fn(),
-    invalidateCache: vi.fn(),
-    getDebugTrace: vi.fn(),
-    hasFeature: vi.fn(),
-    getLimit: vi.fn(),
-  };
+function createMockGate(): Mocked<FeatureGateService> {
+  const repo = createMockRepo();
+  const cache = new CacheService();
+  const gate = new FeatureGateService(repo, cache);
+  gate.hasFeature = vi.fn();
+  gate.getLimit = vi.fn();
+  gate.assertFeature = vi.fn();
+  gate.canConsume = vi.fn();
+  gate.consume = vi.fn();
+  gate.getAllEntitlements = vi.fn();
+  gate.getDebugTrace = vi.fn();
+  gate.invalidateCache = vi.fn();
+  gate.isInExperiment = vi.fn();
+  gate.getExperimentConfig = vi.fn();
+  gate.getExperimentBucket = vi.fn();
+  return gate as Mocked<FeatureGateService>;
 }
 
-/**
- * Create a mock DowngradeService.
- */
-function createMockDowngrade() {
-  return {
-    previewDowngrade: vi.fn(),
-  };
+function createMockDowngrade(): Mocked<DowngradeService> {
+  const repo = createMockRepo();
+  const gate = createMockGate();
+  const cache = new CacheService();
+  const downgrade = new DowngradeService(repo, gate, cache);
+  downgrade.previewDowngrade = vi.fn();
+  downgrade.applyDowngradeStrategy = vi.fn();
+  downgrade.processGracefulDowngrades = vi.fn();
+  return downgrade as Mocked<DowngradeService>;
 }
 
-/**
- * Create a mock PrismaEntitlementRepository instance.
- */
-function createMockRepo() {
+function createMockRepo(): Mocked<IEntitlementRepository> {
   return {
-    getActiveSubscription: vi.fn(),
-    getFeature: vi.fn(),
-    getOverridesForOrg: vi.fn(),
-    getCurrentUsage: vi.fn(),
-    getAllPlans: vi.fn(),
-    getPlanFeature: vi.fn(),
     getPlan: vi.fn(),
+    getAllPlans: vi.fn(),
+    getActivePlans: vi.fn(),
+    getFeature: vi.fn(),
+    getAllFeatures: vi.fn(),
+    getActiveFeatures: vi.fn(),
     getPlanFeatures: vi.fn(),
-  };
+    getPlanFeature: vi.fn(),
+    getPlanFeaturesForPlan: vi.fn(),
+    getOrganization: vi.fn(),
+    getActiveSubscription: vi.fn(),
+    updateSubscription: vi.fn(),
+    createSubscription: vi.fn(),
+    getOverride: vi.fn(),
+    getOverridesForOrg: vi.fn(),
+    getOverridesForUser: vi.fn(),
+    createOverride: vi.fn(),
+    updateOverride: vi.fn(),
+    deleteOverride: vi.fn(),
+    getCurrentUsage: vi.fn(),
+    getUsageForPeriod: vi.fn(),
+    createUsage: vi.fn(),
+    consumeUsage: vi.fn(),
+    hasStripeEventBeenProcessed: vi.fn(),
+    markStripeEventProcessed: vi.fn(),
+  } as Mocked<IEntitlementRepository>;
 }
 
 /**
@@ -158,14 +220,14 @@ function createMockRepo() {
 function mockAuthenticatedUser(userId = "user-1", role?: string) {
   const user: Record<string, string> = { id: userId };
   if (role) user.role = role;
-  vi.mocked(auth).mockResolvedValue({ user } as any);
+  authMock.mockResolvedValue({ user });
 }
 
 /**
  * Convenience: mock auth() to return null (unauthenticated).
  */
 function mockUnauthenticated() {
-  vi.mocked(auth).mockResolvedValue(null);
+  authMock.mockResolvedValue(null);
 }
 
 /**
@@ -185,7 +247,12 @@ function mockAdminUnauthorized(status = 401) {
 /**
  * Convenience: parse a Next.js Response as JSON.
  */
-async function json(res: Response): Promise<any> {
+type Json = {
+  [key: string]: Json;
+  [key: number]: Json;
+};
+
+async function json(res: Response): Promise<Json> {
   return res.json();
 }
 
@@ -205,16 +272,20 @@ describe("Entitlements API Routes — HTTP-level", () => {
   describe("GET /api/entitlements", () => {
     it("returns 200 with full entitlements for authenticated user with orgId", async () => {
       mockAuthenticatedUser("user-1");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as User);
       vi.mocked(prisma.subscription.findFirst).mockResolvedValue({
         plan: "PRO",
         planKey: "pro",
-      } as any);
+      } as Subscription);
       vi.mocked(prisma.usageTracking.findMany).mockResolvedValue([
-        { featureKey: "video-export", usageCount: 3, periodEnd: new Date("2026-01-31") } as any,
+        {
+          featureKey: "video-export",
+          usageCount: 3,
+          periodEnd: new Date("2026-01-31"),
+        } as UsageTracking,
       ]);
       vi.mocked(prisma.feature.findMany).mockResolvedValue([
-        { key: "dark-mode-beta", type: "EXPERIMENT", isActive: true } as any,
+        { key: "dark-mode-beta", type: "EXPERIMENT", isActive: true } as Feature,
       ]);
 
       const mockGate = createMockGate();
@@ -241,7 +312,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with minimal data for authenticated user without orgId", async () => {
       mockAuthenticatedUser("user-2");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: null } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: null } as User);
 
       const res = await GET_Entitlements();
       expect(res.status).toBe(200);
@@ -257,7 +328,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with FREE defaults when no subscription exists", async () => {
       mockAuthenticatedUser("user-3");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-3" } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-3" } as User);
       vi.mocked(prisma.subscription.findFirst).mockResolvedValue(null);
       vi.mocked(prisma.usageTracking.findMany).mockResolvedValue([]);
       vi.mocked(prisma.feature.findMany).mockResolvedValue([]);
@@ -301,11 +372,11 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with empty usage when usageTracking returns empty", async () => {
       mockAuthenticatedUser("user-1");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as User);
       vi.mocked(prisma.subscription.findFirst).mockResolvedValue({
         plan: "PRO",
         planKey: "pro",
-      } as any);
+      } as Subscription);
       vi.mocked(prisma.usageTracking.findMany).mockResolvedValue([]);
       vi.mocked(prisma.feature.findMany).mockResolvedValue([]);
 
@@ -331,11 +402,11 @@ describe("Entitlements API Routes — HTTP-level", () => {
   describe("GET /api/me/entitlements", () => {
     it("returns 200 with Cache-Control header for authenticated user", async () => {
       mockAuthenticatedUser("user-1");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: "org-1" } as User);
       vi.mocked(prisma.subscription.findFirst).mockResolvedValue({
         plan: "PRO",
         planKey: "pro",
-      } as any);
+      } as Subscription);
 
       const mockGate = createMockGate();
       mockGate.getAllEntitlements.mockResolvedValue({
@@ -360,7 +431,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with minimal data when user has no orgId", async () => {
       mockAuthenticatedUser("user-2");
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: null } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ orgId: null } as User);
 
       const res = await GET_MeEntitlements();
       expect(res.status).toBe(200);
@@ -404,8 +475,8 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with paginated feature list", async () => {
       vi.mocked(prisma.feature.findMany).mockResolvedValue([
-        { key: "feature-a", type: "BOOLEAN", name: "Feature A" } as any,
-        { key: "feature-b", type: "LIMIT", name: "Feature B" } as any,
+        { key: "feature-a", type: "BOOLEAN", name: "Feature A" } as Feature,
+        { key: "feature-b", type: "LIMIT", name: "Feature B" } as Feature,
       ]);
       vi.mocked(prisma.feature.count).mockResolvedValue(2);
 
@@ -424,7 +495,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 with type filter applied", async () => {
       vi.mocked(prisma.feature.findMany).mockResolvedValue([
-        { key: "exp-feature", type: "EXPERIMENT", name: "Exp" } as any,
+        { key: "exp-feature", type: "EXPERIMENT", name: "Exp" } as Feature,
       ]);
       vi.mocked(prisma.feature.count).mockResolvedValue(1);
 
@@ -447,7 +518,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         type: "BOOLEAN",
         name: `Feature ${i}`,
       }));
-      vi.mocked(prisma.feature.findMany).mockResolvedValue(manyFeatures.slice(0, 20) as any);
+      vi.mocked(prisma.feature.findMany).mockResolvedValue(manyFeatures.slice(0, 20) as Feature[]);
       vi.mocked(prisma.feature.count).mockResolvedValue(25);
 
       const req = new NextRequest("http://localhost/api/admin/features?page=1&limit=20");
@@ -458,7 +529,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 200 with hasPrev true on page 2", async () => {
-      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as Feature[]);
       vi.mocked(prisma.feature.count).mockResolvedValue(25);
 
       const req = new NextRequest("http://localhost/api/admin/features?page=2&limit=20");
@@ -469,7 +540,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 200 when page is negative — clamps to 1", async () => {
       vi.mocked(prisma.feature.findMany).mockResolvedValue([
-        { key: "a", type: "BOOLEAN" } as any,
+        { key: "a", type: "BOOLEAN" } as Feature,
       ]);
       vi.mocked(prisma.feature.count).mockResolvedValue(1);
 
@@ -480,7 +551,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 200 when limit exceeds 100 — clamps to 100", async () => {
-      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as Feature[]);
       vi.mocked(prisma.feature.count).mockResolvedValue(0);
 
       const req = new NextRequest("http://localhost/api/admin/features?limit=999");
@@ -490,7 +561,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 200 when limit is 0 — clamps to 1", async () => {
-      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.feature.findMany).mockResolvedValue([] as Feature[]);
       vi.mocked(prisma.feature.count).mockResolvedValue(0);
 
       const req = new NextRequest("http://localhost/api/admin/features?limit=0");
@@ -535,12 +606,17 @@ describe("Entitlements API Routes — HTTP-level", () => {
         name: "New Feature",
         type: "BOOLEAN",
         isActive: true,
-      } as any);
+      } as Feature);
 
       const req = new NextRequest("http://localhost/api/admin/features", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "new-feature", name: "New Feature", type: "BOOLEAN", isActive: true }),
+        body: JSON.stringify({
+          key: "new-feature",
+          name: "New Feature",
+          type: "BOOLEAN",
+          isActive: true,
+        }),
       });
       const res = await POST_AdminFeatures(req);
       expect(res.status).toBe(201);
@@ -639,14 +715,14 @@ describe("Entitlements API Routes — HTTP-level", () => {
         id: "feat-1",
         key: "existing-feature",
         type: "BOOLEAN",
-      } as any);
+      } as Feature);
       vi.mocked(prisma.feature.update).mockResolvedValue({
         id: "feat-1",
         key: "existing-feature",
         name: "Updated Name",
         type: "BOOLEAN",
         isActive: true,
-      } as any);
+      } as Feature);
 
       const req = new NextRequest("http://localhost/api/admin/features/existing-feature", {
         method: "PUT",
@@ -682,7 +758,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         id: "feat-1",
         key: "existing",
         type: "BOOLEAN",
-      } as any);
+      } as Feature);
 
       const req = new NextRequest("http://localhost/api/admin/features/existing", {
         method: "PUT",
@@ -715,7 +791,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         id: "feat-1",
         key: "partial",
         type: "BOOLEAN",
-      } as any);
+      } as Feature);
       vi.mocked(prisma.feature.update).mockResolvedValue({
         id: "feat-1",
         key: "partial",
@@ -723,7 +799,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         description: "New desc",
         type: "BOOLEAN",
         isActive: true,
-      } as any);
+      } as Feature);
 
       const req = new NextRequest("http://localhost/api/admin/features/partial", {
         method: "PUT",
@@ -751,9 +827,29 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 200 with plan features", async () => {
-      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as any);
+      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as Plan);
       vi.mocked(prisma.planFeature.findMany).mockResolvedValue([
-        { id: "pf-1", enabled: true, feature: { key: "feat-a", type: "BOOLEAN" } } as any,
+        {
+          id: "pf-1",
+          planId: "plan-1",
+          featureId: "feat-a",
+          enabled: true,
+          limitValue: null,
+          configJson: null,
+          downgradeStrategy: "GRACEFUL",
+          sortOrder: 0,
+          feature: {
+            id: "feat-a",
+            key: "feat-a",
+            name: "Feat A",
+            description: null,
+            type: "BOOLEAN",
+            defaultConfig: null,
+            isActive: true,
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+          },
+        } as PlanFeature,
       ]);
 
       const req = new NextRequest("http://localhost/api/admin/plans/pro/features");
@@ -797,8 +893,11 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 201 when plan-feature is created (upsert)", async () => {
-      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as any);
-      vi.mocked(prisma.feature.findUnique).mockResolvedValue({ id: "feat-1", key: "video-export" } as any);
+      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as Plan);
+      vi.mocked(prisma.feature.findUnique).mockResolvedValue({
+        id: "feat-1",
+        key: "video-export",
+      } as Feature);
       vi.mocked(prisma.planFeature.upsert).mockResolvedValue({
         id: "pf-1",
         planId: "plan-1",
@@ -807,7 +906,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         limitValue: 50,
         downgradeStrategy: "GRACEFUL",
         sortOrder: 1,
-      } as any);
+      } as PlanFeature);
 
       const req = new NextRequest("http://localhost/api/admin/plans/pro/features", {
         method: "POST",
@@ -859,7 +958,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("returns 404 when feature is not found", async () => {
-      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as any);
+      vi.mocked(prisma.plan.findUnique).mockResolvedValue({ id: "plan-1", key: "pro" } as Plan);
       vi.mocked(prisma.feature.findUnique).mockResolvedValue(null);
 
       const req = new NextRequest("http://localhost/api/admin/plans/pro/features", {
@@ -906,7 +1005,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
           scopeId: "org-1",
           featureKey: "video-export",
           enabled: true,
-        } as any,
+        } as EntitlementOverride,
       ]);
       vi.mocked(prisma.entitlementOverride.count).mockResolvedValue(1);
 
@@ -920,29 +1019,29 @@ describe("Entitlements API Routes — HTTP-level", () => {
     });
 
     it("filters by scope query param", async () => {
-      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as EntitlementOverride[]);
       vi.mocked(prisma.entitlementOverride.count).mockResolvedValue(0);
 
       const req = new NextRequest("http://localhost/api/admin/overrides?scope=USER");
       await GET_AdminOverrides(req);
 
-      const whereArg = vi.mocked(prisma.entitlementOverride.findMany).mock.calls[0][0]?.where;
-      expect(whereArg.scope).toBe("USER");
+      const whereArg = vi.mocked(prisma.entitlementOverride.findMany).mock.calls[0]?.[0]?.where;
+      expect(whereArg?.scope).toBe("USER");
     });
 
     it("filters by scopeId query param", async () => {
-      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as EntitlementOverride[]);
       vi.mocked(prisma.entitlementOverride.count).mockResolvedValue(0);
 
       const req = new NextRequest("http://localhost/api/admin/overrides?scopeId=org-42");
       await GET_AdminOverrides(req);
 
-      const whereArg = vi.mocked(prisma.entitlementOverride.findMany).mock.calls[0][0]?.where;
-      expect(whereArg.scopeId).toBe("org-42");
+      const whereArg = vi.mocked(prisma.entitlementOverride.findMany).mock.calls[0]?.[0]?.where;
+      expect(whereArg?.scopeId).toBe("org-42");
     });
 
     it("returns 200 with empty data when no overrides exist", async () => {
-      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.entitlementOverride.findMany).mockResolvedValue([] as EntitlementOverride[]);
       vi.mocked(prisma.entitlementOverride.count).mockResolvedValue(0);
 
       const req = new NextRequest("http://localhost/api/admin/overrides");
@@ -972,7 +1071,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
 
     it("returns 201 for ORG override with cache invalidation", async () => {
       vi.mocked(prisma.entitlementOverride.create).mockResolvedValue({
-        id: "ovr-new",
+        id: "ovr-1",
         scope: "ORG",
         scopeId: "org-1",
         featureKey: "video-export",
@@ -980,7 +1079,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         reason: "Testing override",
         expiresAt: null,
         limitValue: null,
-      } as any);
+      } as EntitlementOverride);
 
       const mockGate = createMockGate();
       mockGate.invalidateCache.mockResolvedValue(undefined);
@@ -1015,7 +1114,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
         featureKey: "beta-test",
         enabled: true,
         reason: "Beta access",
-      } as any);
+      } as EntitlementOverride);
 
       const mockGate = createMockGate();
       vi.mocked(getFeatureGateService).mockReturnValue(mockGate);
@@ -1162,8 +1261,8 @@ describe("Entitlements API Routes — HTTP-level", () => {
         featureKey: "video-export",
         enabled: true,
         reason: "Test",
-      } as any);
-      vi.mocked(prisma.entitlementOverride.delete).mockResolvedValue({} as any);
+      } as EntitlementOverride);
+      vi.mocked(prisma.entitlementOverride.delete).mockResolvedValue({} as EntitlementOverride);
 
       const req = new Request("http://localhost/api/admin/overrides/ovr-1", {
         method: "DELETE",
@@ -1193,8 +1292,8 @@ describe("Entitlements API Routes — HTTP-level", () => {
         featureKey: "beta",
         enabled: true,
         reason: "Test",
-      } as any);
-      vi.mocked(prisma.entitlementOverride.delete).mockResolvedValue({} as any);
+      } as EntitlementOverride);
+      vi.mocked(prisma.entitlementOverride.delete).mockResolvedValue({} as EntitlementOverride);
 
       const req = new Request("http://localhost/api/admin/overrides/ovr-2", {
         method: "DELETE",
@@ -1257,7 +1356,7 @@ describe("Entitlements API Routes — HTTP-level", () => {
           featureKey: "video-export",
           usageCount: 5,
           periodEnd: new Date("2026-01-31"),
-        } as any,
+        } as UsageTracking,
       ]);
 
       const req = new Request("http://localhost/api/admin/orgs/org-1/entitlements");
@@ -1407,28 +1506,37 @@ describe("Entitlements API Routes — HTTP-level", () => {
         planKey: "pro",
         status: "ACTIVE",
         currentPeriodEnd: new Date("2026-02-01"),
-      });
+      } as SubscriptionRecord);
       mockRepo.getFeature.mockResolvedValue({
         key: "video-export",
         type: "LIMIT",
         defaultConfig: null,
-      });
+      } as FeatureRecord);
       mockRepo.getOverridesForOrg.mockResolvedValue([
         { featureKey: "video-export", id: "ovr-1" },
         { featureKey: "other-feature", id: "ovr-2" },
-      ]);
+      ] as EntitlementOverrideRecord[]);
       mockRepo.getCurrentUsage.mockResolvedValue({
         usageCount: 3,
         periodStart: new Date("2026-01-01"),
         periodEnd: new Date("2026-01-31"),
-      });
+      } as UsageTrackingRecord);
       mockRepo.getAllPlans.mockResolvedValue([
         { id: "plan-1", key: "free", name: "Free" },
         { id: "plan-2", key: "pro", name: "Pro" },
-      ]);
-      mockRepo.getPlanFeature.mockResolvedValue({ enabled: true });
+      ] as PlanRecord[]);
+      mockRepo.getPlanFeature.mockResolvedValue({
+        id: "pf-1",
+        planId: "plan-1",
+        featureId: "feat-1",
+        enabled: true,
+        limitValue: null,
+        configJson: null,
+        downgradeStrategy: "GRACEFUL",
+        sortOrder: 0,
+      } as PlanFeatureRecord);
       vi.mocked(PrismaEntitlementRepository).mockImplementation(function () {
-        return mockRepo as any;
+        return mockRepo;
       });
 
       const req = new NextRequest(

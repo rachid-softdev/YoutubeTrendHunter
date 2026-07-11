@@ -33,6 +33,16 @@ vi.mock("@/lib/logger", () => ({
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/prisma";
+import { makeApiToken } from "@/__tests__/factories";
+import type { ApiToken } from "@prisma/client";
+import type { Mock } from "vitest";
+import type { Prisma } from "@prisma/client";
+
+type CreateMock = Mock<(args: Prisma.ApiTokenCreateArgs) => Promise<ApiToken>>;
+type UpdateMock = Mock<(args: Prisma.ApiTokenUpdateArgs) => Promise<ApiToken>>;
+
+const createMock = vi.mocked(prisma.apiToken.create) as CreateMock;
+const updateMock = vi.mocked(prisma.apiToken.update) as UpdateMock;
 
 // On importe les fonctions à tester
 import {
@@ -183,13 +193,13 @@ describe("api-tokens", () => {
 
   describe("createApiToken()", () => {
     it("crée un token et retourne { plainText, token }", async () => {
-      const mockCreated = {
+      const mockCreated = makeApiToken({
         id: "tok-123",
         token: "stored-hash",
         name: "Mon Token",
         expiresAt: null,
-      };
-      (prisma.apiToken.create as any).mockResolvedValue(mockCreated);
+      });
+      createMock.mockResolvedValue(mockCreated);
 
       const result = await createApiToken("user-123", "Mon Token");
 
@@ -211,11 +221,11 @@ describe("api-tokens", () => {
     });
 
     it("stocke le hash en BDD, pas le plainText", async () => {
-      (prisma.apiToken.create as any).mockResolvedValue({ id: "tok-1" });
+      createMock.mockResolvedValue(makeApiToken({ id: "tok-1" }));
 
       await createApiToken("user-456", "Test");
 
-      const createCall = (prisma.apiToken.create as any).mock.calls[0][0];
+      const createCall = createMock.mock.calls[0][0];
       const storedToken = createCall.data.token;
 
       // Le token stocké doit être un hash SHA-256, pas un plainText
@@ -223,12 +233,10 @@ describe("api-tokens", () => {
     });
 
     it("stocke le bon hash en BDD", async () => {
-      (prisma.apiToken.create as any).mockImplementation(async (args: any) => {
-        return { id: "tok-1", ...args.data };
-      });
+      createMock.mockImplementation(async () => makeApiToken({ id: "tok-1" }));
 
       const result = await createApiToken("user-789", "CheckHash");
-      const createCall = (prisma.apiToken.create as any).mock.calls[0][0];
+      const createCall = createMock.mock.calls[0][0];
       const storedHash = createCall.data.token;
 
       // Le plainText retourné au client doit contenir le raw
@@ -243,21 +251,21 @@ describe("api-tokens", () => {
     });
 
     it("stocke le userId dans la BDD", async () => {
-      (prisma.apiToken.create as any).mockResolvedValue({ id: "tok-1" });
+      createMock.mockResolvedValue(makeApiToken({ id: "tok-1" }));
 
       await createApiToken("user-to-test", "Test");
 
-      const createCall = (prisma.apiToken.create as any).mock.calls[0][0];
+      const createCall = createMock.mock.calls[0][0];
       expect(createCall.data.userId).toBe("user-to-test");
     });
 
     it("gère un expiresAt optionnel", async () => {
-      (prisma.apiToken.create as any).mockResolvedValue({ id: "tok-1" });
+      createMock.mockResolvedValue(makeApiToken({ id: "tok-1" }));
 
       const futureDate = new Date(Date.now() + 86400000);
       await createApiToken("user-1", "Expiring", futureDate);
 
-      const createCall = (prisma.apiToken.create as any).mock.calls[0][0];
+      const createCall = createMock.mock.calls[0][0];
       expect(createCall.data.expiresAt).toEqual(futureDate);
     });
   });
@@ -280,14 +288,11 @@ describe("api-tokens", () => {
 
     it("retourne les infos user pour un token valide", async () => {
       const token = generateSecureToken();
-      const mockApiToken = {
-        id: "tok-1",
-        token: token.hash,
+      vi.mocked(prisma.apiToken.findFirst).mockResolvedValue({
+        ...makeApiToken({ id: "tok-1", token: token.hash }),
         user: { id: "user-1", email: "test@test.com", name: "Test" },
-      };
-
-      vi.mocked(prisma.apiToken.findFirst).mockResolvedValue(mockApiToken as any);
-      vi.mocked(prisma.apiToken.update).mockResolvedValue({} as any);
+      } as ApiToken);
+      updateMock.mockResolvedValue(makeApiToken({}));
 
       const result = await verifyApiToken(token.formatted);
 
@@ -299,11 +304,10 @@ describe("api-tokens", () => {
     it("met à jour lastUsedAt après vérification", async () => {
       const token = generateSecureToken();
       vi.mocked(prisma.apiToken.findFirst).mockResolvedValue({
-        id: "tok-1",
-        token: token.hash,
+        ...makeApiToken({ id: "tok-1", token: token.hash }),
         user: { id: "u-1", email: "a@b.com", name: "A" },
-      } as any);
-      vi.mocked(prisma.apiToken.update).mockResolvedValue({} as any);
+      } as ApiToken);
+      updateMock.mockResolvedValue(makeApiToken({}));
 
       await verifyApiToken(token.formatted);
 
@@ -318,7 +322,7 @@ describe("api-tokens", () => {
 
   describe("revokeApiToken()", () => {
     it("supprime le token et retourne true", async () => {
-      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 1 } as any);
+      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 1 });
 
       const result = await revokeApiToken("tok-1", "user-1");
 
@@ -329,7 +333,7 @@ describe("api-tokens", () => {
     });
 
     it("retourne false si le token n'existe pas", async () => {
-      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 } as any);
+      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 });
 
       const result = await revokeApiToken("tok-inexistant", "user-1");
 
@@ -337,7 +341,7 @@ describe("api-tokens", () => {
     });
 
     it("vérifie que le userId correspond", async () => {
-      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 } as any);
+      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 });
 
       await revokeApiToken("tok-1", "wrong-user");
 
@@ -352,16 +356,22 @@ describe("api-tokens", () => {
   describe("listApiTokens()", () => {
     it("retourne la liste des tokens pour un userId", async () => {
       const mockTokens = [
-        { id: "tok-1", name: "Token 1", lastUsedAt: null, expiresAt: null, createdAt: new Date() },
-        {
+        makeApiToken({
+          id: "tok-1",
+          name: "Token 1",
+          lastUsedAt: null,
+          expiresAt: null,
+          createdAt: new Date(),
+        }),
+        makeApiToken({
           id: "tok-2",
           name: "Token 2",
           lastUsedAt: new Date(),
           expiresAt: null,
           createdAt: new Date(),
-        },
+        }),
       ];
-      vi.mocked(prisma.apiToken.findMany).mockResolvedValue(mockTokens as any);
+      vi.mocked(prisma.apiToken.findMany).mockResolvedValue(mockTokens);
 
       const result = await listApiTokens("user-1");
 
@@ -375,7 +385,7 @@ describe("api-tokens", () => {
     });
 
     it("ne retourne pas le hash du token dans la liste", async () => {
-      vi.mocked(prisma.apiToken.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.apiToken.findMany).mockResolvedValue([]);
 
       await listApiTokens("user-1");
 
@@ -388,7 +398,7 @@ describe("api-tokens", () => {
 
   describe("cleanupExpiredTokens()", () => {
     it("supprime les tokens expirés", async () => {
-      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 3 } as any);
+      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 3 });
 
       const result = await cleanupExpiredTokens();
 
@@ -403,7 +413,7 @@ describe("api-tokens", () => {
     });
 
     it("retourne 0 s'il n'y a pas de tokens expirés", async () => {
-      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 } as any);
+      vi.mocked(prisma.apiToken.deleteMany).mockResolvedValue({ count: 0 });
 
       const result = await cleanupExpiredTokens();
 

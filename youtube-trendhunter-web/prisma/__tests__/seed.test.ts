@@ -173,7 +173,7 @@ describe("Seed — Upsert et gestion des doublons", () => {
             data: {
               ...trendData,
               niche: { connect: { id: nicheId } },
-            } as any,
+            },
           })
           .catch(() => {
             errorCaught = true; // L'erreur est avalée silencieusement
@@ -208,7 +208,7 @@ describe("Seed — Upsert et gestion des doublons", () => {
             contentAngles: [],
             detectedAt: new Date(),
             expiresAt: new Date(),
-          } as any,
+          },
         });
       }
 
@@ -234,7 +234,9 @@ describe("Seed — Upsert et gestion des doublons", () => {
       // Si l'admin existe, on ne crée pas
       if (existingAdmin) {
         // Pas de create
-        const hasAdminRole = existingAdmin.userRoles.some((ur: any) => ur.role === "ADMIN");
+        const hasAdminRole = existingAdmin.userRoles.some(
+          (ur: { role: string }) => ur.role === "ADMIN",
+        );
         if (!hasAdminRole) {
           await mockPrismaClient.userRole.create({
             data: { userId: existingAdmin.id, role: "ADMIN" },
@@ -295,7 +297,9 @@ describe("Seed — Upsert et gestion des doublons", () => {
       });
 
       if (existingAdmin) {
-        const hasAdminRole = existingAdmin.userRoles.some((ur: any) => ur.role === "ADMIN");
+        const hasAdminRole = existingAdmin.userRoles.some(
+          (ur: { role: string }) => ur.role === "ADMIN",
+        );
         if (!hasAdminRole) {
           await mockPrismaClient.userRole.create({
             data: { userId: existingAdmin.id, role: "ADMIN" },
@@ -340,7 +344,7 @@ describe("Seed — Upsert et gestion des doublons", () => {
 
       await mockPrismaClient.trend
         .create({
-          data: trend as any,
+          data: trend,
         })
         .catch(() => {
           errorCaught = true;
@@ -371,7 +375,7 @@ describe("Seed — Upsert et gestion des doublons", () => {
         await mockPrismaClient.niche.upsert({
           where: { slug: "erreur" },
           update: {},
-          create: {} as any,
+          create: {},
         });
       } catch {
         // L'erreur est attendue et avalée - on vérifie juste que

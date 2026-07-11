@@ -3,10 +3,6 @@ import { z } from "@/lib/schemas";
 
 // ─── Module Mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/auth", () => ({
-  auth: vi.fn(),
-}));
-
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     niche: {
@@ -72,10 +68,13 @@ vi.mock("@/lib/rate-limit", () => ({
   withRateLimit: vi.fn().mockResolvedValue(null),
 }));
 
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateCache } from "@/lib/cache";
+import { makeNiche, makeUserNiche } from "@/__tests__/factories";
+
+type SessionLike = { user?: { id?: string; email?: string } } | null;
+const sessionMock = vi.fn<() => Promise<SessionLike>>();
 
 // Inline schema matching the route definition
 const nicheFollowSchema = z.object({
@@ -113,31 +112,39 @@ describe("Niches CRUD", () => {
 
   describe("GET /api/niches — business logic", () => {
     it("should return 401 when not authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue(null as any);
+      sessionMock.mockResolvedValue(null);
 
-      const session = await auth();
+      const session = await sessionMock();
       expect(session).toBeNull();
     });
 
     it("should fetch niches with pagination when authenticated", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123", email: "test@example.com" },
-      } as any);
+      });
 
       const { getUserNichesPaginated, getAllFollowedNicheIds, getAllActiveNiches } = await import(
         "@/lib/services/niche.service"
       );
 
       const mockNiches = {
-        userNiches: [{ id: "un-1", niche: { id: "n-1", name: "Tech" } }],
+        userNiches: [
+          {
+            ...makeUserNiche({ id: "un-1", userId: "user-123", nicheId: "n-1" }),
+            niche: {
+              ...makeNiche({ id: "n-1", name: "Tech", slug: "tech" }),
+              _count: { trends: 0 },
+            },
+          },
+        ],
         nextCursor: null,
       };
       const mockFollowed = ["n-1"];
-      const mockAvailable = [{ id: "n-1", name: "Tech", slug: "tech" }];
+      const mockAvailable = [makeNiche({ id: "n-1", name: "Tech", slug: "tech" })];
 
-      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches as any);
+      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches);
       vi.mocked(getAllFollowedNicheIds).mockResolvedValue(mockFollowed);
-      vi.mocked(getAllActiveNiches).mockResolvedValue(mockAvailable as any);
+      vi.mocked(getAllActiveNiches).mockResolvedValue(mockAvailable);
 
       const { userNiches, nextCursor } = await getUserNichesPaginated("user-123", { limit: 20 });
       const followed = await getAllFollowedNicheIds("user-123");
@@ -153,10 +160,16 @@ describe("Niches CRUD", () => {
       const { getUserNichesPaginated } = await import("@/lib/services/niche.service");
 
       const mockNiches = {
-        userNiches: Array.from({ length: 5 }, (_, i) => ({ id: `un-${i}` })),
+        userNiches: Array.from({ length: 5 }, (_, i) => ({
+          ...makeUserNiche({ id: `un-${i}`, userId: "user-123", nicheId: `n-${i}` }),
+          niche: {
+            ...makeNiche({ id: `n-${i}`, slug: `n-${i}`, name: `Niche ${i}` }),
+            _count: { trends: 0 },
+          },
+        })),
         nextCursor: "un-4",
       };
-      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches as any);
+      vi.mocked(getUserNichesPaginated).mockResolvedValue(mockNiches);
 
       const result = await getUserNichesPaginated("user-123", { limit: 5 });
       expect(result.userNiches).toHaveLength(5);
@@ -168,27 +181,23 @@ describe("Niches CRUD", () => {
 
   describe("POST /api/niches — follow business logic", () => {
     it("should follow a niche successfully", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
       const { followNiche, isFollowingNiche, getNicheById, countUserNiches } = await import(
         "@/lib/services/niche.service"
       );
 
       vi.mocked(isFollowingNiche).mockResolvedValue(false);
-      vi.mocked(getNicheById).mockResolvedValue({
-        id: "niche-1",
-        name: "Tech",
-        slug: "tech",
-      } as any);
+      vi.mocked(getNicheById).mockResolvedValue(
+        makeNiche({ id: "niche-1", name: "Tech", slug: "tech" }),
+      );
       vi.mocked(countUserNiches).mockResolvedValue(0);
       vi.mocked(followNiche).mockResolvedValue({
-        id: "un-1",
-        userId: "user-123",
-        nicheId: "niche-1",
-        niche: { id: "niche-1", name: "Tech", slug: "tech" },
-      } as any);
+        ...makeUserNiche({ id: "un-1", userId: "user-123", nicheId: "niche-1" }),
+        niche: makeNiche({ id: "niche-1", name: "Tech", slug: "tech" }),
+      });
 
       const nicheId = "niche-1";
       const alreadyFollowing = await isFollowingNiche("user-123", nicheId);
@@ -253,18 +262,17 @@ describe("Niches CRUD", () => {
 
   describe("DELETE /api/niches/[id] — unfollow business logic", () => {
     it("should unfollow a niche successfully", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      const mockUserNiche = {
+      const mockUserNiche = makeUserNiche({
         id: "un-1",
         userId: "user-123",
         nicheId: "niche-1",
-        niche: { id: "niche-1", name: "Tech", slug: "tech" },
-      };
+      });
 
-      vi.mocked(prisma.userNiche.findUnique).mockResolvedValue(mockUserNiche as any);
+      vi.mocked(prisma.userNiche.findUnique).mockResolvedValue(mockUserNiche);
 
       const userNiche = await prisma.userNiche.findUnique({
         where: { userId_nicheId: { userId: "user-123", nicheId: "niche-1" } },
@@ -293,17 +301,16 @@ describe("Niches CRUD", () => {
 
   describe("PATCH /api/niches/[id] — business logic", () => {
     it("should return user niche on update", async () => {
-      vi.mocked(auth).mockResolvedValue({
+      sessionMock.mockResolvedValue({
         user: { id: "user-123" },
-      } as any);
+      });
 
-      const mockUserNiche = {
+      const mockUserNiche = makeUserNiche({
         id: "un-1",
         userId: "user-123",
         nicheId: "niche-1",
-        createdAt: new Date(),
-      };
-      vi.mocked(prisma.userNiche.findUnique).mockResolvedValue(mockUserNiche as any);
+      });
+      vi.mocked(prisma.userNiche.findUnique).mockResolvedValue(mockUserNiche);
 
       const userNiche = await prisma.userNiche.findUnique({
         where: { userId_nicheId: { userId: "user-123", nicheId: "niche-1" } },

@@ -40,6 +40,13 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { makeStripeEvent, makeSubscription } from "@/__tests__/factories";
+import type { Subscription, SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
+import type { Mock } from "vitest";
+import type { Prisma } from "@prisma/client";
+
+type SubUpdateMock = Mock<(args: Prisma.SubscriptionUpdateArgs) => Promise<Subscription>>;
+const subscriptionUpdateMock = vi.mocked(prisma.subscription.update) as SubUpdateMock;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -124,7 +131,7 @@ async function simulateSubscriptionUpdated(stripeStatus: string) {
     data: {
       stripePriceId: subscription.items.data[0].price.id,
       plan: "PRO",
-      status: mappedStatus as any,
+      status: mappedStatus as SubscriptionStatus,
       stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
     },
   });
@@ -184,7 +191,7 @@ describe("POST /api/stripe/webhook — Extended", () => {
 
   describe("customer.subscription.updated – Mapping des statuts", () => {
     it("statut active → met à jour le statut ACTIVE", async () => {
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const status = await simulateSubscriptionUpdated("active");
       expect(status).toBe("ACTIVE");
@@ -196,21 +203,21 @@ describe("POST /api/stripe/webhook — Extended", () => {
     });
 
     it("statut past_due → met à jour le statut PAST_DUE", async () => {
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const status = await simulateSubscriptionUpdated("past_due");
       expect(status).toBe("PAST_DUE");
     });
 
     it("statut canceled → met à jour le statut CANCELED", async () => {
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const status = await simulateSubscriptionUpdated("canceled");
       expect(status).toBe("CANCELED");
     });
 
     it("statut incomplete → met à jour le statut INCOMPLETE", async () => {
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const status = await simulateSubscriptionUpdated("incomplete");
       expect(status).toBe("INCOMPLETE");
@@ -220,7 +227,7 @@ describe("POST /api/stripe/webhook — Extended", () => {
   describe("Gestion des événements", () => {
     it("événement inconnu → retourne 200 (mais non traité)", async () => {
       vi.mocked(prisma.stripeEvent.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.stripeEvent.upsert).mockResolvedValue({} as any);
+      vi.mocked(prisma.stripeEvent.upsert).mockResolvedValue(makeStripeEvent({}));
 
       const result = await simulateWebhookHandler(
         JSON.stringify({ type: "unknown.event.type" }),
@@ -232,12 +239,14 @@ describe("POST /api/stripe/webhook — Extended", () => {
     });
 
     it("événement dupliqué → retourne 200 avec flag duplicate", async () => {
-      vi.mocked(prisma.stripeEvent.findUnique).mockResolvedValue({
-        id: "evt-1",
-        eventId: "evt_duplicate",
-        type: "invoice.payment_succeeded",
-        processed: true,
-      } as any);
+      vi.mocked(prisma.stripeEvent.findUnique).mockResolvedValue(
+        makeStripeEvent({
+          id: "evt-1",
+          eventId: "evt_duplicate",
+          type: "invoice.payment_succeeded",
+          processed: true,
+        }),
+      );
 
       // On simule la logique : si déjà traité, retour direct
       const existingEvent = await prisma.stripeEvent.findUnique({
@@ -259,12 +268,12 @@ describe("POST /api/stripe/webhook — Extended", () => {
 
   describe("customer.subscription.deleted", () => {
     it("annule l'abonnement : statut CANCELED et plan FREE", async () => {
-      vi.mocked(prisma.subscription.update).mockResolvedValue({} as any);
+      subscriptionUpdateMock.mockResolvedValue(makeSubscription({}));
 
       const userId = "user-to-cancel";
       await prisma.subscription.update({
         where: { userId },
-        data: { status: "CANCELED", plan: "FREE" as any },
+        data: { status: "CANCELED", plan: "FREE" as SubscriptionPlan },
       });
 
       expect(prisma.subscription.update).toHaveBeenCalledWith(
@@ -282,7 +291,7 @@ describe("POST /api/stripe/webhook — Extended", () => {
   describe("Idempotency", () => {
     it("enregistre l'événement avant traitement (processed: false)", async () => {
       vi.mocked(prisma.stripeEvent.findUnique).mockResolvedValue(null);
-      vi.mocked(prisma.stripeEvent.upsert).mockResolvedValue({} as any);
+      vi.mocked(prisma.stripeEvent.upsert).mockResolvedValue(makeStripeEvent({}));
 
       const eventType = "checkout.session.completed";
 
@@ -303,7 +312,7 @@ describe("POST /api/stripe/webhook — Extended", () => {
     });
 
     it("marque l'événement comme traité après succès (processed: true)", async () => {
-      vi.mocked(prisma.stripeEvent.update).mockResolvedValue({} as any);
+      vi.mocked(prisma.stripeEvent.update).mockResolvedValue(makeStripeEvent({}));
 
       await prisma.stripeEvent.update({
         where: { eventId: "evt_success" },

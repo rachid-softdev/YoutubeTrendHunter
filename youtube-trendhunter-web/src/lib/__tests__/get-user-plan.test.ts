@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeSubscription } from "@/__tests__/factories";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -23,30 +24,19 @@ describe("getUserPlan", () => {
     expect(result).toBe("FREE");
   });
 
-  const baseSub = {
-    id: "sub-mock",
-    userId: "user_123",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    orgId: null as string | null,
-    planKey: null as string | null,
-    stripeSubscriptionId: null as string | null,
-    stripePriceId: null as string | null,
-    cancelledAt: null as Date | null,
-  };
-
   it("returns PRO when trial is active and plan is PRO", async () => {
     const now = new Date();
     const trialStart = new Date(now.getTime() - 86400000); // yesterday
     const trialEnd = new Date(now.getTime() + 86400000 * 6); // 6 days from now
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "PRO",
-      status: "TRIALING",
-      trialStart,
-      trialEnd,
-      stripeCurrentPeriodEnd: trialEnd,
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "PRO",
+        status: "TRIALING",
+        trialStart,
+        trialEnd,
+        stripeCurrentPeriodEnd: trialEnd,
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("PRO");
   });
@@ -55,79 +45,85 @@ describe("getUserPlan", () => {
     const now = new Date();
     const trialStart = new Date(now.getTime() - 86400000);
     const trialEnd = new Date(now.getTime() + 86400000 * 6);
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "TEAM",
-      status: "TRIALING",
-      trialStart,
-      trialEnd,
-      stripeCurrentPeriodEnd: trialEnd,
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "TEAM",
+        status: "TRIALING",
+        trialStart,
+        trialEnd,
+        stripeCurrentPeriodEnd: trialEnd,
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("TEAM");
   });
 
   it("returns FREE when subscription is CANCELED", async () => {
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "PRO",
-      status: "CANCELED",
-      trialStart: null,
-      trialEnd: null,
-      stripeCurrentPeriodEnd: new Date(),
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "PRO",
+        status: "CANCELED",
+        trialStart: null,
+        trialEnd: null,
+        stripeCurrentPeriodEnd: new Date(),
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("FREE");
   });
 
   it("returns FREE when subscription is INCOMPLETE", async () => {
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "PRO",
-      status: "INCOMPLETE",
-      trialStart: null,
-      trialEnd: null,
-      stripeCurrentPeriodEnd: new Date(),
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "PRO",
+        status: "INCOMPLETE",
+        trialStart: null,
+        trialEnd: null,
+        stripeCurrentPeriodEnd: new Date(),
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("FREE");
   });
 
   it("returns FREE when subscription period has ended", async () => {
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "PRO",
-      status: "ACTIVE",
-      trialStart: null,
-      trialEnd: null,
-      stripeCurrentPeriodEnd: new Date(Date.now() - 86400000), // yesterday
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "PRO",
+        status: "ACTIVE",
+        trialStart: null,
+        trialEnd: null,
+        stripeCurrentPeriodEnd: new Date(Date.now() - 86400000), // yesterday
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("FREE");
   });
 
   it("returns PRO when subscription is active with valid period", async () => {
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "PRO",
-      status: "ACTIVE",
-      trialStart: null,
-      trialEnd: null,
-      stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 30), // 30 days from now
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "PRO",
+        status: "ACTIVE",
+        trialStart: null,
+        trialEnd: null,
+        stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 30), // 30 days from now
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("PRO");
   });
 
   it("returns TEAM when subscription is TEAM and active", async () => {
-    vi.mocked(prisma.subscription.findUnique).mockResolvedValue({
-      ...baseSub,
-      plan: "TEAM",
-      status: "ACTIVE",
-      trialStart: null,
-      trialEnd: null,
-      stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 30),
-    } as any);
+    vi.mocked(prisma.subscription.findUnique).mockResolvedValue(
+      makeSubscription({
+        plan: "TEAM",
+        status: "ACTIVE",
+        trialStart: null,
+        trialEnd: null,
+        stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 30),
+      }),
+    );
     const result = await getUserPlan("user_123");
     expect(result).toBe("TEAM");
   });
@@ -140,17 +136,19 @@ describe("activateTrial", () => {
   });
 
   it("creates a new trial subscription", async () => {
-    vi.mocked(prisma.subscription.upsert).mockResolvedValue({
-      id: "sub_123",
-      userId: "user_123",
-      plan: "PRO",
-      status: "TRIALING",
-      stripeSubscriptionId: "trial_123",
-      stripePriceId: "pro_trial",
-      stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 7),
-      trialStart: new Date(),
-      trialEnd: new Date(Date.now() + 86400000 * 7),
-    } as any);
+    vi.mocked(prisma.subscription.upsert).mockResolvedValue(
+      makeSubscription({
+        id: "sub_123",
+        userId: "user_123",
+        plan: "PRO",
+        status: "TRIALING",
+        stripeSubscriptionId: "trial_123",
+        stripePriceId: "pro_trial",
+        stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 7),
+        trialStart: new Date(),
+        trialEnd: new Date(Date.now() + 86400000 * 7),
+      }),
+    );
 
     await activateTrial("user_123", "PRO");
 
@@ -167,30 +165,26 @@ describe("activateTrial", () => {
   });
 
   it("uses 7 days as default trial duration", async () => {
-    // @ts-expect-error - mock returns plain object, not Prisma__SubscriptionClient
-    vi.mocked(prisma.subscription.upsert).mockImplementation(async ({ create }: any) => ({
-      ...create,
-      id: "sub_new",
-      trialEnd: create.trialEnd,
-    }));
+    vi.mocked(prisma.subscription.upsert).mockResolvedValue(makeSubscription({ id: "sub_new" }));
 
     const result = await activateTrial("user_123", "PRO");
-    // Trial should be approximately 7 days
     expect(result).toBeDefined();
   });
 
   it("uses TEAM plan for TEAM plan trials", async () => {
-    vi.mocked(prisma.subscription.upsert).mockResolvedValue({
-      id: "sub_123",
-      userId: "user_123",
-      plan: "TEAM",
-      status: "TRIALING",
-      stripeSubscriptionId: "trial_123",
-      stripePriceId: null,
-      stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 7),
-      trialStart: new Date(),
-      trialEnd: new Date(Date.now() + 86400000 * 7),
-    } as any);
+    vi.mocked(prisma.subscription.upsert).mockResolvedValue(
+      makeSubscription({
+        id: "sub_123",
+        userId: "user_123",
+        plan: "TEAM",
+        status: "TRIALING",
+        stripeSubscriptionId: "trial_123",
+        stripePriceId: null,
+        stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 7),
+        trialStart: new Date(),
+        trialEnd: new Date(Date.now() + 86400000 * 7),
+      }),
+    );
 
     await activateTrial("user_123", "TEAM");
 
@@ -204,17 +198,19 @@ describe("activateTrial", () => {
   });
 
   it("uses custom duration when provided", async () => {
-    vi.mocked(prisma.subscription.upsert).mockResolvedValue({
-      id: "sub_123",
-      userId: "user_123",
-      plan: "PRO",
-      status: "TRIALING",
-      stripeSubscriptionId: "trial_123",
-      stripePriceId: "pro_trial",
-      stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 14),
-      trialStart: new Date(),
-      trialEnd: new Date(Date.now() + 86400000 * 14),
-    } as any);
+    vi.mocked(prisma.subscription.upsert).mockResolvedValue(
+      makeSubscription({
+        id: "sub_123",
+        userId: "user_123",
+        plan: "PRO",
+        status: "TRIALING",
+        stripeSubscriptionId: "trial_123",
+        stripePriceId: "pro_trial",
+        stripeCurrentPeriodEnd: new Date(Date.now() + 86400000 * 14),
+        trialStart: new Date(),
+        trialEnd: new Date(Date.now() + 86400000 * 14),
+      }),
+    );
 
     await activateTrial("user_123", "PRO", 14);
 

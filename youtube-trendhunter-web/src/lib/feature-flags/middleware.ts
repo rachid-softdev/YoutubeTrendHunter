@@ -21,11 +21,7 @@
 // ============================================
 
 import type { FeatureGateService } from "./feature-gate.service";
-import {
-  FeatureNotAvailableError,
-  LimitReachedError,
-  SubscriptionExpiredError,
-} from "./errors";
+import { FeatureNotAvailableError, LimitReachedError } from "./errors";
 import { log } from "@/lib/logger";
 
 // ─── Types ───
@@ -51,10 +47,7 @@ export type SessionResolver = () => Promise<AuthSession>;
  * Usage (Express):
  *   router.post("/export", requireFeature(gate, resolveSession)("EXPORT_PDF"), handler)
  */
-export function requireFeature(
-  gate: FeatureGateService,
-  resolveSession: SessionResolver,
-) {
+export function requireFeature(gate: FeatureGateService, resolveSession: SessionResolver) {
   return (featureKey: string) => {
     return async () => {
       const { orgId } = await resolveSession();
@@ -69,10 +62,7 @@ export function requireFeature(
  * Creates a handler wrapper that checks if consumption is possible.
  * Throws LimitReachedError (402) if limit reached.
  */
-export function requireLimit(
-  gate: FeatureGateService,
-  resolveSession: SessionResolver,
-) {
+export function requireLimit(gate: FeatureGateService, resolveSession: SessionResolver) {
   return (featureKey: string, amount = 1) => {
     return async <T>(handler: () => Promise<T>): Promise<T> => {
       const { orgId, userId } = await resolveSession();
@@ -105,10 +95,7 @@ export function requireLimit(
  * Creates a handler wrapper that checks AND consumes a feature.
  * Throws LimitReachedError (402) if limit reached.
  */
-export function consumeFeature(
-  gate: FeatureGateService,
-  resolveSession: SessionResolver,
-) {
+export function consumeFeature(gate: FeatureGateService, resolveSession: SessionResolver) {
   return (featureKey: string, amount = 1) => {
     return async <T>(handler: () => Promise<T>): Promise<T> => {
       const { orgId, userId } = await resolveSession();
@@ -147,10 +134,7 @@ export function consumeFeature(
  * Usage:
  *   export const POST = withFeature(gate, resolveSession)("EXPORT_PDF", handler)
  */
-export function withFeature(
-  gate: FeatureGateService,
-  resolveSession: SessionResolver,
-) {
+export function withFeature(gate: FeatureGateService, resolveSession: SessionResolver) {
   return (featureKey: string) => {
     return <T>(handler: (req: T) => Promise<Response>) => {
       return async (req: T): Promise<Response> => {
@@ -176,15 +160,12 @@ export function withFeature(
 /**
  * Wraps a Next.js route handler with limit check and consumption.
  */
-export function withLimit(
-  gate: FeatureGateService,
-  resolveSession: SessionResolver,
-) {
+export function withLimit(gate: FeatureGateService, resolveSession: SessionResolver) {
   return (featureKey: string, amount = 1) => {
     return <T>(handler: (req: T) => Promise<Response>) => {
       return async (req: T): Promise<Response> => {
         try {
-          const { orgId, userId } = await resolveSession();
+          const { orgId, userId: _userId } = await resolveSession();
           const result = await gate.consume(orgId, featureKey, amount);
 
           if (!result.success) {
@@ -203,7 +184,11 @@ export function withLimit(
               );
             }
             return NextResponse.json(
-              { error: "FEATURE_NOT_AVAILABLE", feature: featureKey, upgrade_url: "/billing/upgrade" },
+              {
+                error: "FEATURE_NOT_AVAILABLE",
+                feature: featureKey,
+                upgrade_url: "/billing/upgrade",
+              },
               { status: 403 },
             );
           }

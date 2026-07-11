@@ -17,11 +17,10 @@ import type {
   FeatureType,
 } from "./types";
 import { isInExperiment as checkExperimentBucket, getExperimentBucket } from "./experiment";
-import { FeatureNotAvailableError, LimitReachedError } from "./errors";
+import { FeatureNotAvailableError } from "./errors";
 import { log } from "@/lib/logger";
 
 const CACHE_TTL = 300; // 5 min Redis
-const MEMORY_TTL = 30; // 30s memory fallback
 const CACHE_PREFIX = "entitlements:";
 
 export class FeatureGateService {
@@ -243,7 +242,10 @@ export class FeatureGateService {
 
         // Handle EXPERIMENT features
         if (featureType === "EXPERIMENT") {
-          const raw = (pf.configJson ?? pf.feature?.defaultConfig) as Record<string, unknown> | null;
+          const raw = (pf.configJson ?? pf.feature?.defaultConfig) as Record<
+            string,
+            unknown
+          > | null;
           const config = raw
             ? { percentage: (raw.percentage as number) ?? 0, seed: (raw.seed as string) ?? "" }
             : null;
@@ -292,7 +294,10 @@ export class FeatureGateService {
   /**
    * Get a detailed debug trace showing how a feature was resolved.
    */
-  async getDebugTrace(orgId: string, featureKey: string): Promise<DebugTrace & { value: boolean | number | null }> {
+  async getDebugTrace(
+    orgId: string,
+    featureKey: string,
+  ): Promise<DebugTrace & { value: boolean | number | null }> {
     // 1. User override (requires userId, not available here — skip)
     // 2. Org override
     const orgOverride = await this.repository.getOverride("ORG", orgId, featureKey);
@@ -302,10 +307,7 @@ export class FeatureGateService {
       const featureType = feature?.type as FeatureType;
       // For LIMIT features: if override disables it, return false; otherwise return limitValue
       const enabled = orgOverride.enabled ?? false;
-      const value =
-        featureType === "LIMIT" && enabled
-          ? (orgOverride.limitValue ?? null)
-          : enabled;
+      const value = featureType === "LIMIT" && enabled ? (orgOverride.limitValue ?? null) : enabled;
 
       return {
         feature: featureKey,

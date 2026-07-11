@@ -6,11 +6,13 @@
 //             distribution uniformity, determinism
 
 import { describe, it, expect } from "vitest";
-import {
-  murmurhash,
-  isInExperiment,
-  getExperimentBucket,
-} from "@/lib/feature-flags/experiment";
+import { murmurhash, isInExperiment, getExperimentBucket } from "@/lib/feature-flags/experiment";
+
+// These tests intentionally probe non-string / wrong-arity inputs to confirm
+// the function never throws. We route them through a loosely-typed wrapper
+// instead of `as any`. The cast is a legal function-type assertion.
+const isInExperimentLoose = isInExperiment as (...args: unknown[]) => boolean;
+const getExperimentBucketLoose = getExperimentBucket as (...args: unknown[]) => number;
 
 // ============================================
 // MurmurHash Correctness
@@ -330,23 +332,23 @@ describe("isInExperiment", () => {
   // ─── Non-string userId (does not throw) ───
 
   it("handles numeric userId without throwing", () => {
-    expect(() => isInExperiment(123 as any, "seed", 50)).not.toThrow();
+    expect(() => isInExperimentLoose(123, "seed", 50)).not.toThrow();
   });
 
   it("handles null userId without throwing", () => {
-    expect(() => isInExperiment(null as any, "seed", 50)).not.toThrow();
+    expect(() => isInExperimentLoose(null, "seed", 50)).not.toThrow();
   });
 
   it("handles undefined userId without throwing", () => {
-    expect(() => isInExperiment(undefined as any, "seed", 50)).not.toThrow();
+    expect(() => isInExperimentLoose(undefined, "seed", 50)).not.toThrow();
   });
 
   it("handles object userId without throwing", () => {
-    expect(() => isInExperiment({} as any, "seed", 50)).not.toThrow();
+    expect(() => isInExperimentLoose({}, "seed", 50)).not.toThrow();
   });
 
   it("handles array userId without throwing", () => {
-    expect(() => isInExperiment([] as any, "seed", 50)).not.toThrow();
+    expect(() => isInExperimentLoose([], "seed", 50)).not.toThrow();
   });
 
   // ─── Seed edge cases ───
@@ -357,11 +359,11 @@ describe("isInExperiment", () => {
   });
 
   it("handles null seed without throwing", () => {
-    expect(() => isInExperiment("user", null as any, 50)).not.toThrow();
+    expect(() => isInExperimentLoose("user", null, 50)).not.toThrow();
   });
 
   it("handles undefined seed without throwing", () => {
-    expect(() => isInExperiment("user", undefined as any, 50)).not.toThrow();
+    expect(() => isInExperimentLoose("user", undefined, 50)).not.toThrow();
   });
 
   // ─── Percentage edge cases ───
@@ -378,15 +380,15 @@ describe("isInExperiment", () => {
   // ─── Missing arguments ───
 
   it("handles no arguments without throwing", () => {
-    expect(() => (isInExperiment as any)()).not.toThrow();
+    expect(() => isInExperimentLoose()).not.toThrow();
   });
 
   it("handles only userId argument without throwing", () => {
-    expect(() => (isInExperiment as any)("user")).not.toThrow();
+    expect(() => isInExperimentLoose("user")).not.toThrow();
   });
 
   it("handles userId + seed without percentage without throwing", () => {
-    expect(() => (isInExperiment as any)("user", "seed")).not.toThrow();
+    expect(() => isInExperimentLoose("user", "seed")).not.toThrow();
   });
 });
 
@@ -495,18 +497,18 @@ describe("getExperimentBucket", () => {
   // ─── Non-string inputs ───
 
   it("handles numeric userId without throwing", () => {
-    expect(() => getExperimentBucket(123 as any, "seed")).not.toThrow();
+    expect(() => getExperimentBucketLoose(123, "seed")).not.toThrow();
   });
 
   it("handles null userId without throwing", () => {
-    expect(() => getExperimentBucket(null as any, "seed")).not.toThrow();
+    expect(() => getExperimentBucketLoose(null, "seed")).not.toThrow();
   });
 
   it("handles undefined seed without throwing", () => {
-    expect(() => getExperimentBucket("user", undefined as any)).not.toThrow();
+    expect(() => getExperimentBucketLoose("user", undefined)).not.toThrow();
   });
 
   it("handles no arguments without throwing", () => {
-    expect(() => (getExperimentBucket as any)()).not.toThrow();
+    expect(() => getExperimentBucketLoose()).not.toThrow();
   });
 });

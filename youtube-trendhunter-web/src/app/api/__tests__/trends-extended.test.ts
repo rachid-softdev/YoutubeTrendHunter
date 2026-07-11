@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { makeTrend, makeUserNiche } from "@/__tests__/factories";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -54,8 +55,6 @@ async function simulateTrendsHandler(
   authResult: { user: { id: string } } | null,
   plan: "FREE" | "PRO" | "TEAM",
   nicheExists: boolean,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _trendsCount: number,
 ) {
   // 1 — Auth check
   if (!authResult?.user?.id) {
@@ -111,14 +110,14 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
 
   describe("Authentication", () => {
     it("retourne 401 si l'utilisateur n'est pas authentifié", async () => {
-      const result = await simulateTrendsHandler(null, "FREE", true, 0);
+      const result = await simulateTrendsHandler(null, "FREE", true);
 
       expect(result.status).toBe(401);
       expect(result.body).toHaveProperty("error");
     });
 
     it("retourne 401 si la session n'a pas d'ID utilisateur", async () => {
-      const result = await simulateTrendsHandler({ user: { id: "" } as any }, "FREE", true, 0);
+      const result = await simulateTrendsHandler({ user: { id: "" } }, "FREE", true);
 
       expect(result.status).toBe(401);
     });
@@ -127,7 +126,7 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       vi.mocked(prisma.userNiche.findMany).mockResolvedValue([]);
       vi.mocked(prisma.trend.findMany).mockResolvedValue([]);
 
-      const result = await simulateTrendsHandler({ user: { id: "user-123" } }, "FREE", true, 0);
+      const result = await simulateTrendsHandler({ user: { id: "user-123" } }, "FREE", true);
 
       expect(result.status).toBe(200);
     });
@@ -136,18 +135,13 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
   describe("FREE Plan Limits", () => {
     it("limite FREE à 5 tendances max, même si la BDD en a plus", async () => {
       vi.mocked(prisma.userNiche.findMany).mockResolvedValue([]);
-      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
-        // Simule que la BDD a 100 tendances mais que take force à 5
-        const fullList = Array.from({ length: 100 }, (_, i) => ({
-          id: `trend-${i}`,
-          title: `Trend ${i}`,
-          score: 100 - i,
-        }));
-        return fullList.slice(0, take) as any;
-      });
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrend({ id: `trend-${i}`, title: `Trend ${i}`, score: 100 - i }),
+        ),
+      );
 
-      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true, 100);
+      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true);
 
       expect(result.status).toBe(200);
       expect(result.body!.trends).toHaveLength(5);
@@ -158,26 +152,24 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
       // Le paramètre limit du client n'est pas parsé par la route →
       // la limite est toujours contrôlée par le serveur.
       vi.mocked(prisma.userNiche.findMany).mockResolvedValue([]);
-      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
-        const bigList = Array.from({ length: 50 }, (_, i) => ({
-          id: `t-${i}`,
-          title: `Trend ${i}`,
-          score: 50 - i,
-        }));
-        return bigList.slice(0, take) as any;
-      });
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(
+        Array.from({ length: 5 }, (_, i) =>
+          makeTrend({ id: `t-${i}`, title: `Trend ${i}`, score: 50 - i }),
+        ),
+      );
 
-      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true, 50);
+      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true);
 
       expect(result.status).toBe(200);
       expect(result.body?.trends?.length).toBeLessThanOrEqual(5);
     });
 
     it("bloque FREE si la niche est déjà suivie", async () => {
-      vi.mocked(prisma.userNiche.findMany).mockResolvedValue([{ nicheId: "niche-other" }] as any);
+      vi.mocked(prisma.userNiche.findMany).mockResolvedValue([
+        makeUserNiche({ nicheId: "niche-other" }),
+      ]);
 
-      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true, 0);
+      const result = await simulateTrendsHandler({ user: { id: "user-free" } }, "FREE", true);
 
       expect(result.status).toBe(403);
       expect(result.body.error).toContain("Limite plan Free");
@@ -186,17 +178,13 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
 
   describe("PRO Plan Limits", () => {
     it("limite PRO à 20 tendances max", async () => {
-      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
-        const bigList = Array.from({ length: 100 }, (_, i) => ({
-          id: `trend-${i}`,
-          title: `Pro Trend ${i}`,
-          score: 100 - i,
-        }));
-        return bigList.slice(0, take) as any;
-      });
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(
+        Array.from({ length: 20 }, (_, i) =>
+          makeTrend({ id: `trend-${i}`, title: `Pro Trend ${i}`, score: 100 - i }),
+        ),
+      );
 
-      const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true, 50);
+      const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true);
 
       expect(result.status).toBe(200);
       expect(result.body!.trends).toHaveLength(20);
@@ -206,14 +194,12 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
     it("ne bloque pas les PRO sur les niches multiples", async () => {
       // FREE check est uniquement pour le plan FREE
       vi.mocked(prisma.trend.findMany).mockResolvedValue(
-        Array.from({ length: 3 }, (_, i) => ({
-          id: `trend-${i}`,
-          title: `Trend ${i}`,
-          score: 90 - i * 10,
-        })) as any,
+        Array.from({ length: 3 }, (_, i) =>
+          makeTrend({ id: `trend-${i}`, title: `Trend ${i}`, score: 90 - i * 10 }),
+        ),
       );
 
-      const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true, 3);
+      const result = await simulateTrendsHandler({ user: { id: "user-pro" } }, "PRO", true);
 
       expect(result.status).toBe(200);
       expect(result.body?.trends?.length).toBeLessThanOrEqual(20);
@@ -222,16 +208,13 @@ describe("GET /api/trends — Plan Limits (Extended)", () => {
 
   describe("TEAM Plan Limits", () => {
     it("limite TEAM à 20 tendances (comme PRO)", async () => {
-      // @ts-expect-error - mock implementation returns plain array, not PrismaPromise
-      vi.mocked(prisma.trend.findMany).mockImplementation(async ({ take }: { take?: number }) => {
-        return Array.from({ length: take ?? 0 }, (_, i) => ({
-          id: `t-${i}`,
-          title: `Team Trend ${i}`,
-          score: 80 - i,
-        })) as any;
-      });
+      vi.mocked(prisma.trend.findMany).mockResolvedValue(
+        Array.from({ length: 20 }, (_, i) =>
+          makeTrend({ id: `t-${i}`, title: `Team Trend ${i}`, score: 80 - i }),
+        ),
+      );
 
-      const result = await simulateTrendsHandler({ user: { id: "user-team" } }, "TEAM", true, 30);
+      const result = await simulateTrendsHandler({ user: { id: "user-team" } }, "TEAM", true);
 
       expect(result.status).toBe(200);
       expect(result.body!.trends).toHaveLength(20);
