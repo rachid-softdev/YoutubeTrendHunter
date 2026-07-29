@@ -4,12 +4,62 @@ import { prisma } from "@/lib/prisma";
 import { getUserPlan } from "@/lib/services/subscription.service";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateCache } from "@/lib/cache";
+import { getNicheById, updateNiche } from "@/lib/services/niche.service";
+import { UnauthorizedError, NotFoundError, ValidationError, InternalError } from "@/lib/api-error";
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.id) return UnauthorizedError();
+
+  try {
+    const { id } = await params;
+    const niche = await getNicheById(id);
+    if (!niche) return NotFoundError("Niche");
+    return NextResponse.json({ niche });
+  } catch (error) {
+    console.error("Error fetching niche:", error);
+    return InternalError();
+  }
+}
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.id) return UnauthorizedError();
+
+  try {
+    const { id } = await params;
+
+    // Verify the niche exists
+    const niche = await getNicheById(id);
+    if (!niche) return NotFoundError("Niche");
+
+    const body = await req.json();
+    const { name, description, language, isActive, keywords } = body;
+
+    if (name !== undefined && (typeof name !== "string" || name.trim().length === 0)) {
+      return ValidationError("Le nom de la niche est requis");
+    }
+
+    const updated = await updateNiche(id, {
+      ...(name !== undefined && { name }),
+      ...(description !== undefined && { description }),
+      ...(language !== undefined && { language }),
+      ...(isActive !== undefined && { isActive }),
+      ...(keywords !== undefined && { keywords }),
+    });
+
+    await invalidateCache("niches:*");
+
+    return NextResponse.json({ niche: updated });
+  } catch (error) {
+    console.error("Error updating niche:", error);
+    return InternalError();
+  }
+}
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
+  if (!session?.user?.id) return UnauthorizedError();
 
   try {
     const { id: nicheId } = await params;
@@ -25,9 +75,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       include: { niche: true },
     });
 
-    if (!userNiche) {
-      return NextResponse.json({ error: "Vous ne suivez pas cette niche" }, { status: 404 });
-    }
+    if (!userNiche) return NotFoundError("Niche");
 
     // Delete
     await prisma.userNiche.delete({
@@ -48,15 +96,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error("Error unfollowing niche:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
+  if (!session?.user?.id) return UnauthorizedError();
 
   try {
     const { id: nicheId } = await params;
@@ -71,13 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
-    if (!userNiche) {
-      return NextResponse.json({ error: "Vous ne suivez pas cette niche" }, { status: 404 });
-    }
-
-    // We don't have an isActive field on UserNiche, so we'll treat this as a no-op
-    // If needed, we'd need to add it to the schema
-    // For now, return success with the current state
+    if (!userNiche) return NotFoundError("Niche");
 
     // Invalidate cached niches
     await invalidateCache("niches:*");
@@ -85,6 +125,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ userNiche });
   } catch (error) {
     console.error("Error updating niche:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }

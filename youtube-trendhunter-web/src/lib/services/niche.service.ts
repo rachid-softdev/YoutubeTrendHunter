@@ -149,3 +149,19 @@ export async function getAllFollowedNicheIds(userId: string) {
   });
   return records.map((r) => r.nicheId);
 }
+
+/**
+ * Update a niche's properties.
+ */
+export async function updateNiche(
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    language?: string;
+    isActive?: boolean;
+    keywords?: string[];
+  },
+) {
+  return prisma.niche.update({ where: { id }, data });
+}

@@ -15,6 +15,7 @@ export async function getTrendsByNiche(
     where: { nicheId, expiresAt: { gte: new Date() } },
     orderBy: [{ score: "desc" }, { id: "asc" }],
     take,
+    include: { niche: true },
     ...(options?.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
   });
 
@@ -38,6 +39,7 @@ export async function getTrendsForDashboard(nicheSlug: string, plan: string, lim
     where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
     orderBy: { score: "desc" },
     take,
+    include: { niche: true },
   });
 }
 
@@ -56,6 +58,7 @@ export async function getTrendsForExtension(nicheSlug: string, plan: string) {
     where: { nicheId: niche.id, expiresAt: { gte: new Date() } },
     orderBy: [{ score: "desc" }, { id: "asc" }],
     take,
+    include: { niche: true },
   });
 
   const hasMore = trends.length > take - 1;

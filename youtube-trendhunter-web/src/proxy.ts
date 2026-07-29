@@ -1,43 +1,52 @@
-/**
- * Next.js App Router proxy (formerly "middleware").
- *
- * Attaches diagnostic response headers (request ID, duration) and logs
- * a structured request summary for every matched API route.
- *
- * NOTE: The proxy cannot access the downstream route handler's response
- * status code — `NextResponse.next()` always returns 200 at this stage.
- * For accurate RED metrics (rate, errors, duration), call
- * `metrics.record()` from individual route handlers instead.
- *
- * See node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md
- */
-
 import { NextResponse } from "next/server";
 import type { NextRequest, NextFetchEvent } from "next/server";
+import { auth } from "@/lib/auth";
 
-export function proxy(request: NextRequest, event: NextFetchEvent) {
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
+  // === Auth protection ===
+  const session = await auth();
+  const isLoggedIn = !!session?.user;
+  const path = request.nextUrl.pathname;
+
+  const protectedPaths = [
+    "/dashboard",
+    "/home",
+    "/my-niches",
+    "/alerts",
+    "/billing",
+    "/settings",
+    "/admin",
+  ];
+
+  const isProtected = protectedPaths.some((p) => path === p || path.startsWith(`${p}/`));
+  const isAuthPage = path === "/login";
+
+  if (isProtected && !isLoggedIn) {
+    const loginUrl = new URL("/login", request.nextUrl);
+    loginUrl.searchParams.set("callbackUrl", path);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (isAuthPage && isLoggedIn) {
+    return NextResponse.redirect(new URL("/home", request.nextUrl));
+  }
+
+  // === Diagnostic headers ===
   const start = Date.now();
   const requestId = crypto.randomUUID();
 
   const response = NextResponse.next();
   response.headers.set("X-Request-ID", requestId);
 
-  // waitUntil runs after the route handler completes, giving us the
-  // real wall-clock duration. Status tracking is intentionally omitted
-  // because `response.status` is always 200 (NextResponse.next()).
   event.waitUntil(
     Promise.resolve().then(() => {
       const duration = Date.now() - start;
       response.headers.set("X-Duration", String(duration));
-
-      const url = new URL(request.url);
-
       console.warn(
         JSON.stringify({
           type: "request_summary",
           method: request.method,
-          path: url.pathname,
-          status: response.status,
+          path,
           duration,
           requestId,
         }),
@@ -48,7 +57,6 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
   return response;
 }
 
-// Limit the proxy to API routes only
 export const config = {
-  matcher: "/api/:path*",
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.ico$).*)"],
 };

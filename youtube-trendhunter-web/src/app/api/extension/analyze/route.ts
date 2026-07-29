@@ -5,6 +5,7 @@ import { getVideoStats, getVideoDetails } from "@/lib/youtube";
 import { scoreVideo } from "@/lib/trend-scorer";
 import { withRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { UnauthorizedError, NotFoundError, ValidationError, InternalError } from "@/lib/api-error";
 
 export async function POST(req: NextRequest) {
   const rateLimitResponse = await withRateLimit(req, "extension");
@@ -12,22 +13,16 @@ export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
 
-  if (!token) {
-    return NextResponse.json({ error: "Token manquant" }, { status: 401 });
-  }
+  if (!token) return UnauthorizedError("Token manquant");
 
   const result = await verifyApiToken(token);
-  if (!result) {
-    return NextResponse.json({ error: "Token invalide", code: "INVALID_TOKEN" }, { status: 401 });
-  }
+  if (!result) return UnauthorizedError("Token invalide");
 
   try {
     const body = await req.json();
     const { videoId } = body;
 
-    if (!videoId) {
-      return NextResponse.json({ error: "videoId requis" }, { status: 400 });
-    }
+    if (!videoId) return ValidationError("videoId requis");
 
     // Get video stats and details from YouTube API
     const [stats, videoDetails] = await Promise.all([
@@ -37,12 +32,7 @@ export async function POST(req: NextRequest) {
 
     const videoStat = stats[0];
 
-    if (!videoStat && !videoDetails) {
-      return NextResponse.json(
-        { error: "Vidéo introuvable ou supprimée", code: "VIDEO_NOT_FOUND" },
-        { status: 404 },
-      );
-    }
+    if (!videoStat && !videoDetails) return NotFoundError("Vidéo");
 
     const plan = await getUserPlan(result.userId);
 
@@ -99,9 +89,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Video analysis error:", error);
-    return NextResponse.json(
-      { error: "Erreur lors de l'analyse", code: "ANALYSIS_FAILED" },
-      { status: 500 },
-    );
+    return InternalError("Erreur lors de l'analyse");
   }
 }

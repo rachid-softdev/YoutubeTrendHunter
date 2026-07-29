@@ -32,7 +32,7 @@ import { getActiveAlertCount } from "@/lib/services/alert.service";
 import { getUserCount } from "@/lib/services/user.service";
 import { getNicheCount } from "@/lib/services/niche.service";
 import { getSubscriptionCount, countByPlan } from "@/lib/services/subscription.service";
-import MonitoringTab from "./monitoring-tab";
+import MonitoringTab from "../monitoring-tab";
 
 export const metadata: Metadata = {
   title: "Administration - TrendHunter",
@@ -41,12 +41,12 @@ export const metadata: Metadata = {
 const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(",") || [];
 
 interface TabProps {
-  params: Promise<{ tab?: string }>;
+  params: Promise<{ tab?: string[] }>;
 }
 
 export default async function AdminPage({ params }: TabProps) {
   const { tab } = await params;
-  const currentTab = tab || "overview";
+  const currentTab = tab?.[0] || "overview";
 
   const session = await auth();
 
@@ -620,4 +620,4 @@ async function NichesTab() {
   );
 }
 
-// MonitoringTab is imported from ./monitoring-tab (client component)
+// MonitoringTab is imported from ../monitoring-tab (client component)

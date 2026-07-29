@@ -5,12 +5,11 @@ import { alertUpdateSchema } from "@/lib/schemas";
 import { updateAlert, deleteAlert } from "@/lib/alerts";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateCache, cacheKeys } from "@/lib/cache";
+import { UnauthorizedError, NotFoundError, ValidationError, InternalError } from "@/lib/api-error";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
+  if (!session?.user?.id) return UnauthorizedError();
 
   try {
     const { id } = await params;
@@ -24,22 +23,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
-    if (!alert) {
-      return NextResponse.json({ error: "Alerte introuvable" }, { status: 404 });
-    }
+    if (!alert) return NotFoundError("Alerte");
 
     return NextResponse.json({ alert });
   } catch (error) {
     console.error("Error fetching alert:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
+  if (!session?.user?.id) return UnauthorizedError();
 
   try {
     const { id } = await params;
@@ -50,14 +45,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: { id, userId: session.user.id },
     });
 
-    if (!existing) {
-      return NextResponse.json({ error: "Alerte introuvable" }, { status: 404 });
-    }
+    if (!existing) return NotFoundError("Alerte");
 
     // Validate body
     const parsed = alertUpdateSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+      return ValidationError(parsed.error.issues[0].message);
     }
 
     // Build update data
@@ -86,15 +79,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ alert: fullAlert });
   } catch (error) {
     console.error("Error updating alert:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
+  if (!session?.user?.id) return UnauthorizedError();
 
   try {
     const { id } = await params;
@@ -104,9 +95,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       where: { id, userId: session.user.id },
     });
 
-    if (!existing) {
-      return NextResponse.json({ error: "Alerte introuvable" }, { status: 404 });
-    }
+    if (!existing) return NotFoundError("Alerte");
 
     // Store for audit before deletion
     const alertType = existing.type;
@@ -133,6 +122,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return new NextResponse(null, { status: 204 });
   } catch (error) {
     console.error("Error deleting alert:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return InternalError();
   }
 }
