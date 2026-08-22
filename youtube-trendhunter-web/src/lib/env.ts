@@ -7,6 +7,7 @@ const envSchema = z.object({
   AUTH_GOOGLE_ID: z.string().min(1),
   AUTH_GOOGLE_SECRET: z.string().min(1),
   STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_"),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
   STRIPE_PRO_PRICE_ID: z.string().startsWith("price_"),
   STRIPE_TEAM_PRICE_ID: z.string().startsWith("price_"),
@@ -16,6 +17,11 @@ const envSchema = z.object({
   YOUTUBE_API_KEY: z.string().min(1),
   RESEND_API_KEY: z.string().startsWith("re_"),
   CRON_SECRET: z.string().min(16).optional(),
+  NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+  NEXT_PUBLIC_POSTHOG_URL: z.string().url().optional(),
+  HEALTH_CHECK_SECRET: z.string().min(16).optional(),
+  ADMIN_EMAILS: z.string().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 });
 
 export function validateEnv(): void {
