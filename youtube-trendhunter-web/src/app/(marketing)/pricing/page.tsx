@@ -101,9 +101,12 @@ export default function PricingPage() {
           ))}
         </div>
 
-        <div className="mt-24 text-center">
+        <div className="mt-24 text-center space-y-2">
           <p className="text-dark-ink-tertiary text-sm font-bold uppercase tracking-[0.2em]">
             Paiement sécurisé par Stripe • Sans engagement
+          </p>
+          <p className="text-dark-ink-tertiary text-xs">
+            Prix en euros, TVA non applicable (article 293 B du CGI — micro-entrepreneur).
           </p>
         </div>
       </div>

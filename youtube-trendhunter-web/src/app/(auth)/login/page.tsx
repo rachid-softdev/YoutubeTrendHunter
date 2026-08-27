@@ -113,14 +113,14 @@ export default function LoginPage() {
           <p className="text-center text-sm text-dark-ink-tertiary font-medium">
             En continuant, vous acceptez nos{" "}
             <Link
-              href="#"
+              href="/terms"
               className="text-dark-ink hover:text-yt-red transition-colors underline decoration-dark-ink-tertiary underline-offset-4"
             >
               Conditions
             </Link>{" "}
             et notre{" "}
             <Link
-              href="#"
+              href="/privacy"
               className="text-dark-ink hover:text-yt-red transition-colors underline decoration-dark-ink-tertiary underline-offset-4"
             >
               Confidentialité

@@ -404,8 +404,14 @@ export default async function BlogPage({
             <Link href="/privacy" className="hover:text-dark-ink">
               Confidentialité
             </Link>
+            <Link href="/cookies" className="hover:text-dark-ink">
+              Cookies
+            </Link>
             <Link href="/terms" className="hover:text-dark-ink">
               CGU
+            </Link>
+            <Link href="/mentions-legales" className="hover:text-dark-ink">
+              Mentions légales
             </Link>
           </div>
 
