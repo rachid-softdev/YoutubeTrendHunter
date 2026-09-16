@@ -69,7 +69,7 @@ export function CookieConsent() {
       >
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <Cookie className="w-5 h-5 text-yt-red shrink-0 mt-0.5" />
+            <Cookie aria-hidden="true" className="w-5 h-5 text-yt-red shrink-0 mt-0.5" />
             <p className="text-sm text-dark-ink-secondary">
               Nous utilisons des cookies pour analyser le trafic et améliorer votre expérience.
             </p>

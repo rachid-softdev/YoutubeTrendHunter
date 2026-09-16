@@ -5,6 +5,7 @@ import { getUserPlan } from "@/lib/services/subscription.service";
 import { auditLog } from "@/lib/audit-log";
 import { invalidateCache } from "@/lib/cache";
 import { getNicheById, updateNiche } from "@/lib/services/niche.service";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { UnauthorizedError, NotFoundError, ValidationError, InternalError } from "@/lib/api-error";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +28,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!session?.user?.id) return UnauthorizedError();
 
   try {
+    // Seul un admin peut modifier une niche globale (les données sont partagées par tous les utilisateurs)
+    await requireAdmin();
+
     const { id } = await params;
 
     // Verify the niche exists
@@ -52,6 +56,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ niche: updated });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Error updating niche:", error);
     return InternalError();
   }

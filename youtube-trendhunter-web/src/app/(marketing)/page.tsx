@@ -68,7 +68,7 @@ export default async function LandingPage() {
         <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="bg-yt-red p-1 rounded-none group-hover:bg-yt-red-deep transition-colors">
-              <Play className="w-4 h-4 text-white fill-current" />
+              <Play aria-hidden="true" className="w-4 h-4 text-white fill-current" />
             </div>
             <span className="text-xl font-bold">TrendHunter</span>
           </Link>
@@ -135,7 +135,7 @@ export default async function LandingPage() {
               {/* Left Column: Text */}
               <div className="flex-1 space-y-10 text-center lg:text-left">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yt-red/10 border border-yt-red/20">
-                  <Sparkles className="w-4 h-4 text-yt-red" />
+                  <Sparkles aria-hidden="true" className="w-4 h-4 text-yt-red" />
                   <span className="text-[10px] font-black text-yt-red tracking-[0.2em] uppercase">
                     Intelligence Stratégique YouTube
                   </span>
@@ -146,6 +146,7 @@ export default async function LandingPage() {
                   <span className="text-yt-red relative">
                     l&apos;Algorithme.
                     <svg
+                      aria-hidden="true"
                       className="absolute -bottom-2 left-0 w-full h-3 text-yt-red/20"
                       viewBox="0 0 100 10"
                       preserveAspectRatio="none"
@@ -173,7 +174,10 @@ export default async function LandingPage() {
                       className="w-full h-12 px-10 text-base font-bold group"
                     >
                       DÉMARRER L&apos;ANALYSE
-                      <Zap className="ml-2 w-4 h-4 group-hover:scale-125 transition-transform" />
+                      <Zap
+                        aria-hidden="true"
+                        className="ml-2 w-4 h-4 group-hover:scale-125 transition-transform"
+                      />
                     </Button>
                   </Link>
                   <Link href="#features" className="w-full sm:w-auto">
@@ -203,7 +207,8 @@ export default async function LandingPage() {
                       Rejoint par +{Math.max(userCount, 1200)} créateurs
                     </p>
                     <div className="flex items-center gap-1 text-yt-red font-black text-[10px] uppercase tracking-widest">
-                      <Zap className="w-3 h-3 fill-current" /> En direct de YouTube
+                      <Zap aria-hidden="true" className="w-3 h-3 fill-current" /> En direct de
+                      YouTube
                     </div>
                   </div>
                 </div>
@@ -220,7 +225,7 @@ export default async function LandingPage() {
                     <div className="absolute inset-0 bg-gradient-to-br from-dark-surface via-dark-canvas to-yt-red/20" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="w-20 h-20 bg-yt-red rounded-full flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
-                        <Play className="w-8 h-8 text-white fill-current ml-1" />
+                        <Play aria-hidden="true" className="w-8 h-8 text-white fill-current ml-1" />
                       </div>
                     </div>
 
@@ -246,7 +251,7 @@ export default async function LandingPage() {
                         </div>
                       </div>
                       <div className="w-12 h-12 bg-white/10 flex items-center justify-center border border-white/20">
-                        <TrendingUp className="w-6 h-6 text-yt-red" />
+                        <TrendingUp aria-hidden="true" className="w-6 h-6 text-yt-red" />
                       </div>
                     </div>
                   </div>
@@ -274,7 +279,10 @@ export default async function LandingPage() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-yt-red/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="w-12 h-12 bg-dark-surface flex items-center justify-center mb-6 group-hover:bg-yt-red/10 transition-colors">
-                    <feature.icon className="w-6 h-6 text-dark-ink-secondary group-hover:text-yt-red transition-colors" />
+                    <feature.icon
+                      aria-hidden="true"
+                      className="w-6 h-6 text-dark-ink-secondary group-hover:text-yt-red transition-colors"
+                    />
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-bold text-lg">{feature.title}</h3>
@@ -333,7 +341,7 @@ export default async function LandingPage() {
                   <ul className="space-y-2 mb-6 flex-1">
                     {plan.features.slice(0, 3).map((feature) => (
                       <li key={feature} className="flex items-center gap-2 text-xs">
-                        <Check className="w-3 h-3 text-yt-red shrink-0" />
+                        <Check aria-hidden="true" className="w-3 h-3 text-yt-red shrink-0" />
                         <span className="text-dark-ink-secondary">{feature}</span>
                       </li>
                     ))}
@@ -363,7 +371,7 @@ export default async function LandingPage() {
                 className="inline-flex items-center gap-2 text-sm font-bold text-yt-red hover:text-yt-red-deep transition-colors"
               >
                 Voir la comparaison détaillée
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight aria-hidden="true" className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -379,7 +387,10 @@ export default async function LandingPage() {
             <Link href="/login" className="inline-block pt-4 group">
               <Button variant="subscribe" size="lg" className="h-12 px-12 text-base font-bold">
                 COMMENCER L&apos;AVENTURE
-                <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight
+                  aria-hidden="true"
+                  className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform"
+                />
               </Button>
             </Link>
           </div>
@@ -391,7 +402,7 @@ export default async function LandingPage() {
         <div className="max-w-[1400px] mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2">
             <div className="bg-dark-surface-overlay p-1 rounded">
-              <Play className="w-4 h-4 text-dark-ink-secondary fill-current" />
+              <Play aria-hidden="true" className="w-4 h-4 text-dark-ink-secondary fill-current" />
             </div>
             <span className="font-bold">TrendHunter</span>
           </div>

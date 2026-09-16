@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PLANS } from "@/lib/plans";
 import { Check, Play, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
@@ -33,7 +33,7 @@ export default function PricingPage() {
         <div className="text-center mb-20 space-y-4">
           <Link href="/" className="inline-flex items-center gap-2 mb-4 group">
             <div className="bg-yt-red p-1.5 rounded-lg group-hover:scale-110 transition-transform">
-              <Play className="w-4 h-4 text-white fill-current" />
+              <Play aria-hidden="true" className="w-4 h-4 text-white fill-current" />
             </div>
             <span className="text-xl font-bold tracking-tighter">TrendHunter</span>
           </Link>
@@ -63,10 +63,10 @@ export default function PricingPage() {
                     variant="live"
                     className="w-fit mb-4 animate-pulse-glow font-black tracking-widest px-4"
                   >
-                    <Sparkles className="w-3 h-3 mr-1" /> POPULAIRE
+                    <Sparkles aria-hidden="true" className="w-3 h-3 mr-1" /> POPULAIRE
                   </Badge>
                 )}
-                <CardTitle className="text-3xl font-black italic">{plan.name}</CardTitle>
+                <h2 className="text-3xl font-black italic">{plan.name}</h2>
                 <div className="pt-2">
                   <div className="flex items-baseline gap-1">
                     <span className="text-5xl font-black text-dark-ink">{plan.price}</span>
@@ -81,7 +81,7 @@ export default function PricingPage() {
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-center gap-4 text-sm font-medium">
                       <div className="w-5 h-5 rounded-full bg-yt-red/10 flex items-center justify-center shrink-0">
-                        <Check className="w-3 h-3 text-yt-red" />
+                        <Check aria-hidden="true" className="w-3 h-3 text-yt-red" />
                       </div>
                       <span className="text-dark-ink-secondary">{feature}</span>
                     </li>
@@ -93,7 +93,10 @@ export default function PricingPage() {
                     variant={plan.popular ? "subscribe" : "outline"}
                   >
                     {plan.cta}
-                    <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform"
+                    />
                   </Button>
                 </Link>
               </CardContent>

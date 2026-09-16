@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 export async function GET() {
   try {
-    const session = await auth();
-
-    if (!session?.user?.role || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAdmin();
 
     const niches = await prisma.niche.findMany({
       orderBy: { name: "asc" },
@@ -27,6 +23,9 @@ export async function GET() {
 
     return NextResponse.json({ niches });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("[Admin/Niches] GET Error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }
@@ -48,11 +47,7 @@ const nicheCreateSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-
-    if (!session?.user?.role || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAdmin();
 
     const body = await req.json();
 
@@ -86,6 +81,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ niche }, { status: 201 });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("[Admin/Niches] POST Error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }
