@@ -54,6 +54,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "critters": "^0.0.25",
+    "_e2e-helpers": "workspace:*",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "jsdom": "^29.1.1",
