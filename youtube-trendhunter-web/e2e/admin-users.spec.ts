@@ -201,7 +201,7 @@ async function mockUsersApiRoutes(page: Page) {
   const page2Users = buildMockUsersPage2();
 
   // Users list with search & pagination
-  await page.route("**/api/admin/users*", async (route) => {
+  await page.route("**/api/admin/users**", async (route) => {
     const method = route.request().method();
     const url = new URL(route.request().url());
 
@@ -239,7 +239,7 @@ async function mockUsersApiRoutes(page: Page) {
           status: 200,
           contentType: "text/csv",
           headers: { "Content-Disposition": "attachment; filename=utilisateurs.csv" },
-          body: "Email,Nom,Plan,Statut,Inscription\njean@example.com,Jean Dupont,PRO,ACTIVE,2026-01-15\n",
+          body: "name,email,role,plan,subscriptionStatus,createdAt,updatedAt\nJean Dupont,jean@example.com,USER,PRO,ACTIVE,2026-01-15T10:30:00.000Z,2026-06-20T08:00:00.000Z\n",
         });
         return;
       }
@@ -292,7 +292,7 @@ async function mockUsersApiRoutes(page: Page) {
           await route.fulfill({
             status: 404,
             contentType: "application/json",
-            body: JSON.stringify({ error: "User not found" }),
+            body: JSON.stringify({ error: "Utilisateur non trouvé" }),
           });
         }
       } else {
@@ -309,7 +309,7 @@ async function mockUsersApiRoutes(page: Page) {
 }
 
 async function mockUsersApiFailure(page: Page) {
-  await page.route("**/api/admin/users*", async (route) => {
+  await page.route("**/api/admin/users**", async (route) => {
     const method = route.request().method();
     if (method === "DELETE") {
       await route.fulfill({
@@ -340,6 +340,9 @@ test.describe("Admin - Utilisateurs", () => {
   test.beforeEach(async ({ page }) => {
     await mockSession(page, ADMIN_SESSION);
     await mockUsersApiRoutes(page);
+    // Navigation initiale pour que fetchApi (fetch natif) soit same-origin
+    // (sinon CORS bloque les appels depuis about:blank)
+    await page.goto("/");
   });
 
   /* ====================================================================== */

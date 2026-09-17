@@ -129,6 +129,57 @@ async function mockAdminApiRoutes(page: Page) {
     });
   });
 
+  // Admin logs API
+  await page.route("**/api/admin/logs*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [
+            {
+              id: "log1",
+              userId: "system-cron",
+              action: "CRON_TRENDS_PROCESSED",
+              ipAddress: null,
+              metadata: { totalTrends: 15600, durationMs: 4520 },
+              createdAt: "2026-09-15T06:00:00.000Z",
+              user: { email: "system-cron", name: null },
+            },
+            {
+              id: "log2",
+              userId: "u1",
+              action: "USER_LOGIN",
+              ipAddress: "192.168.1.1",
+              metadata: { browser: "Chrome", os: "macOS" },
+              createdAt: "2026-09-14T14:30:00.000Z",
+              user: { email: "jean@example.com", name: "Jean Dupont" },
+            },
+            {
+              id: "log3",
+              userId: "u2",
+              action: "SUBSCRIPTION_CANCEL",
+              ipAddress: "10.0.0.1",
+              metadata: { reason: "Too expensive", previousPlan: "PRO" },
+              createdAt: "2026-09-13T09:15:00.000Z",
+              user: { email: "marie@example.com", name: "Marie Curie" },
+            },
+          ],
+          pagination: {
+            page: 1,
+            limit: 50,
+            total: 3,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }),
+      });
+    } else {
+      await route.fulfill({ status: 405 });
+    }
+  });
+
   // Admin stats API
   await page.route("**/api/admin/stats", async (route) => {
     if (route.request().method() === "GET") {

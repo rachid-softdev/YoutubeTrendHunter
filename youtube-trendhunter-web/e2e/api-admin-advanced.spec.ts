@@ -236,7 +236,7 @@ async function mockAdminAdvancedApi(page: Page) {
   });
 
   // ── GET /api/admin/overrides ──────────────────────────────────────────────
-  await page.route("**/api/admin/overrides*", async (route) => {
+  await page.route("**/api/admin/overrides**", async (route) => {
     const method = route.request().method();
     const url = new URL(route.request().url());
     const role = url.searchParams.get("_test_role") || "none";
@@ -484,7 +484,7 @@ async function mockAdminAdvancedApi(page: Page) {
   });
 
   // ── GET /api/admin/orgs/[orgId]/entitlements ────────────────────────────
-  await page.route("**/api/admin/orgs/**/entitlements", async (route) => {
+  await page.route("**/api/admin/orgs/**/entitlements*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.fallback();
       return;
@@ -527,7 +527,7 @@ async function mockAdminAdvancedApi(page: Page) {
   });
 
   // ── GET /api/admin/orgs/[orgId]/downgrade-preview ───────────────────────
-  await page.route("**/api/admin/orgs/**/downgrade-preview", async (route) => {
+  await page.route("**/api/admin/orgs/**/downgrade-preview*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.fallback();
       return;
@@ -612,7 +612,7 @@ async function mockAdminAdvancedApi(page: Page) {
 
   // ── GET /api/admin/plans/[planKey]/features ─────────────────────────────
   // ── PATCH /api/admin/plans/[planKey]/features ───────────────────────────
-  await page.route("**/api/admin/plans/**/features", async (route) => {
+  await page.route("**/api/admin/plans/**/features*", async (route) => {
     const method = route.request().method();
     const url = new URL(route.request().url());
     const role = url.searchParams.get("_test_role") || "none";

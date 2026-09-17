@@ -194,7 +194,7 @@ function resetMockNichesStore() {
 }
 
 async function mockNichesApiRoutes(page: Page) {
-  await page.route("**/api/admin/niches*", async (route) => {
+  await page.route("**/api/admin/niches**", async (route) => {
     const method = route.request().method();
     const url = new URL(route.request().url());
     const pathParts = url.pathname.split("/").filter(Boolean);
@@ -342,7 +342,7 @@ async function mockNichesApiRoutes(page: Page) {
 }
 
 async function mockToggleApiFailure(page: Page) {
-  await page.route("**/api/admin/niches*", async (route) => {
+  await page.route("**/api/admin/niches**", async (route) => {
     const method = route.request().method();
     const url = new URL(route.request().url());
     const pathParts = url.pathname.split("/").filter(Boolean);
@@ -383,6 +383,9 @@ test.describe("Admin - Niches", () => {
   test.beforeEach(async ({ page }) => {
     resetMockNichesStore();
     await mockSession(page, ADMIN_SESSION);
+    // Navigation initiale pour que fetchApi (fetch natif) soit same-origin
+    // (sinon CORS bloque les appels depuis about:blank)
+    await page.goto("/");
   });
 
   /* ====================================================================== */
