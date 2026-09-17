@@ -71,6 +71,11 @@ function contrastRatio(l1, l2) {
 
 const WCAG_MATH = [SRGB_TO_LINEAR, LUMINANCE_FN, CONTRAST_RATIO_FN].join("\n");
 
+// Ambient type-only declarations matching the WCAG helpers injected at runtime
+// via eval(WCAG_MATH) inside page.evaluate callbacks (browser scope).
+declare function relativeLuminance(r: number, g: number, b: number): number;
+declare function contrastRatio(l1: number, l2: number): number;
+
 /**
  * Evaluates the contrast ratio of an element's foreground on its background.
  * Works with any colour value that getComputedStyle can resolve.
@@ -104,11 +109,8 @@ async function getContrastRatioForElement(page: Page, selector: string): Promise
       const [r1, g1, b1] = parseRgb(color);
       const [r2, g2, b2] = parseRgb(bgStr);
 
-      // @ts-expect-error — defined dynamically via eval(wcagMath)
       const l1 = relativeLuminance(r1, g1, b1);
-      // @ts-expect-error — defined dynamically via eval(wcagMath)
       const l2 = relativeLuminance(r2, g2, b2);
-      // @ts-expect-error — defined dynamically via eval(wcagMath)
       return contrastRatio(l1, l2);
     },
     { wcagMath: WCAG_MATH, sel: selector },
@@ -169,24 +171,29 @@ test.describe("1. Accessibilité — Navigation clavier", () => {
     const focusables = await getFocusableElements(page);
     expect(focusables.length).toBeGreaterThanOrEqual(2);
 
-    // First focusable should be the logo link
+    // First focusable is the skip-to-content link — standard a11y pattern:
+    // it is deliberately the first tabbable element to jump past navigation.
     await page.keyboard.press("Tab");
     let activeText = await page.evaluate(() => {
       const el = document.activeElement;
-      return el?.textContent?.trim() ?? el?.ariaLabel ?? el?.tagName ?? "";
+      return (el?.textContent?.trim() ?? el?.ariaLabel ?? el?.tagName ?? "").toLowerCase();
     });
-    const firstLabel = focusables[0].text.toLowerCase();
-    expect(
-      firstLabel.includes("trendhunter") || activeText.toLowerCase().includes("trendhunter"),
-    ).toBe(true);
+    expect(activeText).toContain("contenu");
 
-    // Second Tab: Google sign-in button (or next focusable in DOM)
+    // Second Tab: logo link
+    await page.keyboard.press("Tab");
+    activeText = await page.evaluate(() => {
+      const el = document.activeElement;
+      return (el?.textContent?.trim() ?? el?.ariaLabel ?? "").toLowerCase();
+    });
+    expect(activeText).toContain("trendhunter");
+
+    // Third Tab: Google sign-in button (or next focusable in DOM)
     await page.keyboard.press("Tab");
     activeText = await page.evaluate(() => {
       const el = document.activeElement;
       return (el?.textContent ?? el?.ariaLabel ?? "").trim().slice(0, 80);
     });
-    // Should be either the Google button or a link
     expect(activeText.length).toBeGreaterThan(0);
   });
 
@@ -507,11 +514,8 @@ test.describe("4. Accessibilité — Contraste mode clair", () => {
           const bg = getEffectiveBg(el);
           const [r2, g2, b2] = parseRgb(bg);
 
-          // @ts-expect-error — defined dynamically via eval(wcagMath)
           const l1 = relativeLuminance(r1, g1, b1);
-          // @ts-expect-error — defined dynamically via eval(wcagMath)
           const l2 = relativeLuminance(r2, g2, b2);
-          // @ts-expect-error — defined dynamically via eval(wcagMath)
           const ratio = contrastRatio(l1, l2);
 
           const isLarge =
@@ -609,11 +613,8 @@ test.describe("5. Accessibilité — Contraste mode sombre", () => {
         const [r1, g1, b1] = parseRgb(style.color);
         const [r2, g2, b2] = parseRgb(style.backgroundColor);
 
-        // @ts-expect-error — defined dynamically via eval(wcagMath)
         const l1 = relativeLuminance(r1, g1, b1);
-        // @ts-expect-error — defined dynamically via eval(wcagMath)
         const l2 = relativeLuminance(r2, g2, b2);
-        // @ts-expect-error — defined dynamically via eval(wcagMath)
         return contrastRatio(l1, l2);
       },
       { wcagMath: WCAG_MATH },

@@ -4,7 +4,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
 
 interface PlanItem {
@@ -14,14 +14,6 @@ interface PlanItem {
 }
 
 export const dynamic = "force-dynamic";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user?.role || session.user.role !== "ADMIN") {
-    throw new Error("UNAUTHORIZED");
-  }
-  return session;
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -59,9 +51,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    const err = error as Error;
-    if (err.message === "UNAUTHORIZED") {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("[Admin/Plans] Error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
