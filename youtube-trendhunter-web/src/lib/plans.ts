@@ -1,3 +1,9 @@
+// Source unique des prix mensuels (EUR) — utilisé par le pricing UI et le calcul MRR admin
+export const PRICING = {
+  PRO: 15,
+  TEAM: 39,
+} as const;
+
 export const PLANS = [
   {
     name: "Free",
