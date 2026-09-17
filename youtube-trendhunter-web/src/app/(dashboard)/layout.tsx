@@ -10,11 +10,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth();
   if (!session) redirect("/login");
 
+  const sessionUser = session.user as { role?: string; userRoles?: unknown[] };
+  const isAdmin =
+    sessionUser.role === "ADMIN" ||
+    (Array.isArray(sessionUser.userRoles) &&
+      sessionUser.userRoles.some((r) => {
+        if (typeof r === "string") return r === "ADMIN";
+        return (r as { role?: string }).role === "ADMIN";
+      }));
+
   return (
     <div className="flex flex-col md:flex-row h-screen bg-dark-canvas text-dark-ink overflow-hidden">
       {/* Desktop Sidebar */}
       <div className="hidden md:block">
-        <Sidebar user={session.user} />
+        <Sidebar user={session.user} isAdmin={isAdmin} />
       </div>
 
       {/* Mobile Top Header */}
@@ -51,7 +60,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <MobileNav />
+      <MobileNav isAdmin={isAdmin} />
     </div>
   );
 }

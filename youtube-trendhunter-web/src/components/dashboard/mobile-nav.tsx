@@ -2,17 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Target, Bell, CreditCard, Settings } from "lucide-react";
+import { LayoutDashboard, Target, Bell, CreditCard, Settings, Shield } from "lucide-react";
 
 const links = [
-  { href: "/home", icon: LayoutDashboard, label: "Trends" },
+  { href: "/home", icon: LayoutDashboard, label: "Tendances" },
   { href: "/my-niches", icon: Target, label: "Niches" },
-  { href: "/alerts", icon: Bell, label: "Alerts" },
-  { href: "/billing", icon: CreditCard, label: "Billing" },
+  { href: "/alerts", icon: Bell, label: "Alertes" },
+  { href: "/billing", icon: CreditCard, label: "Facturation" },
   { href: "/settings", icon: Settings, label: "Paramètres" },
 ];
 
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -30,6 +30,15 @@ export function MobileNav() {
           </Link>
         );
       })}
+      {isAdmin && (
+        <Link
+          href="/admin"
+          className={`flex flex-col items-center gap-1 ${pathname.startsWith("/admin") ? "text-yt-red" : "text-dark-ink-secondary"}`}
+        >
+          <Shield className="w-5 h-5" />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Admin</span>
+        </Link>
+      )}
     </nav>
   );
 }

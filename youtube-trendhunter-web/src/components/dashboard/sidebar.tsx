@@ -3,7 +3,16 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Bell, CreditCard, Target, Play, LogOut, Settings } from "lucide-react";
+import {
+  LayoutDashboard,
+  Bell,
+  CreditCard,
+  Target,
+  Play,
+  LogOut,
+  Settings,
+  Shield,
+} from "lucide-react";
 import { signOut } from "next-auth/react";
 import { cn } from "@youtube-trendhunter/ui";
 import { Separator } from "@/components/ui/separator";
@@ -16,7 +25,13 @@ const navItems = [
   { href: "/settings", label: "Paramètres", icon: Settings },
 ];
 
-export function Sidebar({ user }: { user: { name?: string | null; image?: string | null } }) {
+export function Sidebar({
+  user,
+  isAdmin = false,
+}: {
+  user: { name?: string | null; image?: string | null };
+  isAdmin?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -53,6 +68,19 @@ export function Sidebar({ user }: { user: { name?: string | null; image?: string
       </nav>
 
       <Separator className="my-4" />
+
+      {isAdmin && (
+        <>
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 px-3 py-2 rounded-none text-sm font-medium text-dark-ink-secondary hover:bg-dark-overlay hover:text-dark-ink transition-colors mb-2"
+          >
+            <Shield className="w-5 h-5" />
+            Administration
+          </Link>
+          <Separator className="mb-4" />
+        </>
+      )}
 
       <button
         onClick={() => signOut({ callbackUrl: "/" })}
