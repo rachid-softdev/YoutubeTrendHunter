@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { AuthError, requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/prisma";
+import { PRICING } from "@/lib/plans";
 
 export async function GET() {
   try {
-    const session = await auth();
-
-    if (!session?.user?.role || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAdmin();
 
     const [
       totalUsers,
@@ -45,7 +42,7 @@ export async function GET() {
     });
 
     // Get MRR (monthly recurring revenue) estimate
-    const mrrEstimate = proCount * 15 + teamCount * 39;
+    const mrrEstimate = proCount * PRICING.PRO + teamCount * PRICING.TEAM;
 
     return NextResponse.json({
       stats: {
@@ -61,6 +58,9 @@ export async function GET() {
       recentUsers,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("[Admin/Stats] Error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }
