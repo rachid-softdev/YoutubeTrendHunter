@@ -48,6 +48,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
+      - name: Sync Prisma schema to test database
+        working-directory: youtube-trendhunter-web
+        run: npx prisma db push
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
       - name: Lint
         run: pnpm lint
 
@@ -70,6 +76,7 @@ jobs:
         run: pnpm test
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
+          TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
           AUTH_SECRET: test-secret
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
@@ -143,6 +150,12 @@ jobs:
       - name: Generate Prisma client
         working-directory: youtube-trendhunter-web
         run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
+      - name: Sync Prisma schema to test database
+        working-directory: youtube-trendhunter-web
+        run: npx prisma db push
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
