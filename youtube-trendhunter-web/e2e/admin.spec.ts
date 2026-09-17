@@ -38,7 +38,7 @@ const USER_SESSION = {
   expires: "2099-01-01T00:00:00.000Z",
 };
 
-async function mockSession(page: Page, session: Record<string, any> = ADMIN_SESSION) {
+async function mockSession(page: Page, session: Record<string, unknown> = ADMIN_SESSION) {
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({
       status: 200,
@@ -392,15 +392,17 @@ test.describe("Admin", () => {
       await page.waitForLoadState("networkidle");
 
       // Server-side auth() will likely return null (no real DB cookie),
-      // so we check if we end up on /login or /dashboard.
+      // so we check if we end up on /login, /dashboard or /home.
       const onLogin = page.url().includes("/login");
-      const onDashboard = page.url().includes("/dashboard") && !page.url().includes("/admin");
+      const onDashboard =
+        (page.url().includes("/dashboard") || page.url().includes("/home")) &&
+        !page.url().includes("/admin");
 
       // If we can't test the exact redirect due to env config,
       // at least verify we're NOT on the admin page.
       const onAdmin = page.url().includes("/admin");
       if (!onAdmin) {
-        // Either redirected to /dashboard or /login — auth gate works
+        // Either redirected to /dashboard (/home) or /login — auth gate works
         expect(onLogin || onDashboard).toBe(true);
       }
     });

@@ -19,7 +19,7 @@ export default async function DashboardPage({
   if (!session?.user?.id) return null;
 
   const plan = await getUserPlan(session.user.id);
-  const nicheSlug = nicheQuery ?? "tech";
+  const nicheSlug = nicheQuery ?? "tech-ia";
 
   // Try cache first — key includes nicheSlug so switching niches gets correct data
   const cacheKey = `dashboard:user:${session.user.id}:${plan}:${nicheSlug}`;

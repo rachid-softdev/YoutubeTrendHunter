@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   };
 
   if (!cursor) {
-    await setCached(`trends:ext:${nicheSlug}:${plan}:${result.userId}`, responseData, 300);
+    await setCached(`trends:ext:${nicheSlug}:${plan}`, responseData, 300);
   }
 
   return NextResponse.json(responseData);

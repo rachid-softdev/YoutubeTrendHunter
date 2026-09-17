@@ -15,7 +15,7 @@ export function NicheSelector({ niches, current }: NicheSelectorProps) {
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("niche", e.target.value);
-    router.push(`/dashboard?${params.toString()}`);
+    router.push(`/home?${params.toString()}`);
   };
 
   return (

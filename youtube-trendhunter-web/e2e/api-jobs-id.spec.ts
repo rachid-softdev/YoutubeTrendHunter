@@ -652,7 +652,10 @@ test.describe("API Jobs / [id] — GET /api/jobs/[id]", () => {
   test("1m — Path traversal dans l'ID du job → 404", async ({ page }) => {
     const res = await fetchApi(
       page,
-      "/api/jobs/../../../etc/passwd?_test_session=true&_test_path_traversal=true",
+      // Percent-encoded traversal: the browser normalizes literal "../" segments
+      // to "/etc/passwd" (never reaching the mock), so we encode them to keep the
+      // path under /api/jobs/ and exercise the handler's traversal contract.
+      "/api/jobs/%2e%2e%2fetc%2fpasswd?_test_session=true&_test_path_traversal=true",
     );
 
     expect(res.status).toBe(404);

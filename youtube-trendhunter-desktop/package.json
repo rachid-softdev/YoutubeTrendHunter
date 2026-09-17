@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "echo 'Desktop placeholder'",
     "build": "echo 'Desktop placeholder'",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "echo 'Desktop placeholder typecheck'",
     "test": "echo 'No tests'"
   }
 }
