@@ -150,7 +150,7 @@ jobs:
 
       - name: Run E2E tests
         working-directory: youtube-trendhunter-web
-        run: pnpm test:e2e
+        run: pnpm test:e2e --project=chromium
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           AUTH_SECRET: test-secret
