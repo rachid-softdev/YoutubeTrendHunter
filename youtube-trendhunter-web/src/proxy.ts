@@ -3,10 +3,16 @@ import type { NextRequest, NextFetchEvent } from "next/server";
 import { auth } from "@/lib/auth";
 
 export async function proxy(request: NextRequest, event: NextFetchEvent) {
+  const path = request.nextUrl.pathname;
+
+  // Dev-only routes: block /dev/* in production
+  if (process.env.NODE_ENV === "production" && (path === "/dev" || path.startsWith("/dev/"))) {
+    return NextResponse.rewrite(new URL("/404", request.url));
+  }
+
   // === Auth protection ===
   const session = await auth();
   const isLoggedIn = !!session?.user;
-  const path = request.nextUrl.pathname;
 
   const protectedPaths = [
     "/dashboard",
