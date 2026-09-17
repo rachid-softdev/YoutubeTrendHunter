@@ -22,6 +22,8 @@
    - [Fix 10 — Build racine : typecheck des stubs desktop/mobile](#fix-10--build-racine--typecheck-des-stubs-desktopmobile)
 4. [Constats documentés — non corrigés](#4-constats-documentés--non-corrigés)
 5. [Plan de vérification](#5-plan-de-vérification)
+   - [5.6 État CI de la PR #51 — dette pré-existante](#56-état-ci-de-la-pr-51--dette-pré-existante)
+   - [5.7 Chantier CI-repair — ✅ RÉSOLU](#57-chantier-ci-repair--résolu)
 6. [Audit de non-régression](#6-audit-de-non-régression)
 7. [Rapport de convergence](#7-rapport-de-convergence)
 
@@ -739,6 +741,8 @@ L'environnement de travail de cette session **redémarre les processus longs (> 
 
 ### 5.6 État CI de la PR #51 — ⚠️ 2 JOBS EN ÉCHEC **PRÉ-EXISTANTS** (zéro régression introduite)
 
+> **✅ RÉSOLU par le chantier « CI-repair » (branche `fix/ci-repair`) — voir §5.7.**
+
 **Constat (run `35141979081`, head `d3c17c6`, PR #51 `fix/audit-corrections`) :**
 
 | Job | Conclusion | Cause |
@@ -766,6 +770,90 @@ L'environnement de travail de cette session **redémarre les processus longs (> 
 2. Corriger les ~40 erreurs de types réelles masquées (audit type-strict) ;
 3. Traiter l'audit pnpm (mises à jour ciblées) ;
 4. Re-exécuter la CI → le job E2E se débloquera automatiquement (`needs:`), y compris la suite multi-navigateurs + premières baselines visual-regression (à générer via `--update-snapshots` ; `E2E Tests` CI ne couvre que `chromium` actuellement — étendre aux 4 projets si souhaité).
+
+### 5.7 Chantier CI-repair — ✅ RÉSOLU
+
+**Périmètre** : branche `fix/ci-repair` (base = `main` après fusion de la PR #51). Objectif : rendre la CI verte — typecheck (310 erreurs TS), audit pnpm (`--audit-level=high`), et débloquer le job E2E (`needs:`).
+
+#### 5.7.1 Restauration des dépendances manquantes (cause racine des 310 erreurs TS)
+
+**Résultat clé : les 310 erreurs étaient 100 % des cascades de types manquants — zéro correction de code source requise** (contrairement à l'hypothèse initiale d'~40 erreurs type-strict réelles : `BadgeProps`, `ErrorBoundary`, `unknown → MetricPoint`… disparaissent une fois les types réels en place).
+
+Ajoutées dans `youtube-trendhunter-web/package.json` (versions résolues par pnpm, cohérentes React 19 / Next 16) :
+
+| Dépendance | Version | Rôle |
+|-----------|---------|------|
+| `lucide-react` | ^1.46.0 | icônes (39 sites d'import) |
+| `zod` | ^4.6.5 | validation (schémas, env, routes) |
+| `stripe` | ^22.6.2 | paiement (adapter + webhooks + tests) |
+| `@sentry/nextjs` | ^10.75.0 | observabilité (configs client/edge/server) |
+| `posthog-js` | ^1.433.7 | analytics |
+| `@upstash/redis` | ^1.38.4 | cache (Redis REST) |
+| `@anthropic-ai/sdk` | ^0.126.0 | génération IA |
+| `class-variance-authority` | ^0.7.1 | variants UI (aligné package ui) |
+| `@radix-ui/react-slot` | ^1.2.4 | composition UI (aligné package ui) |
+| `@testing-library/react` | ^16 | tests (dev) |
+| `@types/react` / `@types/react-dom` | ^19.2.14 / ^19.2.3 | types JSX (dev) |
+| `@types/node` | ^20 | built-ins Node dans tests/configs (dev) |
+
+**Seule correction de code** : `src/lib/stripe.ts` — pin `apiVersion` `"2026-04-22.dahlia"` → `"2026-08-26.dahlia"` (sync avec le type exigé par stripe 22). Typecheck web : **310 → 0 erreur**.
+
+#### 5.7.2 Mises à jour de sécurité directes (advisories CRITIQUES)
+
+| Paquet | Avant | Après | Advisory |
+|--------|-------|-------|----------|
+| `next` | ^16.2.6 | **^16.3.5** | CRITIQUE (>=16.0.0 <16.3.3) + HIGH (>=16.0.0 <16.2.11) ; `sharp` corrigé au passage |
+| `next-auth` | 5.0.0-beta.31 | **5.0.0-beta.32** | CRITIQUE (<=5.0.0-beta.31) |
+| `@auth/core` | (transitif 0.41.2 du prisma-adapter) | **^0.41.3** | CRITIQUE (<0.41.3) — via `@auth/prisma-adapter@2.11.3` (qui exige `@auth/core: 0.41.3` exact) |
+| `eslint-config-next` | 16.2.9 | **16.3.5** | aligné sur next |
+| `vite` (dev, ajouté direct) | — (transitif 8.0.14) | **^8.0.16** (résolu 8.3.0 via override) | HIGH (>=8.0.0 <=8.0.15) + modéré |
+| `vitest` | ^4.1.6 | **^4.1.11** | modéré |
+
+#### 5.7.3 Overrides pnpm racine (dette transitive — `package.json` → `pnpm.overrides`)
+
+| Override | Raison (chaîne) |
+|----------|-----------------|
+| `fast-uri: 3.1.8` | HIGH — `ajv@8.20.0` (chaîne commitlint) |
+| `js-yaml@<4: 3.15.2` | HIGH — `read-yaml-file@1.1.0` (chaîne changesets) |
+| `js-yaml@>=4: 4.3.2` | HIGH — `@changesets/parse`, `@eslint/eslintrc`, `cosmiconfig` |
+| `brace-expansion@<2: 1.1.21` | HIGH — `minimatch@3.1.5` |
+| `brace-expansion@>=5: 5.0.12` | HIGH — `minimatch@10.2.5` |
+| `postcss: 8.5.28` | HIGH — `critters`, `vite` (web devDeps) |
+| `nanoid: 3.3.19` | HIGH — `postcss@8.5.15` (satisfait le `^3.3.18` du postcss 8.5.28) |
+| `tmp: 0.2.7` | HIGH — `web-ext-run@0.2.4` (extension, pins exacts) |
+| `shell-quote: 1.10.0` | CRITIQUE — `fx-runner@1.4.0` ← `web-ext-run` (API `parse`/`quote` stable) |
+| `adm-zip: 0.6.1` | HIGH — `firefox-profile@4.7.0` (`~0.5.x` forcé à 0.6.1 ; seul outil non exercé par la CI) |
+| `browserslist: 4.29.0` | HIGH — `@babel/helper-compilation-targets`, webpack |
+| `deepmerge-ts: 8.0.2` | HIGH — `@prisma/config@6.19.3` (pin 7.1.5 ; **validé par `prisma generate` OK**) |
+| `vite: 8.3.0` | purge de la copie vulnérable 8.0.14 (ranges `^8.0.0` satisfaits : vite-node, wxt) |
+
+#### 5.7.4 Résultat audit
+
+| Étape | Count | Sev |
+|-------|-------|-----|
+| Avant (main HEAD `8468614`) | 65 | dont 45 ≥ high |
+| Après restauration deps + updates | 44 | dont 32 ≥ high |
+| Après overrides + vite/vitest | **3** | **1 low + 2 moderate — 0 high, 0 critical** ✅ |
+
+**`pnpm audit --audit-level=high` → EXIT 0** (le gate CI passe). Restants documentés (non bloquants, bump majeur risqué) :
+- `baseline-browser-mapping` <2.11.0 (modéré) — pin de **next@16.3.5** lui-même (outil interne, pas d'exécution sous notre contrôle) ;
+- `uuid` <11.1.1 (modéré) — `node-notifier@10.0.1` ← `web-ext-run` (uuid v8→v11 = rupture CJS) ;
+- `esbuild` <0.28.1 (low) — chaîne vite/wxt.
+
+#### 5.7.5 Vérifications — toutes vertes en local
+
+| Gate | Résultat |
+|------|----------|
+| Typecheck web (`tsc --noEmit`) | ✅ 0 erreur |
+| Typecheck racine (turbo 6 packages) | ✅ 6/6 |
+| Lint (turbo 2 packages) | ✅ 2/2 |
+| Build web (next 16.3.5 + deps réelles) | ✅ |
+| Build racine (turbo) | ✅ 5/5 (warnings placeholders desktop/mobile/extension pré-existants) |
+| Tests unitaires (vitest 4.1.11) | ✅ **1288/1288** (44 fichiers) |
+| `prisma generate` (override deepmerge-ts 8.0.2) | ✅ |
+| E2E ciblé chromium | ✅ **51/51** (`api-jobs-id` 15/15, `accessibility` 18/18, `accessibility-copy` 18/18) |
+
+**Attendu en CI au push** : Lint+Typecheck+Test ✅ (310 erreurs levées), Security Scan ✅ (aucun ≥ high), E2E Tests **débloqué** (plus de skip `needs:`) — premier vrai run e2e CI. Correction workflow au passage : `pnpm test:e2e --project=chromium` (la config multi-navigateurs du commit pré-existant `7ecfcd8` lancerait 4 projets alors que le step n'installe que chromium — ce premier run réel l'aurait fait échouer « browser not installed »). Suites multi-navigateurs + baselines visual-regression (`--update-snapshots`) restent des extensions souhaitables hors périmètre.
 
 ---
 
