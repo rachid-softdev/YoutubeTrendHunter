@@ -737,6 +737,36 @@ L'environnement de travail de cette session **redémarre les processus longs (> 
 
 > **Recommandation** : exécuter la suite complète multi-navigateurs en **CI** (environnement stable) : `pnpm exec playwright test` après une génération initiale des baselines visual-regression (`--update-snapshots` chromium) et une URL Redis réelle (débloque E1). Statut à ce jour documenté au §4/§5 — aucune régression connue des changements.
 
+### 5.6 État CI de la PR #51 — ⚠️ 2 JOBS EN ÉCHEC **PRÉ-EXISTANTS** (zéro régression introduite)
+
+**Constat (run `35141979081`, head `d3c17c6`, PR #51 `fix/audit-corrections`) :**
+
+| Job | Conclusion | Cause |
+|-----|------------|-------|
+| Lint + Typecheck + Test | ❌ **FAILURE** | Step « Typecheck » (tuile : `turbo run typecheck`) — **310 erreurs TS** |
+| Security Scan | ❌ **FAILURE** | Step « Audit dependencies » (`pnpm audit --audit-level=high`) |
+| E2E Tests (Playwright) | ⏭️ **SKIPPED** | `needs: [lint-typecheck-test]` → auto-skip quand la job amont échoue |
+
+**Preuve que c'est pré-existant (et non imputable à la PR) :**
+- `gh api commits/8468614/check-runs` (= HEAD de `main`, base de la branche) → **exactement les mêmes conclusions** : Lint+Typecheck+Test `failure`, Security Scan `failure`, E2E `skipped`. Le dernier run CI vert de `main` date d'avant le 2026-09-04 (run le plus récent de main déjà en échec).
+- Les **310 erreurs TS sont 100 % de classe « dépendance manquante »** — aucune erreur nouvelle liée aux fichiers modifiés par la PR (les fichiers de la PR n'apparaissent que via les modules manquants partagés, ex. `lucide-react` ; aucun `TS2xxx` de logique).
+
+**Cause racine (inventaire relevé) :**
+- Le `package.json` de `youtube-trendhunter-web` **ne déclare pas ~13 dépendances que le code importe** : `lucide-react` (39 sites), `zod`, `stripe`, `@sentry/nextjs`, `posthog-js`, `@upstash/redis`, `@anthropic-ai/sdk`, `@testing-library/react`, `class-variance-authority`, `@radix-ui/react-slot`, `@types/react`, `@types/react-dom`, `@types/node`…
+- `git log -S "lucide-react" -- youtube-trendhunter-web/package.json` = **aucune trace** — ces deps ont été perdues lors de la migration workspace (« Move project files to dedicated folders », 2026-05-19) ou d'un nettoyage ultérieur, sans retirer les imports.
+- Le lockfile (`pnpm-lock.yaml`) ne contient **0 occurrence** de `lucide`/`stripe`/`sentry` → un install CI frais (`--frozen-lockfile`) ne peut pas les résoudre.
+- **Pourquoi le local passe** : `node_modules\lucide-react` existe à la racine du repo local comme **dossier réel orphelin (pas un symlink pnpm, absent du `.pnpm`)**, vestige d'un install manuel — la résolution TS monte jusqu'au node_modules racine. **Le typecheck local est donc non représentatif de la CI** (dette d'environnement).
+
+**~40 erreurs de TYPES RÉELLES masquées** (elles remonteront dès l'ajout des deps — chantier type-strict à planifier, PAS un simple `pnpm add`) : `BadgeProps` sans `children` (`ui/badge.tsx`, ~40 sites d'appel), `ErrorBoundary` `state`/`setState`/`props` inexistants, `observability.ts` `unknown` → `MetricPoint`, `stripe-adapter.ts`/`stripe-webhook-handler.ts`/`trend-scorer.ts` `unknown` non assignables, `implicit any` dans `alerts-client.tsx`, `niche-grid.tsx`, `nps-survey.tsx`…
+
+**Dette séparée :** `pnpm audit` signale des vulnérabilités ≥ high sur le lockfile (dette de dépendances, indépendante de la PR).
+
+**Actions recommandées (chantier dédié « CI-repair », hors périmètre du lot validé, ordre préconisé) :**
+1. Restaurer les deps manquantes dans `youtube-trendhunter-web/package.json` (versions compatibles React 19 / Next 16.2) + régénérer le lockfile ;
+2. Corriger les ~40 erreurs de types réelles masquées (audit type-strict) ;
+3. Traiter l'audit pnpm (mises à jour ciblées) ;
+4. Re-exécuter la CI → le job E2E se débloquera automatiquement (`needs:`), y compris la suite multi-navigateurs + premières baselines visual-regression (à générer via `--update-snapshots` ; `E2E Tests` CI ne couvre que `chromium` actuellement — étendre aux 4 projets si souhaité).
+
 ---
 
 ## 6. Audit de non-régression — **RÉSULTATS (exécuté)**
