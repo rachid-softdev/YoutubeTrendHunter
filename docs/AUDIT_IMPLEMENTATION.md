@@ -795,6 +795,7 @@ Ajoutées dans `youtube-trendhunter-web/package.json` (versions résolues par pn
 | `@testing-library/react` | ^16 | tests (dev) |
 | `@types/react` / `@types/react-dom` | ^19.2.14 / ^19.2.3 | types JSX (dev) |
 | `@types/node` | ^20 | built-ins Node dans tests/configs (dev) |
+| `jsdom` | ^30.1.0 | environnement vitest (`environment: "jsdom"` dans `vitest.config.ts`) — **invisible au scan d'imports** (nommé par chaîne, jamais `import` ; révélé par le 1er run CI : `MISSING DEPENDENCY 'jsdom'`) |
 
 **Seule correction de code** : `src/lib/stripe.ts` — pin `apiVersion` `"2026-04-22.dahlia"` → `"2026-08-26.dahlia"` (sync avec le type exigé par stripe 22). Typecheck web : **310 → 0 erreur**.
 
@@ -853,7 +854,18 @@ Ajoutées dans `youtube-trendhunter-web/package.json` (versions résolues par pn
 | `prisma generate` (override deepmerge-ts 8.0.2) | ✅ |
 | E2E ciblé chromium | ✅ **51/51** (`api-jobs-id` 15/15, `accessibility` 18/18, `accessibility-copy` 18/18) |
 
-**Attendu en CI au push** : Lint+Typecheck+Test ✅ (310 erreurs levées), Security Scan ✅ (aucun ≥ high), E2E Tests **débloqué** (plus de skip `needs:`) — premier vrai run e2e CI. Correction workflow au passage : `pnpm test:e2e --project=chromium` (la config multi-navigateurs du commit pré-existant `7ecfcd8` lancerait 4 projets alors que le step n'installe que chromium — ce premier run réel l'aurait fait échouer « browser not installed »). Suites multi-navigateurs + baselines visual-regression (`--update-snapshots`) restent des extensions souhaitables hors périmètre.
+**Premier run CI réel (run `35193709583`, PR #52) — ce que la CI fraîche a révélé :**
+
+| Job / step | Résultat | Analyse |
+|-----------|----------|---------|
+| Lint (CI) | ✅ SUCCESS | install frais `--frozen-lockfile` (plus de dossier orphelin local) |
+| Typecheck (CI) | ✅ SUCCESS | **310 erreurs levées** — preuve du chantier sur install réel |
+| Audit dependencies (CI) | ✅ SUCCESS | `pnpm audit --audit-level=high` vert — **preuve** (step Gitleaks a pu s'exécuter ensuite) |
+| Unit tests (CI) | ❌ → ✅ corrigé | `MISSING DEPENDENCY 'jsdom'` — la 13ᵉ dep manquante, invisible au scan (environnement vitest nommé par chaîne, pas un import). Masquée en local par le symlink racine (comme `lucide-react`). **Ajout `jsdom@^30.1.0`** → tests relancés 1288/1288 en local, lockfile frozen OK |
+| Gitleaks | ❌ → ✅ corrigé | `fatal: No url found for submodule path 'worktrees/review' in .gitmodules` — **gitlink fantôme** (mode `160000`, commit `e11fc968`) committé accidentellement dans #27 (`48856f6`, « worktrees/review » = worktree du bot de review, exclu du tsconfig, submodule SANS `.gitmodules` → Gitleaks `git submodule foreach` échoue). Jamais exécuté avant : step masqué par l'échec audit des runs précédents (**skipped** sur `35141979081`). **Correction** : `git rm --cached worktrees/review` + `/worktrees/` dans `.gitignore` (prévention re-ajout) |
+| E2E Tests | ⏭️ skipped | `needs:` amont — se débloque au run suivant (typecheck ✅ + tests ✅ désormais) |
+
+**Attendu au run CI suivant** : Lint+Typecheck+Test ✅, Security Scan ✅ (audit ✅ + Gitleaks corrigé), E2E Tests **premier run réel** chromium (`pnpm test:e2e --project=chromium` — correction workflow : la config multi-navigateurs du commit pré-existant `7ecfcd8` lancerait 4 projets alors que le step n'installe que chromium). Réserve e2e CI : Redis placeholder `http://localhost:6379` (E1) — un échec éventuel du spec Redis serait une dette d'infra CI distincte (vraie URL Upstash requise), pas une régression des changements. Suites multi-navigateurs + baselines visual-regression (`--update-snapshots`) restent des extensions souhaitables hors périmètre.
 
 ---
 
