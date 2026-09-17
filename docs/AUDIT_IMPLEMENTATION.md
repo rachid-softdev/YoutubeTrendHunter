@@ -874,7 +874,11 @@ Ajoutées dans `youtube-trendhunter-web/package.json` (versions résolues par pn
 - **Validations locales** : frozen-lockfile ✅, typecheck web ✅, **51/51 e2e chromium (39.8s)** avec le symlink workspace ✅.
 - Dette documentée : 3 artefacts helpers coexistent (`e2e/auth-helpers.ts` source, `e2e/auth-helpers.js`, `packages/e2e-helpers/index.js`) — divergence possible entre eux ; piste à terme : reporter/corriger le bug esbuild upstream (hors périmètre).
 
-**Attendu au run CI suivant (run #9)** : Lint+Typecheck+Test et Security Scan ✅ acquis, E2E Tests chromium **3ᵉ run réel** — les 51 tests ciblés (`api-jobs-id`, `accessibility`, `accessibility-copy`) devraient enfin s'exécuter intégralement et être verts (webServer OK depuis le run #7 ; helpers désormais installés par pnpm). Réserve e2e CI : Redis placeholder `http://localhost:6379` (E1) — un échec éventuel du spec Redis serait une dette d'infra CI distincte (vraie URL Upstash requise), pas une régression des changements. La suite complète `e2e/` (~2734 tests) reste hors périmètre CI (infra externe absente : Stripe réel, Upstash, OAuth Google, clés YouTube/Anthropic/Resend, baselines visual-regression — les baselines générées localement sont désormais gitignorées via `e2e/*.spec.ts-snapshots/`).
+**Run #9 (35208030478, commit `f00258a`) — 🎉 CI 100 % VERTE, chantier livré :**
+
+- ✅ Security Scan (41s), ✅ Lint + Typecheck + Test (1m46s — audit ✅, typecheck ✅, **1288/1288 unit tests**), ✅ **E2E Tests (Playwright) (1m48s — 51/51 passés)** ;
+- Le job E2E s'exécute intégralement et passe pour la **première fois** : webServer OK (tailwindcss déclaré + dist UI buildé), helpers `_e2e-helpers` installés par pnpm (workspace package).
+- Annotations restantes, toutes non bloquantes : Node.js 20 deprecation (actions GitHub forcées sur Node 24), warning lint pré-existant `window.location.href` dans `error-boundary.tsx:76`, `DeprecationWarning: url.parse()` (logs de dépendances runtime). Dettes documentées, hors périmètre du chantier.
 
 ---
 
