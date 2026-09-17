@@ -18,21 +18,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": [
-        "TEST_DATABASE_URL",
-        "DATABASE_URL",
-        "AUTH_SECRET",
-        "AUTH_GOOGLE_ID",
-        "AUTH_GOOGLE_SECRET",
-        "UPSTASH_REDIS_REST_URL",
-        "UPSTASH_REDIS_REST_TOKEN",
-        "STRIPE_SECRET_KEY",
-        "STRIPE_WEBHOOK_SECRET",
-        "STRIPE_PRO_PRICE_ID",
-        "STRIPE_TEAM_PRICE_ID",
-        "NEXTAUTH_URL",
-        "NEXT_PUBLIC_APP_URL"
-      ]
+      "env": ["TEST_DATABASE_URL", "DATABASE_URL"]
     },
     "test:e2e": {
       "dependsOn": ["^build"],
