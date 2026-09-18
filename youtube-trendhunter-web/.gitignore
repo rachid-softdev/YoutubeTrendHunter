@@ -40,3 +40,4 @@ next-env.d.ts
 # prisma
 /prisma/*.db
 /prisma/*.db-journal
+e2e/*.spec.ts-snapshots/

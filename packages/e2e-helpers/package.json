@@ -1,0 +1,8 @@
+{
+  "name": "_e2e-helpers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "E2E test helpers for youtube-trendhunter-web. Exposed as a node_modules package (not a local module) to bypass Playwright's internal esbuild transpilation bug: TypeError: context.conditions?.includes is not a function (occurs when test files import local modules and use the imported functions). See docs/AUDIT_IMPLEMENTATION.md §5.7.",
+  "main": "index.js",
+  "types": "index.d.ts"
+}

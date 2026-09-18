@@ -12,7 +12,11 @@ export default defineConfig({
     // Suppress Node.js experimental warnings for clean CI output.
     env: {
       NODE_NO_WARNINGS: "1",
-      TEST_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/trendhunter_test",
+      // Default targets the local dev/test Postgres (postgres:postgres / trendhunter_test).
+      // CI overrides it via TEST_DATABASE_URL (see .github/workflows/ci.yml).
+      TEST_DATABASE_URL:
+        process.env.TEST_DATABASE_URL ??
+        "postgresql://postgres:postgres@localhost:5432/trendhunter_test",
     },
     coverage: {
       provider: "v8",

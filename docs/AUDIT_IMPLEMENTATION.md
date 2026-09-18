@@ -22,6 +22,8 @@
    - [Fix 10 — Build racine : typecheck des stubs desktop/mobile](#fix-10--build-racine--typecheck-des-stubs-desktopmobile)
 4. [Constats documentés — non corrigés](#4-constats-documentés--non-corrigés)
 5. [Plan de vérification](#5-plan-de-vérification)
+   - [5.6 État CI de la PR #51 — dette pré-existante](#56-état-ci-de-la-pr-51--dette-pré-existante)
+   - [5.7 Chantier CI-repair — ✅ RÉSOLU](#57-chantier-ci-repair--résolu)
 6. [Audit de non-régression](#6-audit-de-non-régression)
 7. [Rapport de convergence](#7-rapport-de-convergence)
 
@@ -739,6 +741,8 @@ L'environnement de travail de cette session **redémarre les processus longs (> 
 
 ### 5.6 État CI de la PR #51 — ⚠️ 2 JOBS EN ÉCHEC **PRÉ-EXISTANTS** (zéro régression introduite)
 
+> **✅ RÉSOLU par le chantier « CI-repair » (branche `fix/ci-repair`) — voir §5.7.**
+
 **Constat (run `35141979081`, head `d3c17c6`, PR #51 `fix/audit-corrections`) :**
 
 | Job | Conclusion | Cause |
@@ -766,6 +770,115 @@ L'environnement de travail de cette session **redémarre les processus longs (> 
 2. Corriger les ~40 erreurs de types réelles masquées (audit type-strict) ;
 3. Traiter l'audit pnpm (mises à jour ciblées) ;
 4. Re-exécuter la CI → le job E2E se débloquera automatiquement (`needs:`), y compris la suite multi-navigateurs + premières baselines visual-regression (à générer via `--update-snapshots` ; `E2E Tests` CI ne couvre que `chromium` actuellement — étendre aux 4 projets si souhaité).
+
+### 5.7 Chantier CI-repair — ✅ RÉSOLU
+
+**Périmètre** : branche `fix/ci-repair` (base = `main` après fusion de la PR #51). Objectif : rendre la CI verte — typecheck (310 erreurs TS), audit pnpm (`--audit-level=high`), et débloquer le job E2E (`needs:`).
+
+#### 5.7.1 Restauration des dépendances manquantes (cause racine des 310 erreurs TS)
+
+**Résultat clé : les 310 erreurs étaient 100 % des cascades de types manquants — zéro correction de code source requise** (contrairement à l'hypothèse initiale d'~40 erreurs type-strict réelles : `BadgeProps`, `ErrorBoundary`, `unknown → MetricPoint`… disparaissent une fois les types réels en place).
+
+Ajoutées dans `youtube-trendhunter-web/package.json` (versions résolues par pnpm, cohérentes React 19 / Next 16) :
+
+| Dépendance | Version | Rôle |
+|-----------|---------|------|
+| `lucide-react` | ^1.46.0 | icônes (39 sites d'import) |
+| `zod` | ^4.6.5 | validation (schémas, env, routes) |
+| `stripe` | ^22.6.2 | paiement (adapter + webhooks + tests) |
+| `@sentry/nextjs` | ^10.75.0 | observabilité (configs client/edge/server) |
+| `posthog-js` | ^1.433.7 | analytics |
+| `@upstash/redis` | ^1.38.4 | cache (Redis REST) |
+| `@anthropic-ai/sdk` | ^0.126.0 | génération IA |
+| `class-variance-authority` | ^0.7.1 | variants UI (aligné package ui) |
+| `@radix-ui/react-slot` | ^1.2.4 | composition UI (aligné package ui) |
+| `@testing-library/react` | ^16 | tests (dev) |
+| `@types/react` / `@types/react-dom` | ^19.2.14 / ^19.2.3 | types JSX (dev) |
+| `@types/node` | ^20 | built-ins Node dans tests/configs (dev) |
+| `jsdom` | ^29.1.1 | environnement vitest (`environment: "jsdom"` dans `vitest.config.ts`) — **invisible au scan d'imports** (nommé par chaîne, jamais `import` ; révélé par le 1er run CI : `MISSING DEPENDENCY 'jsdom'`). **v30 exclue** : exige Node ≥22.22 (`webidl.util.markAsUncloneable`) alors que la CI tourne Node 20 → pin `^29.1.1` (engines `^20.19.0 || ^22.13.0 || >=24.0.0`) |
+
+**Seule correction de code** : `src/lib/stripe.ts` — pin `apiVersion` `"2026-04-22.dahlia"` → `"2026-08-26.dahlia"` (sync avec le type exigé par stripe 22). Typecheck web : **310 → 0 erreur**.
+
+#### 5.7.2 Mises à jour de sécurité directes (advisories CRITIQUES)
+
+| Paquet | Avant | Après | Advisory |
+|--------|-------|-------|----------|
+| `next` | ^16.2.6 | **^16.3.5** | CRITIQUE (>=16.0.0 <16.3.3) + HIGH (>=16.0.0 <16.2.11) ; `sharp` corrigé au passage |
+| `next-auth` | 5.0.0-beta.31 | **5.0.0-beta.32** | CRITIQUE (<=5.0.0-beta.31) |
+| `@auth/core` | (transitif 0.41.2 du prisma-adapter) | **^0.41.3** | CRITIQUE (<0.41.3) — via `@auth/prisma-adapter@2.11.3` (qui exige `@auth/core: 0.41.3` exact) |
+| `eslint-config-next` | 16.2.9 | **16.3.5** | aligné sur next |
+| `vite` (dev, ajouté direct) | — (transitif 8.0.14) | **^8.0.16** (résolu 8.3.0 via override) | HIGH (>=8.0.0 <=8.0.15) + modéré |
+| `vitest` | ^4.1.6 | **^4.1.11** | modéré |
+
+#### 5.7.3 Overrides pnpm racine (dette transitive — `package.json` → `pnpm.overrides`)
+
+| Override | Raison (chaîne) |
+|----------|-----------------|
+| `fast-uri: 3.1.8` | HIGH — `ajv@8.20.0` (chaîne commitlint) |
+| `js-yaml@<4: 3.15.2` | HIGH — `read-yaml-file@1.1.0` (chaîne changesets) |
+| `js-yaml@>=4: 4.3.2` | HIGH — `@changesets/parse`, `@eslint/eslintrc`, `cosmiconfig` |
+| `brace-expansion@<2: 1.1.21` | HIGH — `minimatch@3.1.5` |
+| `brace-expansion@>=5: 5.0.12` | HIGH — `minimatch@10.2.5` |
+| `postcss: 8.5.28` | HIGH — `critters`, `vite` (web devDeps) |
+| `nanoid: 3.3.19` | HIGH — `postcss@8.5.15` (satisfait le `^3.3.18` du postcss 8.5.28) |
+| `tmp: 0.2.7` | HIGH — `web-ext-run@0.2.4` (extension, pins exacts) |
+| `shell-quote: 1.10.0` | CRITIQUE — `fx-runner@1.4.0` ← `web-ext-run` (API `parse`/`quote` stable) |
+| `adm-zip: 0.6.1` | HIGH — `firefox-profile@4.7.0` (`~0.5.x` forcé à 0.6.1 ; seul outil non exercé par la CI) |
+| `browserslist: 4.29.0` | HIGH — `@babel/helper-compilation-targets`, webpack |
+| `deepmerge-ts: 8.0.2` | HIGH — `@prisma/config@6.19.3` (pin 7.1.5 ; **validé par `prisma generate` OK**) |
+| `vite: 8.3.0` | purge de la copie vulnérable 8.0.14 (ranges `^8.0.0` satisfaits : vite-node, wxt) |
+
+#### 5.7.4 Résultat audit
+
+| Étape | Count | Sev |
+|-------|-------|-----|
+| Avant (main HEAD `8468614`) | 65 | dont 45 ≥ high |
+| Après restauration deps + updates | 44 | dont 32 ≥ high |
+| Après overrides + vite/vitest | **3** | **1 low + 2 moderate — 0 high, 0 critical** ✅ |
+
+**`pnpm audit --audit-level=high` → EXIT 0** (le gate CI passe). Restants documentés (non bloquants, bump majeur risqué) :
+- `baseline-browser-mapping` <2.11.0 (modéré) — pin de **next@16.3.5** lui-même (outil interne, pas d'exécution sous notre contrôle) ;
+- `uuid` <11.1.1 (modéré) — `node-notifier@10.0.1` ← `web-ext-run` (uuid v8→v11 = rupture CJS) ;
+- `esbuild` <0.28.1 (low) — chaîne vite/wxt.
+
+#### 5.7.5 Vérifications — toutes vertes en local
+
+| Gate | Résultat |
+|------|----------|
+| Typecheck web (`tsc --noEmit`) | ✅ 0 erreur |
+| Typecheck racine (turbo 6 packages) | ✅ 6/6 |
+| Lint (turbo 2 packages) | ✅ 2/2 |
+| Build web (next 16.3.5 + deps réelles) | ✅ |
+| Build racine (turbo) | ✅ 5/5 (warnings placeholders desktop/mobile/extension pré-existants) |
+| Tests unitaires (vitest 4.1.11) | ✅ **1288/1288** (44 fichiers) |
+| `prisma generate` (override deepmerge-ts 8.0.2) | ✅ |
+| E2E ciblé chromium | ✅ **51/51** (`api-jobs-id` 15/15, `accessibility` 18/18, `accessibility-copy` 18/18) |
+
+**Premier run CI réel (run `35193709583`, PR #52) — ce que la CI fraîche a révélé :**
+
+| Job / step | Résultat | Analyse |
+|-----------|----------|---------|
+| Lint (CI) | ✅ SUCCESS | install frais `--frozen-lockfile` (plus de dossier orphelin local) |
+| Typecheck (CI) | ✅ SUCCESS | **310 erreurs levées** — preuve du chantier sur install réel |
+| Audit dependencies (CI) | ✅ SUCCESS | `pnpm audit --audit-level=high` vert — **preuve** (step Gitleaks a pu s'exécuter ensuite) |
+| Unit tests (CI) | ❌ → ✅ (6 itérations, **verts au run #7**) | **Run #1** : `MISSING DEPENDENCY 'jsdom'` — la 13ᵉ dep manquante, invisible au scan (environnement vitest nommé par chaîne, pas un import). Masquée en local par le symlink racine (comme `lucide-react`). Ajout `jsdom@^30.1.0`. **Run #2** : `TypeError: webidl.util.markAsUncloneable is not a function` — jsdom 30 exige Node ≥22.22, la CI tourne Node 20 (local = Node 24, d'où le faux négatif). **Pin `jsdom@^29.1.1`** (engines `^20.19.0`) → tests relancés 1288/1288 en local, lockfile frozen OK. **Run #3** : jsdom ✅ (workers OK) mais **3 fichiers feature-flags en FAIL** — `PrismaClientInitializationError: Authentication failed ... credentials for 'postgres'`. Cause : `vitest.config.ts` hardcodait `TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trendhunter_test` (Postgres de **dev local**) alors que le service CI = `test:test@localhost:5432/test` (user/role `postgres` sans mot de passe sur l'image alpine). Corrections : fallback `process.env.TEST_DATABASE_URL ?? "…postgres:postgres…"` dans `vitest.config.ts` (dev local inchangé) + `TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test` sur le step Run unit tests + steps **`prisma db push`** dans `lint-typecheck-test` et `e2e-tests` (provisionnement du schéma — **découverte** : `prisma migrate deploy` échoue sur base vierge, la migration `0001_add_user_roles` référence l'enum `"Role"` sans le créer — migration delta jamais appliquée à froid ; `db push` = pratique établie du repo : script `db:push` + commentaire du test). **Run #4** : db push ✅, Lint/Typecheck ✅, MAIS échec **identique** (`credentials for 'postgres'`) — `TEST_DATABASE_URL` du step CI n'atteignait jamais vitest. Cause racine : **Turborepo 2.x en Strict Mode par défaut** (doc officielle) — filtre les variables d'env disponibles à une tâche à **seulement** celles déclarées dans `env`/`globalEnv` du `turbo.json`, y compris les variables des steps CI (le legacy v1 passait tout). Preuve empirique locale : `turbo run test` + variable bidon non déclarée → 1288/1288 (fallback local utilisé, la variable ne traverse pas) ; après déclaration → la variable traverse (P1003 « database does not exist »). **Correction** : déclarer `env` sur les tâches `test` **et** `test:e2e`. **Run #5** : Prisma ✅ (TEST_DATABASE_URL transmise) mais **3 autres fichiers en échec** : `schemas.test.ts` + `checkout.test.ts` (`AssertionError: expected false to be true` sur `accepts valid priceId`) et `feature-flags-resilience.test.ts` (CacheService real implementation). Cause : la liste complète des env CI était désormais transmise (`STRIPE_PRO_PRICE_ID=test`, `UPSTASH_REDIS_REST_URL=http://localhost:6379`...) — **les tests unitaires sont conçus pour tourner SANS ces variables** : `VALID_PRICE_IDS` vide (schemas.ts) ⇒ validation désactivée (`length === 0`) ; UPSTASH absente ⇒ CacheService en mode mémoire. Avant le fix, turbo filtrait ces vars (d'où le vert). **Correction** : la tâche `test` ne déclare que les variables aux valeurs réelles en CI. **Run #6** : checkout/CacheService ✅ mais **2 fichiers en échec** (`feature-flags-extreme-values`, `feature-flags-security`) : `Error: Neither apiKey nor config.authenticator provided` — `src/lib/stripe.ts` fait `new Stripe(process.env.STRIPE_SECRET_KEY!, …)` → crash à l'IMPORT du module quand la variable est absente. Faux négatif local : vitest charge le `.env` du package web (gitignored, `STRIPE_SECRET_KEY="sk_test_xxx"` réel) ; en CI pas de `.env` et la variable filtrée par turbo. **Correction finale** : la tâche `test` déclare `TEST_DATABASE_URL`, `DATABASE_URL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (valeurs CI `test` valides : instanciation OK, webhook refus sans signature OK) ; `STRIPE_PRO_PRICE_ID`/`STRIPE_TEAM_PRICE_ID`/UPSTASH/AUTH restent non déclarés (unit tests conçus sans). Validé : simulation locale exacte du CI (vars bidon dans le shell + déclarées transmises) → 1288/1288 via turbo. **Run #7** : ✅ **VERTS ENFIN** — Lint + Typecheck + Unit tests 100 % (1288/1288) sur install frais |
+| Gitleaks | ❌ → ✅ corrigé (2 itérations) | Run #1 : `fatal: No url found for submodule path 'worktrees/review' in .gitmodules` — **gitlink fantôme** (mode `160000`, commit `e11fc968`) committé accidentellement dans #27 (`48856f6`, « worktrees/review » = worktree du bot de review, exclu du tsconfig, submodule SANS `.gitmodules` → Gitleaks `git submodule foreach` échoue). Jamais exécuté avant : step masqué par l'échec audit des runs précédents (**skipped** sur `35141979081`). Correction : `git rm --cached worktrees/review` + `/worktrees/` dans `.gitignore` (prévention re-ajout). **Run #2** : `fatal: ambiguous argument 'f3de7e40^..f5c536b'` — l'action scanne le diff complet de la PR mais le checkout CI était **shallow** (fetch-depth 1 par défaut) → parent du 1er commit absent. **Correction** : `fetch-depth: 0` sur le checkout du job `security-scan` |
+| E2E Tests | ⏭️ skipped (runs #1-#6) → ❌ run #7 (webServer Next) → ❌ run #8 (`_e2e-helpers`) | `needs:` enfin vert (typecheck ✅ + tests ✅) → job e2e exécuté mais webServer Next en échec. **Cause 1** — `Error: Cannot find module '@tailwindcss/postcss'` (évaluation de `globals.css`/`postcss.config.mjs`) : dep **orpheline** du node_modules racine local (`tailwindcss@4.2.4` + `@tailwindcss/postcss@4.2.4`, engloutis par l'hoisting), jamais déclarée dans `package.json`/lockfile → install frais ne la crée plus (15ᵉ dep masquée). **Cause 2** — `Module not found: Can't resolve '@youtube-trendhunter/ui'` (badge.tsx) : le package UI exporte `./dist/index.js` (build `tsup`) et le step e2e lance `playwright test` **directement** (working-directory web, PAS via turbo) → rien ne buildait le dist en CI (masqué en local : `dist/` présent). Corrections : déclarer `tailwindcss@^4.2.4` + `@tailwindcss/postcss@^4.2.4` en devDeps web (lockfile mis à jour, frozen OK) + step CI **`Build workspace packages`** (`pnpm --filter @youtube-trendhunter/ui build`) avant « Run E2E tests ». Warnings [ENV] webServer (AUTH_SECRET court, STRIPE_* `test`, clés API undefined) = non bloquants, documentés |
+
+**Run #8 (35206155254, commit `805da6e`) — la 16ᵉ cause masquée : un hack non versionné :**
+
+- ✅ Security Scan, ✅ Lint+Typecheck+Test, ✅ « Build workspace packages » — les corrections du run #7 fonctionnent ;
+- ❌ « Run E2E tests » en 1m20 : les 51 tests ne démarrent pas — `Error: Cannot find module '_e2e-helpers'` (require stack : `accessibility[-copy].spec.ts` ligne 2).
+- **Cause racine** : `_e2e-helpers` = **hack manuel placé dans `youtube-trendhunter-web/node_modules/`** (`index.js` + `index.d.ts`, sans package.json, non versionné → jamais recréé par `pnpm install` frais). Son header le documente : « placed in node_modules to bypass Playwright's internal esbuild transpilation bug (`context.conditions?.includes`) that occurs when test files import local modules and use the imported functions ». **Test empirique** : l'import relatif `./auth-helpers` dans `accessibility.spec.ts` reproduit exactement `TypeError: context.conditions?.includes is not a function` avec `@playwright/test@^1.61.0` → le contournement node_modules est **nécessaire**, pas un simple orphelin.
+- **Correction** : versionner le hack comme **vrai workspace package** — `packages/e2e-helpers/` (`name: "_e2e-helpers"`, `main: index.js`, `types: index.d.ts`, contenu copié fidèlement du hack, SHA vérifié) + `"_e2e-helpers": "workspace:*"` en devDeps du web → pnpm crée `node_modules/_e2e-helpers` (junction) et l'entrée lockfile ; les specs gardent leur import `"_e2e-helpers"` inchangé. Note : la CLI `pnpm add -D _e2e-helpers@workspace:*` échoue (`ERR_PNPM_SPEC_NOT_SUPPORTED_BY_ANY_RESOLVER` — nom à préfixe `_`) → déclaration directe dans le package.json puis `pnpm install`.
+- **Validations locales** : frozen-lockfile ✅, typecheck web ✅, **51/51 e2e chromium (39.8s)** avec le symlink workspace ✅.
+- Dette documentée : 3 artefacts helpers coexistent (`e2e/auth-helpers.ts` source, `e2e/auth-helpers.js`, `packages/e2e-helpers/index.js`) — divergence possible entre eux ; piste à terme : reporter/corriger le bug esbuild upstream (hors périmètre).
+
+**Run #9 (35208030478, commit `f00258a`) — 🎉 CI 100 % VERTE, chantier livré :**
+
+- ✅ Security Scan (41s), ✅ Lint + Typecheck + Test (1m46s — audit ✅, typecheck ✅, **1288/1288 unit tests**), ✅ **E2E Tests (Playwright) (1m48s — 51/51 passés)** ;
+- Le job E2E s'exécute intégralement et passe pour la **première fois** : webServer OK (tailwindcss déclaré + dist UI buildé), helpers `_e2e-helpers` installés par pnpm (workspace package).
+- Annotations restantes, toutes non bloquantes : Node.js 20 deprecation (actions GitHub forcées sur Node 24), warning lint pré-existant `window.location.href` dans `error-boundary.tsx:76`, `DeprecationWarning: url.parse()` (logs de dépendances runtime). Dettes documentées, hors périmètre du chantier.
 
 ---
 
