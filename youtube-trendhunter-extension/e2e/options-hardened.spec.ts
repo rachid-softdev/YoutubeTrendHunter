@@ -5,7 +5,7 @@ import { OptionsPage } from "./pages/options";
 /*  Constants                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const DEFAULT_URL = "http://localhost:3000";
+const DEFAULT_URL = "https://trendhunter.app";
 
 /* -------------------------------------------------------------------------- */
 /*  Storage override helpers                                                  */

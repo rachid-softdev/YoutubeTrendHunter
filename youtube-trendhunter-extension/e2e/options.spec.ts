@@ -5,8 +5,8 @@ import { OptionsPage } from "./pages/options";
 /*  Constants                                                                 */
 /* -------------------------------------------------------------------------- */
 
-/** The default API base URL matching VITE_API_BASE_URL in .env. */
-const DEFAULT_URL = "http://localhost:3000";
+/** The default API base URL (production, unless overridden by VITE_API_BASE_URL in .env). */
+const DEFAULT_URL = "https://trendhunter.app";
 
 /* -------------------------------------------------------------------------- */
 /*  Storage failure simulation script                                         */
@@ -80,7 +80,7 @@ test.describe("Extension — Options Page", () => {
 
     test("renders the description explaining the API URL", async () => {
       await expect(options.description).toBeVisible();
-      await expect(options.description).toContainText("http://localhost:3000");
+      await expect(options.description).toContainText(DEFAULT_URL);
     });
 
     test("URL input has type url and correct placeholder", async () => {

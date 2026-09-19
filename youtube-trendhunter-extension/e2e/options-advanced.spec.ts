@@ -5,7 +5,7 @@ import { OptionsPage } from "./pages/options";
 /*  Constants                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const DEFAULT_URL = "http://localhost:3000";
+const DEFAULT_URL = "https://trendhunter.app";
 
 /* -------------------------------------------------------------------------- */
 /*  Helpers                                                                   */
@@ -492,7 +492,7 @@ test.describe("Options Page — Advanced Edge Cases", () => {
       // Act: send GET_TRENDS
       await sendMessage(page, { type: "GET_TRENDS" });
 
-      // Assert: fetch went to the default URL (localhost:3000)
+      // Assert: fetch went to the default URL
       expect(capturedUrl).toContain(DEFAULT_URL);
       expect(capturedUrl).toContain("/api/extension/trends");
     });

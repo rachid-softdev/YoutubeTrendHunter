@@ -49,7 +49,8 @@ export default function App() {
       <section className="options-section">
         <h2 className="section-title">URL de l&rsquo;API</h2>
         <p className="section-desc">
-          Adresse du serveur backend TrendHunter. Pour le développement local, utilisez{" "}
+          Adresse du serveur backend TrendHunter. Par défaut le serveur de production (
+          <code>{DEFAULT_API_BASE}</code>). Pour le développement local, utilisez{" "}
           <code>http://localhost:3000</code>.
         </p>
         <div className="input-group">
