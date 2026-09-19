@@ -27,13 +27,16 @@ export default function MentionsLegalesPage() {
             <p>Le site TrendHunter est édité par :</p>
             <ul className="list-disc pl-6 space-y-1">
               <li>
-                <strong className="text-dark-ink">Rachid Softdev</strong> — micro-entrepreneur
+                <strong className="text-dark-ink">ABBOU Rachid</strong> — micro-entrepreneur
               </li>
               <li>
-                SIRET : <em>à compléter</em>
+                SIREN : <strong className="text-dark-ink">940 192 545</strong>
               </li>
               <li>
-                Adresse : <em>à compléter</em>
+                SIRET : <strong className="text-dark-ink">940 192 545 00025</strong>
+              </li>
+              <li>
+                Adresse : <strong className="text-dark-ink">47 rue Vivienne, 75002 Paris</strong>
               </li>
               <li>
                 Email :{" "}
@@ -53,7 +56,7 @@ export default function MentionsLegalesPage() {
 
           <section className="space-y-2">
             <h2 className="text-dark-ink text-xl font-bold">2. Directeur de la publication</h2>
-            <p>Le directeur de la publication est Rachid Softdev.</p>
+            <p>Le directeur de la publication est ABBOU Rachid.</p>
           </section>
 
           <section className="space-y-2">

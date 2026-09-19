@@ -36,7 +36,7 @@ export default function TermsPage() {
           <section className="space-y-2">
             <h2 className="text-dark-ink text-xl font-bold">1. Éditeur et acceptation</h2>
             <p>
-              TrendHunter est édité par Rachid Softdev (micro-entrepreneur), dont les informations
+              TrendHunter est édité par ABBOU Rachid (micro-entrepreneur), dont les informations
               complètes figurent sur la page{" "}
               <Link href="/mentions-legales" className="text-yt-red underline underline-offset-2">
                 Mentions légales
